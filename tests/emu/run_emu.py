@@ -274,6 +274,73 @@ def run_vadd(TXDAT, RSRC2, SCRSZ, ARCHV="rdna3", KPROP=0x03):
 
     return 0, NFAIL, NELMS
 
+# ---- test_shfl Execution ----
+
+def run_shfl(TXDAT, RSRC2, SCRSZ, ARCHV="rdna3", KPROP=0x03):
+    """Execute test_shfl and verify ballot lane mask and shuffle values."""
+    KCODE = TXDAT[256:]
+    KCSIZ = len(KCODE)
+    CADDR = lo_mem(KCSIZ)
+    ctypes.memmove(CADDR, KCODE, KCSIZ)
+
+    NELMS = 64
+    BKSIZ = 64
+    NGRPS = 1
+    FSIZE = NELMS * 4
+
+    MEMSZ = FSIZE * 2 + 128
+    MBASE = lo_mem(MEMSZ)
+
+    OUTAD = MBASE
+    INPAD = MBASE + FSIZE
+    KAOFF = INPAD + FSIZE
+
+    BUFO  = (ctypes.c_float * NELMS).from_address(OUTAD)
+    BUFI  = (ctypes.c_float * NELMS).from_address(INPAD)
+    KARGS = (ctypes.c_uint8 * 64).from_address(KAOFF)
+
+    for i in range(NELMS):
+        BUFI[i] = 1.0 if i < 16 else -1.0
+        BUFO[i] = -1.0
+
+    struct.pack_into('<Q', KARGS, 0, OUTAD)
+    struct.pack_into('<Q', KARGS, 8, INPAD)
+
+    struct.pack_into('<I', KARGS, 32, NGRPS)
+    struct.pack_into('<I', KARGS, 36, 1)
+    struct.pack_into('<I', KARGS, 40, 1)
+    struct.pack_into('<H', KARGS, 44, BKSIZ)
+    struct.pack_into('<H', KARGS, 46, 1)
+    struct.pack_into('<H', KARGS, 48, 1)
+
+    USRDT = []
+    if KPROP & (1 << 1):
+        USRDT += [0, 0]
+    if KPROP & (1 << 3):
+        USRDT += [KAOFF & 0xFFFFFFFF, (KAOFF >> 32) & 0xFFFFFFFF]
+
+    RETCD = run_asm(CADDR, KCSIZ, NGRPS, 1, 1, BKSIZ, 1, 1,
+                    KAOFF, RSRC2, SCRSZ, ARCHV, USRDT)
+    if RETCD != 0:
+        return RETCD, 0, NELMS
+
+    NFAIL = 0
+    for i in range(NELMS):
+        s0 = BUFI[i + 1] if i < 63 else BUFI[i]
+        s1 = BUFI[0]
+        s2 = BUFI[i - 1] if i > 0 else BUFI[0]
+        s3 = BUFI[i + 1] if i < 63 else BUFI[i]
+        s4 = BUFI[i ^ 1]
+        b = 65535.0  # 0x0000FFFFu: first 16 lanes positive
+        a0 = 1.0
+        a1 = 0.0
+        EXPCT = s0 + s1 + s2 + s3 + s4 + b + a0 + a1
+        GVAL  = BUFO[i]
+        if abs(GVAL - EXPCT) > 0.5:
+            NFAIL += 1
+
+    return 0, NFAIL, NELMS
+
 def main():
     if len(sys.argv) < 2:
         print(f"usage: {sys.argv[0]} <file.hsaco>", file=sys.stderr)
@@ -293,15 +360,22 @@ def main():
         print("ABORT: emulator cannot even s_endpgm. Check tinygrad install.")
         return 1
 
-    print(f"\n=== vectorAdd ({ARCHV}) ===")
     TXDAT = prs_elf(FDATA)
     RSRC1, RSRC2, KASIZ, LDSSZ, SCRSZ, KPROP = prs_kd(TXDAT)
     KCSIZ = len(TXDAT) - 256
 
-    print(f"  rsrc1=0x{RSRC1:08x} rsrc2=0x{RSRC2:08x} "
-          f"kernarg={KASIZ} lds={LDSSZ} scratch={SCRSZ} code={KCSIZ}B")
-
-    RETCD, NFAIL, NELMS = run_vadd(TXDAT, RSRC2, SCRSZ, ARCHV, KPROP)
+    if "shfl" in sys.argv[1]:
+        print(f"\n=== test_shfl ({ARCHV}) ===")
+        print(f"  rsrc1=0x{RSRC1:08x} rsrc2=0x{RSRC2:08x} "
+              f"kernarg={KASIZ} lds={LDSSZ} scratch={SCRSZ} code={KCSIZ}B")
+        RETCD, NFAIL, NELMS = run_shfl(TXDAT, RSRC2, SCRSZ, ARCHV, KPROP)
+        KNAME = "test_shfl"
+    else:
+        print(f"\n=== vectorAdd ({ARCHV}) ===")
+        print(f"  rsrc1=0x{RSRC1:08x} rsrc2=0x{RSRC2:08x} "
+              f"kernarg={KASIZ} lds={LDSSZ} scratch={SCRSZ} code={KCSIZ}B")
+        RETCD, NFAIL, NELMS = run_vadd(TXDAT, RSRC2, SCRSZ, ARCHV, KPROP)
+        KNAME = "vectorAdd"
 
     if RETCD != 0:
         print(f"FAIL: emulator rc={RETCD}")
@@ -310,7 +384,7 @@ def main():
         print(f"FAIL: {NFAIL}/{NELMS} elements wrong")
         return 1
 
-    print(f"PASS: vectorAdd {NELMS} elements verified ({ARCHV})")
+    print(f"PASS: {KNAME} {NELMS} elements verified ({ARCHV})")
     return 0
 
 if __name__ == '__main__':

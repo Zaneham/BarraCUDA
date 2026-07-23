@@ -568,10 +568,8 @@ static void rv64_func(rv64_mod_t *V,const bir_func_t *F){
 
         /* ---- Warp primitives, single-lane degenerate forms. ---- */
         case BIR_SHFL: case BIR_SHFL_UP: case BIR_SHFL_DOWN: case BIR_SHFL_XOR:
-            load_val(V,V_T0,I->operands[0]); st_slot(V,V_T0,s); break;
-        case BIR_BALLOT: e_li(V,V_T0,1); st_slot(V,V_T0,s); break;
-        case BIR_VOTE_ANY: case BIR_VOTE_ALL:
-            load_val(V,V_T0,I->operands[0]); st_slot(V,V_T0,s); break;
+        case BIR_BALLOT: case BIR_VOTE_ANY: case BIR_VOTE_ALL:
+            load_val(V,V_T0,I->operands[1]); st_slot(V,V_T0,s); break;
         case BIR_GEP: { int sz=pointee_sz(V,I->type); load_val(V,V_T0,I->operands[1]); e_li(V,V_T1,sz); e_mul(V,V_T0,V_T0,V_T1); load_val(V,V_T1,I->operands[0]); e_add(V,V_T0,V_T0,V_T1); st_slot(V,V_T0,s); break; }
         case BIR_LOAD: { load_val(V,V_T0,I->operands[0]);
             const bir_type_t*t=(I->type<V->M->num_types)?&V->M->types[I->type]:0; int w=t?(int)t->width:32;
