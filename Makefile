@@ -28,8 +28,12 @@ LIBS    = -lm
 # never into kath. nv_rt is portable (LoadLibraryA on Windows, dlopen elsewhere);
 # bc_runtime is Linux, bare dlfcn.h and libhsa. -ldl names Linux rather than
 # "not Windows" because macOS keeps dlopen in libSystem and ships no libdl.
+# lf_gpu implements LFortran's GPU offload ABI on top of nv_rt, so an
+# LFortran-compiled Fortran program can launch kernels kath produced. It
+# links into the Fortran executable, not into kath; it sits in HOSTRT so
+# the strict build keeps checking it.
 UNAME_S := $(shell uname -s 2>/dev/null)
-HOSTRT   = src/nvidia/nv_rt.o
+HOSTRT   = src/nvidia/nv_rt.o src/runtime/lf_gpu.o
 DL_LIB   =
 ifeq ($(UNAME_S),Linux)
   HOSTRT += src/runtime/bc_runtime.o
