@@ -1,0 +1,27 @@
+{
+  "config": {
+    "_comment": "Two axes. accuracy = worst element vs the known-good value; a broken kernel trips this. regression = this run's mean vs the committed baseline for the SAME backend; codegen drift trips this. GPU float legitimately differs from CPU, so accuracy is deliberately loose and regression is the real gate.",
+    "accuracy_ceiling_rel": 0.20,
+    "regression_gate_rel": 0.20
+  },
+  "kernels": [
+    {
+      "name": "saxpy",
+      "source": "kernels/saxpy.f90",
+      "entry": "__lfortran_gpu_kernel_0",
+      "reference": "BLAS-1 saxpy, y := a*x + y. With x=1, y=3, a=2 every element is 5, exactly representable, so any deviation is the backend's fault not the maths'.",
+      "args": [
+        { "kind": "buffer", "type": "f32", "role": "in",    "init": 1.0 },
+        { "kind": "buffer", "type": "f32", "role": "inout", "init": 3.0 },
+        { "kind": "scalar", "type": "f32", "value": 2.0 },
+        { "kind": "scalar", "type": "i32", "value": "@n" },
+        { "kind": "scalar", "type": "i32", "value": "@n" }
+      ],
+      "cases": [
+        { "n": 256, "expect": 5.0 },
+        { "n": 200, "expect": 5.0 },
+        { "n": 255, "expect": 5.0 }
+      ]
+    }
+  ]
+}
