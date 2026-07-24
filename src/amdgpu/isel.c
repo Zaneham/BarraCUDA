@@ -1658,6 +1658,15 @@ static void isel_branch(const bir_inst_t *I)
     emit0_1(AMD_S_BRANCH, mop_label(target_mb));
 }
 
+/* A lone ret in a kernel — the guard clause every kernel opens with. */
+static int blk_is_kret(uint32_t bir_bi)
+{
+    if (!S.is_kernel || bir_bi >= S.bir->num_blocks) return 0;
+    const bir_block_t *B = &S.bir->blocks[bir_bi];
+    if (B->num_insts != 1) return 0;
+    return S.bir->insts[B->first_inst].op == BIR_RET;
+}
+
 static void isel_br_cond(const bir_inst_t *I, int cond_div)
 {
     uint32_t true_bir  = I->operands[1];
@@ -1665,6 +1674,21 @@ static void isel_br_cond(const bir_inst_t *I, int cond_div)
     if (true_bir >= BIR_MAX_BLOCKS || false_bir >= BIR_MAX_BLOCKS) return;
     uint32_t true_mb   = S.block_map[true_bir];
     uint32_t false_mb  = S.block_map[false_bir];
+
+    /* Masking down to the returning lanes and hitting s_endpgm kills the whole
+       wave — EXEC can't save them. andn2 benches just the returners, wave plays
+       on, and a ragged launch keeps the tail of its last wave. */
+    if (cond_div && blk_is_kret(true_bir)) {
+        moperand_t cond  = resolve_val(I->operands[0], 1);
+        moperand_t vcond = ensure_vgpr(cond);
+        emit0_2(AMD_V_CMP_NE_U32, mop_imm(0), vcond);   /* vcc = returning lanes */
+        emit2(S.mf->exec_w ? AMD_S_ANDN2_B64 : AMD_S_ANDN2_B32,
+              mop_special(AMD_SPEC_EXEC),
+              mop_special(AMD_SPEC_EXEC), mop_special(AMD_SPEC_VCC));
+        /* Lanes left run the body; an all-out wave falls through to s_endpgm. */
+        emit0_1(AMD_S_CBRANCH_EXECNZ, mop_label(false_mb));
+        return;
+    }
 
     if (cond_div) {
         /* Divergent branch: EXEC mask save/restore pattern.
