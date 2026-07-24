@@ -1,14 +1,10 @@
 /* lf_gpu.h — LFortran GPU offload ABI, Booth implementation
  *
- * LFortran lowers `do concurrent` to a kernel plus a handful of calls into
- * a device-agnostic runtime. Implement these eight functions and LFortran
- * can target Booth without either project depending on the other; the CUDA
- * and Metal runtimes in its tree are siblings of this one.
- *
- * Declared here rather than including LFortran's header so the build stays
- * self-contained. The signatures are an ABI contract and must match
- * libasr/runtime/lfortran_gpu_runtime.h exactly or the link will lie.
- */
+ * Eight functions LFortran calls to run a `do concurrent` kernel; a sibling
+ * of the CUDA and Metal runtimes in its tree, so neither project depends on
+ * the other. Our own declaration, not LFortran's header, so the build stays
+ * self-contained — but it must match libasr/runtime/lfortran_gpu_runtime.h
+ * exactly or the link will lie. */
 
 #ifndef BARRACUDA_LF_GPU_H
 #define BARRACUDA_LF_GPU_H

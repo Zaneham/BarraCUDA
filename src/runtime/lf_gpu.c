@@ -1,14 +1,9 @@
 /* lf_gpu.c — LFortran GPU offload ABI over the Booth NVIDIA launcher.
  *
- * The ABI returns void and has no error channel, so a failure here is fatal
- * and loud. Carrying on after a failed H2D copy would hand Fortran a result
- * array full of whatever was in device memory, which is the one outcome
- * worse than stopping.
- *
- * Kernels are PTX on disk, produced by kath from the .cu LFortran emits.
- * The CUDA runtime gets its kernel from a static registrar linked into the
- * host object; we have no such hook, so the path is resolved at load time.
- */
+ * The ABI is void-returning with no error channel, so failure is fatal and
+ * loud: a silent bad copy hands Fortran an array of garbage, which is worse.
+ * Kernels are PTX on disk, so we resolve the path at load time rather than
+ * lean on the static registrar the CUDA runtime links in. */
 
 #include "lf_gpu.h"
 #include "nv_rt.h"
@@ -63,8 +58,7 @@ static void lf_die(const char *what, int rc)
     exit(1);
 }
 
-/* Where to find the PTX. An explicit source string wins, then BOOTH_PTX for
- * the case where the build put it somewhere odd, then the kernel name. */
+/* Find the PTX: explicit source, then $BOOTH_PTX, then <kernel>.ptx. */
 static void lf_ptx(const char *source, const char *entry,
                    char *out, size_t cap)
 {
@@ -160,9 +154,8 @@ void lfortran_gpu_release_kernel(lfortran_gpu_kernel *k)
 
 /* ---- Arguments ---- */
 
-/* Buffers are copied host to device here and back again after the launch,
- * mirroring the CUDA runtime. Fortran hands us plain host arrays and expects
- * to read results out of the same memory afterwards. */
+/* Copy in now, out after the launch: Fortran reads results from the same
+ * host array it handed us. */
 void lfortran_gpu_set_buffer_arg(lfortran_gpu_kernel *k, int idx,
     void *ptr, size_t size)
 {
@@ -221,8 +214,7 @@ void lfortran_gpu_launch(lfortran_gpu_ctx *ctx, lfortran_gpu_kernel *k,
         lf_die("launch dims non-positive", grid[0]);
     }
 
-    /* The driver API wants a pointer to each argument, so buffers pass the
-     * address of the device pointer rather than the pointer itself. */
+    /* Driver API wants a pointer to each arg, so buffers pass &dptr. */
     for (j = 0; j < k->nargs; j++) {
         if (!k->args[j].used) lf_die("argument gap", j);
         argv[n++] = k->args[j].is_buf ? (void *)&k->args[j].dptr
