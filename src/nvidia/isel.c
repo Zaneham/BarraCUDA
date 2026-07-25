@@ -360,6 +360,17 @@ static void is_imul(uint32_t idx, const bir_inst_t *I)
     em1((rf == NV_RF_U64) ? NV_MUL_LO_U64 : NV_MUL_LO_U32, d, a, b);
 }
 
+/* High half of a wide product, the workhorse of multi-limb field arithmetic.
+ * PTX has mul.hi natively at both widths, so this is a straight lowering. */
+static void is_umulhi(uint32_t idx, const bir_inst_t *I)
+{
+    uint8_t rf = bir_rfile(I->type);
+    nv_opnd_t d = map_val(idx, I->type);
+    nv_opnd_t a = rslv(I->operands[0]);
+    nv_opnd_t b = rslv(I->operands[1]);
+    em1((rf == NV_RF_U64) ? NV_MUL_HI_U64 : NV_MUL_HI_U32, d, a, b);
+}
+
 static void is_idiv(uint32_t idx, const bir_inst_t *I)
 {
     nv_opnd_t d = map_val(idx, I->type);
@@ -1108,6 +1119,8 @@ static void isel_blk(uint32_t bir_bi)
             is_isub(idx, I); break;
         case BIR_MUL:
             is_imul(idx, I); break;
+        case BIR_UMULHI:
+            is_umulhi(idx, I); break;
         case BIR_SDIV: case BIR_UDIV:
             is_idiv(idx, I); break;
         case BIR_SREM: case BIR_UREM:

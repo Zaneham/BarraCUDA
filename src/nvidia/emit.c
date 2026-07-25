@@ -176,6 +176,12 @@ static void em_inst(nv_module_t *nv, const nv_minst_t *I)
         em_opnd(nv, &I->ops[1]); nv_apnd(nv, ", ");
         em_opnd(nv, &I->ops[2]);
         break;
+    case NV_MUL_HI_U64:
+        nv_apnd(nv, "mul.hi.u64 ");
+        em_opnd(nv, &I->ops[0]); nv_apnd(nv, ", ");
+        em_opnd(nv, &I->ops[1]); nv_apnd(nv, ", ");
+        em_opnd(nv, &I->ops[2]);
+        break;
     case NV_MAD_LO_U64:
         nv_apnd(nv, "mad.lo.u64 ");
         em_opnd(nv, &I->ops[0]); nv_apnd(nv, ", ");

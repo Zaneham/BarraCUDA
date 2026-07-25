@@ -19,7 +19,7 @@ typedef enum {
     NV_ADD_U32 = 0,  NV_ADD_U64,  NV_ADD_S32,
     NV_SUB_U32,      NV_SUB_S32,  NV_SUB_S64,
     NV_MUL_LO_U32,   NV_MUL_LO_S32,  NV_MUL_LO_U64,
-    NV_MUL_HI_U32,   NV_MUL_HI_S32,
+    NV_MUL_HI_U32,   NV_MUL_HI_S32,  NV_MUL_HI_U64,
     NV_MAD_LO_U64,   /* mad.lo.u64 for GEP */
     NV_DIV_U32,       NV_DIV_S32,
     NV_REM_U32,       NV_REM_S32,
