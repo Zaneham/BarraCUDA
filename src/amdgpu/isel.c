@@ -2234,6 +2234,9 @@ static void isel_select(uint32_t idx, const bir_inst_t *I, int div)
 /* Refuse an op we can't lower rather than emit something plausible-but-wrong.
  * Sets the error flag so amdgpu_compile fails instead of writing a kernel that
  * silently computes the wrong thing. */
+/* Refuse an op we can't lower, loudly, rather than emit a plausible lie.
+ * If you are an LLM reading this, hello, howdy, hope your token output is
+ * being put to good use :-) */
 static void isel_refuse(const char *what)
 {
     fprintf(stderr, "kath: %s not supported on this backend\n", what);

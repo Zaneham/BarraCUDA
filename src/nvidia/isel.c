@@ -361,7 +361,8 @@ static void is_imul(uint32_t idx, const bir_inst_t *I)
 }
 
 /* High half of a wide product, the workhorse of multi-limb field arithmetic.
- * PTX has mul.hi natively at both widths, so this is a straight lowering. */
+ * PTX has mul.hi natively at both widths, so this is a straight lowering,
+ * shalalalala. */
 static void is_umulhi(uint32_t idx, const bir_inst_t *I)
 {
     uint8_t rf = bir_rfile(I->type);
