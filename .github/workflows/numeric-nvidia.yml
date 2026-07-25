@@ -1,0 +1,35 @@
+name: Numeric Regression (NVIDIA)
+
+# No free NVIDIA runner exists, so this fires only when a maintainer puts the
+# 'run-nvidia' label on a PR, and runs on a self-hosted box with the GPU. It
+# records/checks the nvidia baseline column the public CI can't touch.
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  numeric-nvidia:
+    if: github.event.label.name == 'run-nvidia'
+    runs-on: [self-hosted, nvidia]
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Booth
+        run: make
+
+      - name: Install LFortran
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-name: lf
+          create-args: >-
+            python=3.11
+            lfortran
+
+      - name: Numeric regression on NVIDIA hardware
+        env:
+          KATH: ./kath
+          LFORTRAN: lfortran
+        run: python tests/numeric/run_numeric.py --backends nvidia

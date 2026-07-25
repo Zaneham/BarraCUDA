@@ -22,6 +22,40 @@
         { "n": 200, "expect": 5.0 },
         { "n": 255, "expect": 5.0 }
       ]
+    },
+    {
+      "name": "sscal",
+      "source": "kernels/sscal.f90",
+      "entry": "__lfortran_gpu_kernel_0",
+      "reference": "BLAS-1 sscal, x := a*x. With x=2, a=3 every element is 6, exact.",
+      "args": [
+        { "kind": "buffer", "type": "f32", "role": "inout", "init": 2.0 },
+        { "kind": "scalar", "type": "f32", "value": 3.0 },
+        { "kind": "scalar", "type": "i32", "value": "@n" },
+        { "kind": "scalar", "type": "i32", "value": "@n" }
+      ],
+      "cases": [
+        { "n": 256, "expect": 6.0 },
+        { "n": 200, "expect": 6.0 },
+        { "n": 255, "expect": 6.0 }
+      ]
+    },
+    {
+      "name": "scopy",
+      "source": "kernels/scopy.f90",
+      "entry": "__lfortran_gpu_kernel_0",
+      "reference": "BLAS-1 scopy, y := x. With x=7 every element of y is 7, exact.",
+      "args": [
+        { "kind": "buffer", "type": "f32", "role": "in",  "init": 7.0 },
+        { "kind": "buffer", "type": "f32", "role": "out", "init": 0.0 },
+        { "kind": "scalar", "type": "i32", "value": "@n" },
+        { "kind": "scalar", "type": "i32", "value": "@n" }
+      ],
+      "cases": [
+        { "n": 256, "expect": 7.0 },
+        { "n": 200, "expect": 7.0 },
+        { "n": 255, "expect": 7.0 }
+      ]
     }
   ]
 }

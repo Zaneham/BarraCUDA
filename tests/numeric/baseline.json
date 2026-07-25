@@ -2,16 +2,45 @@
   "cpu": {
     "saxpy/n=200": 5.0,
     "saxpy/n=255": 5.0,
-    "saxpy/n=256": 5.0
+    "saxpy/n=256": 5.0,
+    "scopy/n=200": 7.0,
+    "scopy/n=255": 7.0,
+    "scopy/n=256": 7.0,
+    "sscal/n=200": 6.0,
+    "sscal/n=255": 6.0,
+    "sscal/n=256": 6.0
+  },
+  "nvidia": {
+    "saxpy/n=200": 5.0,
+    "saxpy/n=255": 5.0,
+    "saxpy/n=256": 5.0,
+    "scopy/n=200": 7.0,
+    "scopy/n=255": 7.0,
+    "scopy/n=256": 7.0,
+    "sscal/n=200": 6.0,
+    "sscal/n=255": 6.0,
+    "sscal/n=256": 6.0
   },
   "rdna3": {
     "saxpy/n=200": 5.0,
     "saxpy/n=255": 5.0,
-    "saxpy/n=256": 5.0
+    "saxpy/n=256": 5.0,
+    "scopy/n=200": 7.0,
+    "scopy/n=255": 7.0,
+    "scopy/n=256": 7.0,
+    "sscal/n=200": 6.0,
+    "sscal/n=255": 6.0,
+    "sscal/n=256": 6.0
   },
   "rdna4": {
     "saxpy/n=200": 5.0,
     "saxpy/n=255": 5.0,
-    "saxpy/n=256": 5.0
+    "saxpy/n=256": 5.0,
+    "scopy/n=200": 7.0,
+    "scopy/n=255": 7.0,
+    "scopy/n=256": 7.0,
+    "sscal/n=200": 6.0,
+    "sscal/n=255": 6.0,
+    "sscal/n=256": 6.0
   }
 }

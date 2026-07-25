@@ -29,10 +29,16 @@ A backend with no baseline entry is recorded, not failed. Bless new numbers with
     TINYGRAD_PATH=/path/to/tinygrad \
     python3 tests/numeric/run_numeric.py --backends cpu,rdna3,rdna4
 
-`cpu`, `rdna3` and `rdna4` gate the build. NVIDIA and CDNA have no free CI
-runner, so their baselines are captured on hardware and committed; the emulated
-RDNA path is where a wave-divergence bug like the guard clause gets caught
-without a card.
+`cpu`, `rdna3` and `rdna4` gate the build (numeric.yml). NVIDIA has no free CI
+runner, so `numeric-nvidia.yml` runs `--backends nvidia` on a self-hosted box
+only when a maintainer adds the `run-nvidia` label to a PR. The emulated RDNA
+path is where a wave-divergence bug like the guard clause gets caught without a
+card.
+
+Only elementwise BLAS-1 lives here (saxpy, sscal, scopy). Reductions (sdot,
+sasum, snrm2) are blocked upstream: LFortran's CUDA backend emits an empty
+kernel for a `do concurrent ... reduce(+:)`, so there is nothing for kath to
+compile yet. They land once that offload path does.
 
 ## Adding a kernel
 

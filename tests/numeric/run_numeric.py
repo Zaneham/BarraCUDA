@@ -178,10 +178,80 @@ def run_rdna(cu_path, k, n, workdir, gfx):
     return [out[j] for j in range(n)]
 
 
+# ---- NVIDIA backend (real hardware, via nv_rt + CUDA driver) ----
+
+def run_nvidia(cu_path, k, n, workdir):
+    """kath --nvidia-ptx -> PTX, run it on the GPU through nv_rt. Needs a CUDA
+    driver (works under WSL via the passthrough libcuda). Record-only: there is
+    no free NVIDIA CI runner, so this fires on a self-hosted box behind a label."""
+    ptx = workdir / "k.ptx"
+    r = subprocess.run([KATH, "--nvidia-ptx", "-o", str(ptx), str(cu_path)],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"kath --nvidia-ptx failed: {r.stderr.strip()}")
+
+    nv_rt_o = workdir / "nv_rt.o"
+    r = subprocess.run(["gcc", "-c", "-O2", "-D_POSIX_C_SOURCE=200809L",
+                        "-I", str(BOOTH / "src" / "nvidia"),
+                        str(BOOTH / "src" / "nvidia" / "nv_rt.c"),
+                        "-o", str(nv_rt_o)], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"nv_rt build failed: {r.stderr.strip()}")
+
+    seeds, args, outs = [], [], []
+    for i, a in enumerate(k["args"]):
+        if a["kind"] == "buffer":
+            ct = CTYPE[a["type"]]
+            seeds.append(f"  {ct} *h{i} = malloc((size_t)n*sizeof({ct}));")
+            seeds.append(f"  for (int j=0;j<n;j++) h{i}[j] = {float(a.get('init',0.0))};")
+            seeds.append(f"  CUdevptr d{i} = nv_rt_alloc(&dev, (size_t)n*sizeof({ct}));")
+            seeds.append(f"  nv_rt_h2d(&dev, d{i}, h{i}, (size_t)n*sizeof({ct}));")
+            args.append(f"&d{i}")
+            if a["role"] in ("out", "inout"):
+                outs.append(i)
+        else:
+            v = n if a["value"] == "@n" else a["value"]
+            seeds.append(f"  {CTYPE[a['type']]} s{i} = ({CTYPE[a['type']]})({v});")
+            args.append(f"&s{i}")
+    if len(outs) != 1:
+        raise RuntimeError("harness supports exactly one output buffer for now")
+    outi = outs[0]
+
+    harness = workdir / "nvh.c"
+    harness.write_text(
+        "#include \"nv_rt.h\"\n#include <stdio.h>\n#include <stdlib.h>\n"
+        "int main(int argc, char **argv){\n"
+        "  int n = atoi(argv[1]);\n"
+        "  nv_dev_t dev; nv_kern_t kern;\n"
+        "  if (nv_rt_init(&dev)) { fprintf(stderr,\"init\\n\"); return 2; }\n"
+        f"  if (nv_rt_load(&dev, argv[2], \"{k['entry']}\", &kern)) "
+        "{ fprintf(stderr,\"load\\n\"); return 3; }\n"
+        + "\n".join(seeds) + "\n"
+        f"  void *args[] = {{ {', '.join(args)} }};\n"
+        "  int bs = 256, gs = (n + 255) / 256;\n"
+        "  nv_rt_launch(&dev, &kern, (unsigned)gs,1,1, (unsigned)bs,1,1, 0, args);\n"
+        "  nv_rt_sync(&dev);\n"
+        f"  nv_rt_d2h(&dev, h{outi}, d{outi}, (size_t)n*sizeof(*h{outi}));\n"
+        f"  for (int j=0;j<n;j++) printf(\"%.9g\\n\", (double)h{outi}[j]);\n"
+        "  return 0;\n}\n")
+
+    exe = workdir / "nvh.exe"
+    r = subprocess.run(["gcc", "-O2", "-I", str(BOOTH / "src" / "nvidia"),
+                        str(harness), str(nv_rt_o), "-o", str(exe), "-ldl"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"nvidia harness link failed: {r.stderr.strip()}")
+    r = subprocess.run([str(exe), str(n), str(ptx)], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"nvidia run failed: {r.stderr.strip()}")
+    return [float(x) for x in r.stdout.split()]
+
+
 BACKENDS = {
-    "cpu":   lambda cu, k, n, w: run_cpu(cu, k, n, w),
-    "rdna3": lambda cu, k, n, w: run_rdna(cu, k, n, w, "rdna3"),
-    "rdna4": lambda cu, k, n, w: run_rdna(cu, k, n, w, "rdna4"),
+    "cpu":    lambda cu, k, n, w: run_cpu(cu, k, n, w),
+    "rdna3":  lambda cu, k, n, w: run_rdna(cu, k, n, w, "rdna3"),
+    "rdna4":  lambda cu, k, n, w: run_rdna(cu, k, n, w, "rdna4"),
+    "nvidia": lambda cu, k, n, w: run_nvidia(cu, k, n, w),
 }
 
 
