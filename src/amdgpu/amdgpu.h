@@ -149,6 +149,7 @@ typedef enum {
     AMD_V_ADD_U32,
     AMD_V_SUB_U32,
     AMD_V_MUL_LO_U32,
+    AMD_V_MUL_HI_U32,
     AMD_V_AND_B32,
     AMD_V_OR_B32,
     AMD_V_XOR_B32,
