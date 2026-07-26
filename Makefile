@@ -28,12 +28,25 @@ LIBS    = -lm
 # never into kath. nv_rt is portable (LoadLibraryA on Windows, dlopen elsewhere);
 # bc_runtime is Linux, bare dlfcn.h and libhsa. -ldl names Linux rather than
 # "not Windows" because macOS keeps dlopen in libSystem and ships no libdl.
+# lf_gpu implements LFortran's GPU offload ABI on top of nv_rt, so an
+# LFortran-compiled Fortran program can launch kernels kath produced. It
+# links into the Fortran executable, not into kath; it sits in HOSTRT so
+# the strict build keeps checking it.
 UNAME_S := $(shell uname -s 2>/dev/null)
-HOSTRT   = src/nvidia/nv_rt.o
+HOSTRT   = src/nvidia/nv_rt.o src/runtime/lf_gpu.o
 DL_LIB   =
 ifeq ($(UNAME_S),Linux)
   HOSTRT += src/runtime/bc_runtime.o
   DL_LIB  = -ldl
+endif
+
+# lf_gpu_hsa is the AMD sibling of lf_gpu: the same ABI over bc_runtime. It
+# defines the same symbols, so it can't sit in HOSTRT next to lf_gpu; we just
+# compile it (Linux only) to keep it under the strict flags. The Fortran build
+# links one runtime or the other depending on the target.
+ALT_RT =
+ifeq ($(UNAME_S),Linux)
+  ALT_RT = src/runtime/lf_gpu_hsa.o
 endif
 
 SOURCES = src/main.c \
@@ -50,7 +63,7 @@ SOURCES = src/main.c \
 OBJECTS = $(SOURCES:.c=.o)
 TARGET  = kath
 
-all: $(TARGET)
+all: $(TARGET) $(ALT_RT)
 
 $(TARGET): $(OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
@@ -116,7 +129,7 @@ runtime/%.o: runtime/%.c
 	$(CC) $(TCFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJECTS) $(TARGET) $(TARGET).exe trunner trunner.exe $(TOBJS) $(HOSTRT) src/runtime/*.o runtime/*.o
+	rm -f $(OBJECTS) $(TARGET) $(TARGET).exe trunner trunner.exe $(TOBJS) $(HOSTRT) $(ALT_RT) src/runtime/*.o runtime/*.o
 	rm -f $(OBJECTS:.o=.d) $(TOBJS:.o=.d) $(HOSTRT:.o=.d) src/runtime/*.d runtime/*.d
 
 # Header deps from -MMD. Without these a header edit leaves stale objects
