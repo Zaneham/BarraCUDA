@@ -20,11 +20,11 @@ jobs:
 
       - name: Setup tinygrad emulator
         run: |
-          # Pinned: the emu harness imports tinygrad's test.mockgpu.amd.emu,
-          # an internal API upstream reshuffles between versions (and recently
-          # deleted on tip). This is the commit the kernels were verified on.
-          git clone https://github.com/tinygrad/tinygrad.git /tmp/tinygrad
-          git -C /tmp/tinygrad checkout 5a22e7f1b0254b534f1f35a640b04efcc8d77488
+          # The RDNA/gfx1200 emulator lives on our tinygrad fork, not upstream
+          # (which deleted its amd mockgpu). booth-emu is a frozen tag at the
+          # commit the kernels were verified against; the fork's branch tip has
+          # since drifted and gets gfx1200 wrong, hence a tag not a branch.
+          git clone --branch booth-emu --depth 1 https://github.com/Zaneham/tinygrad.git /tmp/tinygrad
           pip install -e /tmp/tinygrad
 
       - name: Install LFortran
