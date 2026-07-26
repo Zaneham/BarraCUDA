@@ -45,6 +45,20 @@ static void pha_ast(void)
 }
 TH_REG("phase", pha_ast)
 
+/* A function pointer declarator used to parse as a call expression, which
+   cost nothing at parse time and everything later. */
+static void pha_fnptr(void)
+{
+    int rc = th_run(BC_BIN " --parse tests/fnptr.cu", obuf, TH_BUFSZ);
+    CHEQ(rc, 0);
+    CHECK(strstr(obuf, "0 parse error(s)") != NULL);
+    CHECK(strstr(obuf, "(ident cb_t)") != NULL);
+    CHECK(strstr(obuf, "(ident hook)") != NULL);
+    CHECK(strstr(obuf, "call") == NULL);
+    PASS();
+}
+TH_REG("phase", pha_fnptr)
+
 /* ---- phase: IR ---- */
 
 static void pha_ir(void)

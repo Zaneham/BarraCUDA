@@ -318,6 +318,8 @@ static uint32_t parse_expr(parser_t *P, int min_prec);
 static uint32_t parse_stmt(parser_t *P);
 static uint32_t parse_type_spec(parser_t *P, uint16_t *quals, uint16_t *cuda);
 static uint32_t parse_decl_or_stmt(parser_t *P);
+static uint32_t fnptr(parser_t *P, int *depth);
+static int is_fnptr(parser_t *P);
 
 static int64_t parse_int_text(const char *s, int len)
 {
@@ -894,7 +896,12 @@ static uint32_t parse_param_list(parser_t *P)
             P->nodes[param].d.oper.flags = ptr_depth;
         }
 
-        if (cur_type(P) == TOK_IDENT) {
+        if (is_fnptr(P)) {
+            int d = P->nodes[param].d.oper.flags;
+            uint32_t fname = fnptr(P, &d);
+            P->nodes[param].d.oper.flags = d;
+            if (fname) add_child(P, param, fname);
+        } else if (cur_type(P) == TOK_IDENT) {
             uint32_t name = alloc_node(P, AST_IDENT);
             P->nodes[name].d.text.offset = cur(P)->offset;
             P->nodes[name].d.text.len = cur(P)->len;
@@ -920,6 +927,37 @@ static uint32_t parse_param_list(parser_t *P)
         if (!match(P, TOK_COMMA)) break;
     }
     return first;
+}
+
+/* T (*name)(sig) — the inner stars add to *depth. Booth has no indirect
+   calls on device, so the signature is parsed and dropped and what is left
+   is an ordinary pointer. Returns the name node, 0 for an abstract one. */
+static uint32_t fnptr(parser_t *P, int *depth)
+{
+    uint32_t name = 0;
+    advance(P);                                     /* ( */
+    while (cur_type(P) == TOK_STAR) { advance(P); (*depth)++; }
+    while (cur_type(P) == TOK_CONST || cur_type(P) == TOK_CU_RESTRICT)
+        advance(P);
+    if (cur_type(P) == TOK_IDENT) {
+        name = alloc_node(P, AST_IDENT);
+        P->nodes[name].d.text.offset = cur(P)->offset;
+        P->nodes[name].d.text.len = cur(P)->len;
+        advance(P);
+    }
+    expect(P, TOK_RPAREN);
+    if (cur_type(P) == TOK_LPAREN) {
+        advance(P);
+        parse_param_list(P);
+        expect(P, TOK_RPAREN);
+    }
+    return name;
+}
+
+/* Distinguishes T (*f)(...) from a parenthesised expression. */
+static int is_fnptr(parser_t *P)
+{
+    return cur_type(P) == TOK_LPAREN && peek_type(P, 1) == TOK_STAR;
 }
 
 static int starts_declaration(parser_t *P)
@@ -1161,6 +1199,25 @@ static uint32_t parse_declaration(parser_t *P)
             }
             expect(P, TOK_RPAREN);
         }
+    }
+
+    if (is_fnptr(P)) {
+        uint32_t fname = fnptr(P, &ptr_depth);
+        if (fname) {
+            decl_node = alloc_node(P, AST_VAR_DECL);
+            P->nodes[decl_node].qualifiers = quals;
+            P->nodes[decl_node].cuda_flags = cuda;
+            P->nodes[decl_node].d.oper.flags = ptr_depth;
+            add_child(P, decl_node, type_node);
+            add_child(P, decl_node, fname);
+            if (quals & QUAL_TYPEDEF)
+                reg_tname(P, P->nodes[fname].d.text.offset,
+                          (uint16_t)P->nodes[fname].d.text.len);
+            if (!expect(P, TOK_SEMI)) sync_past_semi(P);
+            return decl_node;
+        }
+        match(P, TOK_SEMI);
+        return type_node;
     }
 
     if (cur_type(P) == TOK_IDENT || cur_type(P) == TOK_TILDE
