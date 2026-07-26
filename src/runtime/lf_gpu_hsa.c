@@ -11,9 +11,8 @@
  * hidden block_count/group_size the AMD isel reads for blockDim/gridDim. The
  * layout matches the one the RDNA emulator checks in tests/numeric.
  *
- * Linux/ROCm only. End-to-end verification needs a real AMD GPU (MI300X); the
- * kernarg layout and bc_runtime path are each proven elsewhere, but the two
- * have not yet been run together on hardware.
+ * Linux/ROCm only. Smoke-tested on an MI300X (CDNA): a do-concurrent kernel
+ * offloads through here and comes back with the right answer.
  */
 
 #include "lf_gpu.h"
