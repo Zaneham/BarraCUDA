@@ -20,7 +20,11 @@ jobs:
 
       - name: Setup tinygrad emulator
         run: |
-          git clone --depth 1 https://github.com/tinygrad/tinygrad.git /tmp/tinygrad
+          # Pinned: the emu harness imports tinygrad's test.mockgpu.amd.emu,
+          # an internal API upstream reshuffles between versions (and recently
+          # deleted on tip). This is the commit the kernels were verified on.
+          git clone https://github.com/tinygrad/tinygrad.git /tmp/tinygrad
+          git -C /tmp/tinygrad checkout 5a22e7f1b0254b534f1f35a640b04efcc8d77488
           pip install -e /tmp/tinygrad
 
       - name: Install LFortran
