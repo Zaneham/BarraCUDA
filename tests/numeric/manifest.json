@@ -56,6 +56,23 @@
         { "n": 200, "expect": 7.0 },
         { "n": 255, "expect": 7.0 }
       ]
+    },
+    {
+      "name": "sswap",
+      "source": "kernels/sswap.f90",
+      "entry": "__lfortran_gpu_kernel_0",
+      "reference": "BLAS-1 sswap, x <-> y. Two outputs: x=3, y=8 comes back x=8, y=3.",
+      "args": [
+        { "kind": "buffer", "type": "f32", "role": "inout", "init": 3.0, "name": "x", "expect": 8.0 },
+        { "kind": "buffer", "type": "f32", "role": "inout", "init": 8.0, "name": "y", "expect": 3.0 },
+        { "kind": "scalar", "type": "i32", "value": "@n" },
+        { "kind": "scalar", "type": "i32", "value": "@n" }
+      ],
+      "cases": [
+        { "n": 256 },
+        { "n": 200 },
+        { "n": 255 }
+      ]
     }
   ]
 }

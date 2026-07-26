@@ -35,10 +35,14 @@ only when a maintainer adds the `run-nvidia` label to a PR. The emulated RDNA
 path is where a wave-divergence bug like the guard clause gets caught without a
 card.
 
-Only elementwise BLAS-1 lives here (saxpy, sscal, scopy). Reductions (sdot,
-sasum, snrm2) are blocked upstream: LFortran's CUDA backend emits an empty
-kernel for a `do concurrent ... reduce(+:)`, so there is nothing for kath to
-compile yet. They land once that offload path does.
+Elementwise BLAS-1 lives here: saxpy, sscal, scopy (one output) and sswap (two
+outputs, x and y). Multi-output kernels give each buffer a name and its own
+known-good value in the manifest, and get keyed as `kernel/n=N/name` in the
+baseline; single-output kernels stay on the flat `kernel/n=N` key.
+
+Reductions (sdot, sasum, snrm2) are blocked upstream: LFortran's CUDA backend
+emits an empty kernel for a `do concurrent ... reduce(+:)`, so there is nothing
+for kath to compile yet. They land once that offload path does.
 
 ## Adding a kernel
 

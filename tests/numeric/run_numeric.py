@@ -48,6 +48,44 @@ def fortran_to_cu(src, workdir):
     return text[:cut] if cut >= 0 else text
 
 
+# ---- Output plumbing ----
+# A kernel may write more than one buffer (sswap swaps x and y). Every runner
+# prints "argidx value" per element and returns {argidx: [values]}, so a
+# single- and a two-output kernel travel the same path.
+
+def out_indices(k):
+    return [i for i, a in enumerate(k["args"])
+            if a["kind"] == "buffer" and a["role"] in ("out", "inout")]
+
+
+def parse_multi(text):
+    """Collect "argidx value" lines into {argidx: [values]}. Anything that isn't
+    that shape is skipped, so a runtime that chats on stdout (nv_rt's device
+    banner) doesn't derail the parse."""
+    res = {}
+    for line in text.strip().splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        try:
+            idx, val = int(parts[0]), float(parts[1])
+        except ValueError:
+            continue
+        res.setdefault(idx, []).append(val)
+    return res
+
+
+def key_expect(k, case, argidx):
+    """Baseline key and known-good value for one output of one case. Single-output
+    kernels keep the flat kernel/n=N key; multi-output tag each by arg name."""
+    n = case["n"]
+    outs = out_indices(k)
+    if len(outs) == 1:
+        return f"{k['name']}/n={n}", case["expect"]
+    a = k["args"][argidx]
+    return f"{k['name']}/n={n}/{a['name']}", a["expect"]
+
+
 # ---- CPU backend ----
 
 def run_cpu(cu_path, k, n, workdir):
@@ -77,10 +115,12 @@ def run_cpu(cu_path, k, n, workdir):
             call.append(f"({CTYPE[a['type']]})({v})")
     call.append("n")                                    # nthreads
 
-    if len(outs) != 1:
-        raise RuntimeError("harness supports exactly one output buffer for now")
-    outi = outs[0]
+    if not outs:
+        raise RuntimeError("kernel has no output buffer")
 
+    prints = "".join(
+        f"  for (int j=0;j<n;j++) printf(\"%d %.9g\\n\", {i}, (double)b{i}[j]);\n"
+        for i in outs)
     harness = workdir / "h.c"
     harness.write_text(
         "#include <stdio.h>\n#include <stdlib.h>\n"
@@ -89,7 +129,7 @@ def run_cpu(cu_path, k, n, workdir):
         "  int n = atoi(argv[1]);\n"
         + "\n".join(seeds) + "\n"
         f"  {k['entry']}({', '.join(call)});\n"
-        f"  for (int j=0;j<n;j++) printf(\"%.9g\\n\", (double)b{outi}[j]);\n"
+        + prints +
         "  return 0;\n}\n")
 
     exe = workdir / "h.exe"
@@ -100,7 +140,7 @@ def run_cpu(cu_path, k, n, workdir):
     r = subprocess.run([str(exe), str(n)], capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError(f"cpu harness run failed: {r.stderr.strip()}")
-    return [float(x) for x in r.stdout.split()]
+    return parse_multi(r.stdout)
 
 
 # ---- RDNA emulator backend ----
@@ -138,8 +178,9 @@ def run_rdna(cu_path, k, n, workdir, gfx):
     kaoff = base + bufsz * nbuf
 
     karg = (ctypes.c_uint8 * 64).from_address(kaoff)
-    slot, outaddr, bi = 0, None, 0
-    for a in k["args"]:
+    slot, bi = 0, 0
+    out_addr = {}
+    for i, a in enumerate(k["args"]):
         if a["kind"] == "buffer":
             addr = base + bufsz * bi
             buf = (ctypes.c_float * n).from_address(addr)
@@ -147,7 +188,7 @@ def run_rdna(cu_path, k, n, workdir, gfx):
                 buf[j] = float(a.get("init", 0.0))
             struct.pack_into("<Q", karg, slot, addr)
             if a["role"] in ("out", "inout"):
-                outaddr = addr
+                out_addr[i] = addr
             bi += 1
         elif a["type"] == "f32":
             v = n if a["value"] == "@n" else a["value"]
@@ -174,8 +215,11 @@ def run_rdna(cu_path, k, n, workdir, gfx):
                  kaoff, rsrc2, scrsz, arch, usr)
     if rc != 0:
         raise RuntimeError(f"{gfx} emulator rc={rc}")
-    out = (ctypes.c_float * n).from_address(outaddr)
-    return [out[j] for j in range(n)]
+    res = {}
+    for i, addr in out_addr.items():
+        ob = (ctypes.c_float * n).from_address(addr)
+        res[i] = [ob[j] for j in range(n)]
+    return res
 
 
 # ---- NVIDIA backend (real hardware, via nv_rt + CUDA driver) ----
@@ -213,10 +257,13 @@ def run_nvidia(cu_path, k, n, workdir):
             v = n if a["value"] == "@n" else a["value"]
             seeds.append(f"  {CTYPE[a['type']]} s{i} = ({CTYPE[a['type']]})({v});")
             args.append(f"&s{i}")
-    if len(outs) != 1:
-        raise RuntimeError("harness supports exactly one output buffer for now")
-    outi = outs[0]
+    if not outs:
+        raise RuntimeError("kernel has no output buffer")
 
+    readback = "".join(
+        f"  nv_rt_d2h(&dev, h{i}, d{i}, (size_t)n*sizeof(*h{i}));\n"
+        f"  for (int j=0;j<n;j++) printf(\"%d %.9g\\n\", {i}, (double)h{i}[j]);\n"
+        for i in outs)
     harness = workdir / "nvh.c"
     harness.write_text(
         "#include \"nv_rt.h\"\n#include <stdio.h>\n#include <stdlib.h>\n"
@@ -231,8 +278,7 @@ def run_nvidia(cu_path, k, n, workdir):
         "  int bs = 256, gs = (n + 255) / 256;\n"
         "  nv_rt_launch(&dev, &kern, (unsigned)gs,1,1, (unsigned)bs,1,1, 0, args);\n"
         "  nv_rt_sync(&dev);\n"
-        f"  nv_rt_d2h(&dev, h{outi}, d{outi}, (size_t)n*sizeof(*h{outi}));\n"
-        f"  for (int j=0;j<n;j++) printf(\"%.9g\\n\", (double)h{outi}[j]);\n"
+        + readback +
         "  return 0;\n}\n")
 
     exe = workdir / "nvh.exe"
@@ -244,7 +290,7 @@ def run_nvidia(cu_path, k, n, workdir):
     r = subprocess.run([str(exe), str(n), str(ptx)], capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError(f"nvidia run failed: {r.stderr.strip()}")
-    return [float(x) for x in r.stdout.split()]
+    return parse_multi(r.stdout)
 
 
 BACKENDS = {
@@ -303,42 +349,43 @@ def main():
                     print(f"  skip {be}: no runner")
                     continue
                 for case in k["cases"]:
-                    n, expect = case["n"], case["expect"]
-                    key = f"{k['name']}/n={n}"
+                    n = case["n"]
                     try:
                         vals = BACKENDS[be](cu, k, n, wd)
                     except Exception as e:
                         tag = "FAIL" if be in GATING else "warn"
-                        print(f"  {tag} {be} {key}: {e}")
+                        print(f"  {tag} {be} {k['name']}/n={n}: {e}")
                         if be in GATING:
-                            failures.append(f"{be} {key}")
+                            failures.append(f"{be} {k['name']}/n={n}")
                         continue
 
-                    mean, worst = score(vals, n, expect)
-                    measured.setdefault(be, {})[key] = round(mean, 9)
+                    for oi in out_indices(k):
+                        key, expect = key_expect(k, case, oi)
+                        mean, worst = score(vals[oi], n, expect)
+                        measured.setdefault(be, {})[key] = round(mean, 9)
 
-                    verdict, notes = "ok", []
-                    if worst > acc_ceiling:
-                        notes.append(f"accuracy {worst*100:.1f}% > "
-                                     f"{acc_ceiling*100:.0f}%")
-                        if be in GATING:
-                            verdict = "FAIL"
-                    prev = baseline.get(be, {}).get(key)
-                    if prev is None:
-                        notes.append("no baseline (recorded)")
-                    else:
-                        denom = abs(prev) if prev else 1.0
-                        drift = abs(mean - prev) / denom
-                        if drift > reg_gate:
-                            notes.append(f"regression {drift*100:.1f}% vs "
-                                         f"baseline {prev:g}")
+                        verdict, notes = "ok", []
+                        if worst > acc_ceiling:
+                            notes.append(f"accuracy {worst*100:.1f}% > "
+                                         f"{acc_ceiling*100:.0f}%")
                             if be in GATING:
                                 verdict = "FAIL"
-                    if verdict == "FAIL":
-                        failures.append(f"{be} {key}")
-                    tail = ("  [" + "; ".join(notes) + "]") if notes else ""
-                    print(f"  {verdict:4s} {be:6s} {key}: "
-                          f"mean={mean:.6g} worst_err={worst*100:.2f}%{tail}")
+                        prev = baseline.get(be, {}).get(key)
+                        if prev is None:
+                            notes.append("no baseline (recorded)")
+                        else:
+                            denom = abs(prev) if prev else 1.0
+                            drift = abs(mean - prev) / denom
+                            if drift > reg_gate:
+                                notes.append(f"regression {drift*100:.1f}% vs "
+                                             f"baseline {prev:g}")
+                                if be in GATING:
+                                    verdict = "FAIL"
+                        if verdict == "FAIL":
+                            failures.append(f"{be} {key}")
+                        tail = ("  [" + "; ".join(notes) + "]") if notes else ""
+                        print(f"  {verdict:4s} {be:6s} {key}: "
+                              f"mean={mean:.6g} worst_err={worst*100:.2f}%{tail}")
 
     if args.update_baseline:
         merged = baseline

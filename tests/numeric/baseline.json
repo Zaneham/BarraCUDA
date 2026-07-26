@@ -8,7 +8,13 @@
     "scopy/n=256": 7.0,
     "sscal/n=200": 6.0,
     "sscal/n=255": 6.0,
-    "sscal/n=256": 6.0
+    "sscal/n=256": 6.0,
+    "sswap/n=200/x": 8.0,
+    "sswap/n=200/y": 3.0,
+    "sswap/n=255/x": 8.0,
+    "sswap/n=255/y": 3.0,
+    "sswap/n=256/x": 8.0,
+    "sswap/n=256/y": 3.0
   },
   "nvidia": {
     "saxpy/n=200": 5.0,
@@ -19,7 +25,13 @@
     "scopy/n=256": 7.0,
     "sscal/n=200": 6.0,
     "sscal/n=255": 6.0,
-    "sscal/n=256": 6.0
+    "sscal/n=256": 6.0,
+    "sswap/n=200/x": 8.0,
+    "sswap/n=200/y": 3.0,
+    "sswap/n=255/x": 8.0,
+    "sswap/n=255/y": 3.0,
+    "sswap/n=256/x": 8.0,
+    "sswap/n=256/y": 3.0
   },
   "rdna3": {
     "saxpy/n=200": 5.0,
@@ -30,7 +42,13 @@
     "scopy/n=256": 7.0,
     "sscal/n=200": 6.0,
     "sscal/n=255": 6.0,
-    "sscal/n=256": 6.0
+    "sscal/n=256": 6.0,
+    "sswap/n=200/x": 8.0,
+    "sswap/n=200/y": 3.0,
+    "sswap/n=255/x": 8.0,
+    "sswap/n=255/y": 3.0,
+    "sswap/n=256/x": 8.0,
+    "sswap/n=256/y": 3.0
   },
   "rdna4": {
     "saxpy/n=200": 5.0,
@@ -41,6 +59,12 @@
     "scopy/n=256": 7.0,
     "sscal/n=200": 6.0,
     "sscal/n=255": 6.0,
-    "sscal/n=256": 6.0
+    "sscal/n=256": 6.0,
+    "sswap/n=200/x": 8.0,
+    "sswap/n=200/y": 3.0,
+    "sswap/n=255/x": 8.0,
+    "sswap/n=255/y": 3.0,
+    "sswap/n=256/x": 8.0,
+    "sswap/n=256/y": 3.0
   }
 }
