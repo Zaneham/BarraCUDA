@@ -1,0 +1,43 @@
+name: Numeric Regression (SLATEC)
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  numeric:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}      # login shell so the conda env is active
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Booth
+        run: make
+
+      - name: Setup tinygrad emulator
+        run: |
+          # The correct gfx1200 emulation lives on our tinygrad fork; upstream's
+          # amd mockgpu gets rdna4 wrong (rdna3 is fine on both). booth-emu is a
+          # frozen tag at the verified commit; the fork's branch tip has since
+          # drifted and gets gfx1200 wrong too, hence a tag not a branch.
+          git clone --branch booth-emu --depth 1 https://github.com/Zaneham/tinygrad.git /tmp/tinygrad
+          pip install -e /tmp/tinygrad
+
+      - name: Install LFortran
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-name: lf
+          create-args: >-
+            python=3.11
+            lfortran
+
+      - name: Numeric regression vs baseline
+        env:
+          KATH: ./kath
+          LFORTRAN: lfortran
+          TINYGRAD_PATH: /tmp/tinygrad
+        run: python tests/numeric/run_numeric.py --backends cpu,rdna3,rdna4

@@ -1,0 +1,78 @@
+{
+  "config": {
+    "_comment": "Two axes. accuracy = worst element vs the known-good value; a broken kernel trips this. regression = this run's mean vs the committed baseline for the SAME backend; codegen drift trips this. GPU float legitimately differs from CPU, so accuracy is deliberately loose and regression is the real gate.",
+    "accuracy_ceiling_rel": 0.20,
+    "regression_gate_rel": 0.20
+  },
+  "kernels": [
+    {
+      "name": "saxpy",
+      "source": "kernels/saxpy.f90",
+      "entry": "__lfortran_gpu_kernel_0",
+      "reference": "BLAS-1 saxpy, y := a*x + y. With x=1, y=3, a=2 every element is 5, exactly representable, so any deviation is the backend's fault not the maths'.",
+      "args": [
+        { "kind": "buffer", "type": "f32", "role": "in",    "init": 1.0 },
+        { "kind": "buffer", "type": "f32", "role": "inout", "init": 3.0 },
+        { "kind": "scalar", "type": "f32", "value": 2.0 },
+        { "kind": "scalar", "type": "i32", "value": "@n" },
+        { "kind": "scalar", "type": "i32", "value": "@n" }
+      ],
+      "cases": [
+        { "n": 256, "expect": 5.0 },
+        { "n": 200, "expect": 5.0 },
+        { "n": 255, "expect": 5.0 }
+      ]
+    },
+    {
+      "name": "sscal",
+      "source": "kernels/sscal.f90",
+      "entry": "__lfortran_gpu_kernel_0",
+      "reference": "BLAS-1 sscal, x := a*x. With x=2, a=3 every element is 6, exact.",
+      "args": [
+        { "kind": "buffer", "type": "f32", "role": "inout", "init": 2.0 },
+        { "kind": "scalar", "type": "f32", "value": 3.0 },
+        { "kind": "scalar", "type": "i32", "value": "@n" },
+        { "kind": "scalar", "type": "i32", "value": "@n" }
+      ],
+      "cases": [
+        { "n": 256, "expect": 6.0 },
+        { "n": 200, "expect": 6.0 },
+        { "n": 255, "expect": 6.0 }
+      ]
+    },
+    {
+      "name": "scopy",
+      "source": "kernels/scopy.f90",
+      "entry": "__lfortran_gpu_kernel_0",
+      "reference": "BLAS-1 scopy, y := x. With x=7 every element of y is 7, exact.",
+      "args": [
+        { "kind": "buffer", "type": "f32", "role": "in",  "init": 7.0 },
+        { "kind": "buffer", "type": "f32", "role": "out", "init": 0.0 },
+        { "kind": "scalar", "type": "i32", "value": "@n" },
+        { "kind": "scalar", "type": "i32", "value": "@n" }
+      ],
+      "cases": [
+        { "n": 256, "expect": 7.0 },
+        { "n": 200, "expect": 7.0 },
+        { "n": 255, "expect": 7.0 }
+      ]
+    },
+    {
+      "name": "sswap",
+      "source": "kernels/sswap.f90",
+      "entry": "__lfortran_gpu_kernel_0",
+      "reference": "BLAS-1 sswap, x <-> y. Two outputs: x=3, y=8 comes back x=8, y=3.",
+      "args": [
+        { "kind": "buffer", "type": "f32", "role": "inout", "init": 3.0, "name": "x", "expect": 8.0 },
+        { "kind": "buffer", "type": "f32", "role": "inout", "init": 8.0, "name": "y", "expect": 3.0 },
+        { "kind": "scalar", "type": "i32", "value": "@n" },
+        { "kind": "scalar", "type": "i32", "value": "@n" }
+      ],
+      "cases": [
+        { "n": 256 },
+        { "n": 200 },
+        { "n": 255 }
+      ]
+    }
+  ]
+}

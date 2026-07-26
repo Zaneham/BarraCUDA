@@ -24,7 +24,10 @@ jobs:
 
       - name: Setup tinygrad emulator
         run: |
-          git clone --depth 1 https://github.com/tinygrad/tinygrad.git /tmp/tinygrad
+          # Our tinygrad fork at the booth-emu tag: the RDNA emulation we
+          # verified against. Upstream's amd mockgpu drifts (and gets rdna4
+          # wrong), so pin the same frozen tag the numeric CI uses.
+          git clone --branch booth-emu --depth 1 https://github.com/Zaneham/tinygrad.git /tmp/tinygrad
           pip install -e /tmp/tinygrad
 
       - name: vectorAdd (RDNA3/4 emulator)
