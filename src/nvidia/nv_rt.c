@@ -151,7 +151,7 @@ int nv_rt_init(nv_dev_t *D)
         return NV_RT_ERR_CUDA;
     }
 
-    printf("nv_rt: %s (sm_%d%d)\n", D->dev_name, D->sm_major, D->sm_minor);
+    fprintf(stderr, "nv_rt: %s (sm_%d%d)\n", D->dev_name, D->sm_major, D->sm_minor);
     return NV_RT_OK;
 }
 
@@ -243,7 +243,7 @@ int nv_rt_load(nv_dev_t *D, const char *ptx_path,
     }
 
     snprintf(out->name, sizeof(out->name), "%s", kern_name);
-    printf("nv_rt: loaded kernel '%s' from %s\n", kern_name, ptx_path);
+    fprintf(stderr, "nv_rt: loaded kernel '%s' from %s\n", kern_name, ptx_path);
     return NV_RT_OK;
 }
 

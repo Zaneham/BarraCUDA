@@ -607,6 +607,7 @@ static const cuda_builtin_t cuda_builtins[] = {
     {"__shfl_up_sync",  -1, 0,  1},
     {"__shfl_down_sync",-1, 0,  1},
     {"__shfl_xor_sync", -1, 0,  1},
+    {"__umulhi",         2, 0,  0},  /* high 32 of a 32x32 product */
     {"__umul64hi",       2, 0,  0},  /* high 64 of a 64x64 product — ZK field arith */
     {"sqrtf",1,0,0},{"sqrt",1,0,0},{"__fsqrt_rn",1,0,0},{"rsqrtf",1,0,0},{"__frsqrt_rn",1,0,0},
     {"__frcp_rn",1,0,0},{"expf",1,0,0},{"__expf",1,0,0},{"exp2f",1,0,0},

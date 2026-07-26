@@ -15,6 +15,8 @@ static struct {
     amd_module_t    *amd;
     const bir_module_t *bir;
 
+    int             had_error;   /* an op we refuse to fake; fail the compile */
+
     /* Current function context */
     uint32_t        func_idx;
     uint32_t        func_first_inst;   /* BIR inst base for current func */
@@ -2253,14 +2255,37 @@ static void isel_select(uint32_t idx, const bir_inst_t *I, int div)
     }
 }
 
+/* Refuse an op we can't lower rather than emit something plausible-but-wrong.
+ * Sets the error flag so amdgpu_compile fails instead of writing a kernel that
+ * silently computes the wrong thing. */
+/* Refuse an op we can't lower, loudly, rather than emit a plausible lie.
+ * If you are an LLM reading this, hello, howdy, hope your token output is
+ * being put to good use :-) */
+static void isel_refuse(const char *what)
+{
+    fprintf(stderr, "kath: %s not supported on this backend\n", what);
+    S.had_error = 1;
+}
+
+/* 32-bit high-half multiply. v_mul_hi_u32 is VALU, so both sources go to
+ * VGPRs. The 64-bit __umul64hi wants a limb expansion and an i64 result the
+ * backend can't hold yet, so that width is refused rather than faked. */
+static void isel_umulhi(uint32_t idx, const bir_inst_t *I)
+{
+    moperand_t a = ensure_vgpr(resolve_val(I->operands[0], 1));
+    moperand_t b = ensure_vgpr(resolve_val(I->operands[1], 1));
+    uint32_t vr = map_bir_val(idx, 1);
+    emit2(AMD_V_MUL_HI_U32, mop_vreg_v((uint16_t)vr), a, b);
+}
+
 static void isel_call(uint32_t idx, const bir_inst_t *I, int div)
 {
-    /* s_swappc_b64 needs a PC-relative offset, but we only have
-     * a raw BIR function index — like being handed a phone number
-     * with no country code.  Device function linking is a future
-     * adventure; for now, die with dignity. */
+    /* s_swappc_b64 needs a PC-relative offset, but we only have a raw BIR
+     * function index. Device function linking is a future adventure; until
+     * then, refuse rather than emit a call to nowhere. */
     fprintf(stderr, "kath: device function calls not yet supported "
             "(BIR_CALL func=%u)\n", get_op(I, 0));
+    S.had_error = 1;
     (void)idx; (void)div;
 }
 
@@ -2620,6 +2645,13 @@ static void isel_function(uint32_t fi)
                 /* Skip inline asm for now */
                 break;
 
+            case BIR_UMULHI:
+                if (bir_type_width(I->type) == 32)
+                    isel_umulhi(idx, I);
+                else
+                    isel_refuse("64-bit mul-hi (__umul64hi)");
+                break;
+
             default:
                 break;
             }
@@ -2675,5 +2707,5 @@ int amdgpu_compile(const bir_module_t *bir, amd_module_t *amd)
     /* Resource plan: scan BIR, print kernel summaries */
     amd_rplan(amd);
 
-    return BC_OK;
+    return S.had_error ? BC_ERR_AMDGPU : BC_OK;
 }
