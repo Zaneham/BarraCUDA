@@ -226,12 +226,12 @@ static void tt_lower_matmul(void)
 {
     /* Rank-2 tiles with tl.dot now lower for the CPU path: the tile is
      * materialized and fully unrolled (block sizes are constexpr), so a
-     * 4x4 matmul produces float multiplies and adds and no E099. */
+     * 4x4 matmul produces float multiplies and adds and no E138. */
     int rc = tt_run("--triton --ir tests/tri_matmul.py");
     CHEQ(rc, 0);
     CHECK(strstr(obuf, "fmul f32") != NULL);
     CHECK(strstr(obuf, "fadd f32") != NULL);
-    CHECK(strstr(obuf, "E099") == NULL);
+    CHECK(strstr(obuf, "E138") == NULL);
     PASS();
 }
 TH_REG("triton", tt_lower_matmul)
@@ -240,12 +240,12 @@ static void tt_lower_matmul_kloop(void)
 {
     /* Matmul with a runtime K-loop lowers to a counted loop: the
      * accumulator is scratch-backed and the loop counter is a phi, so
-     * the BIR has a phi and a conditional branch and no E099. */
+     * the BIR has a phi and a conditional branch and no E138. */
     int rc = tt_run("--triton --ir tests/tri_matmul_k.py");
     CHEQ(rc, 0);
     CHECK(strstr(obuf, "phi i32") != NULL);
     CHECK(strstr(obuf, "br_cond") != NULL);
-    CHECK(strstr(obuf, "E099") == NULL);
+    CHECK(strstr(obuf, "E138") == NULL);
     PASS();
 }
 TH_REG("triton", tt_lower_matmul_kloop)
@@ -322,7 +322,7 @@ static void tt_lower_math_intrinsics(void)
     CHECK(strstr(obuf, "fmax ") != NULL);
     CHECK(strstr(obuf, "fmin ") != NULL);
     CHECK(strstr(obuf, "fdiv f32") != NULL);
-    CHECK(strstr(obuf, "E095") == NULL);
+    CHECK(strstr(obuf, "E134") == NULL);
     PASS();
 }
 TH_REG("triton", tt_lower_math_intrinsics)
@@ -333,7 +333,7 @@ static void tt_lower_where_select(void)
     CHEQ(rc, 0);
     CHECK(strstr(obuf, "fcmp ") != NULL);
     CHECK(strstr(obuf, "select f32") != NULL);
-    CHECK(strstr(obuf, "E095") == NULL);
+    CHECK(strstr(obuf, "E134") == NULL);
     PASS();
 }
 TH_REG("triton", tt_lower_where_select)
@@ -344,7 +344,7 @@ static void tt_lower_where_mixed_promotes(void)
     CHEQ(rc, 0);
     CHECK(strstr(obuf, "sitofp i32") != NULL);
     CHECK(strstr(obuf, "select f32") != NULL);
-    CHECK(strstr(obuf, "E095") == NULL);
+    CHECK(strstr(obuf, "E134") == NULL);
     PASS();
 }
 TH_REG("triton", tt_lower_where_mixed_promotes)
@@ -355,7 +355,7 @@ static void tt_lower_where_i32_select(void)
     CHEQ(rc, 0);
     CHECK(strstr(obuf, "icmp ") != NULL);
     CHECK(strstr(obuf, "select i32") != NULL);
-    CHECK(strstr(obuf, "E095") == NULL);
+    CHECK(strstr(obuf, "E134") == NULL);
     PASS();
 }
 TH_REG("triton", tt_lower_where_i32_select)
@@ -364,7 +364,7 @@ static void tt_lower_where_bad_cond(void)
 {
     int rc = tt_run("--triton --ir tests/tri_where_bad_cond.py");
     CHNE(rc, 0);
-    CHECK(strstr(obuf, "E095") != NULL);
+    CHECK(strstr(obuf, "E134") != NULL);
     CHECK(strstr(obuf, "condition must lower") != NULL);
     PASS();
 }
