@@ -73,6 +73,46 @@
         { "n": 200 },
         { "n": 255 }
       ]
+    },
+    {
+      "name": "srot",
+      "source": "kernels/srot.f90",
+      "entry": "__lfortran_gpu_kernel_0",
+      "reference": "BLAS-1 srot, a Givens rotation applied across x and y. Two outputs, and the cross dependency needs a kernel-local temp because y reads the old x. Constants are powers of two so every result is exact: x=2, y=12 with c=0.5, s=0.25 gives x=4, y=5.5. Chosen for exactness rather than being a unit rotation.",
+      "args": [
+        { "kind": "buffer", "type": "f32", "role": "inout", "init": 2.0,  "name": "x", "expect": 4.0 },
+        { "kind": "buffer", "type": "f32", "role": "inout", "init": 12.0, "name": "y", "expect": 5.5 },
+        { "kind": "scalar", "type": "f32", "value": 0.5 },
+        { "kind": "scalar", "type": "i32", "value": "@n" },
+        { "kind": "scalar", "type": "f32", "value": 0.25 },
+        { "kind": "scalar", "type": "i32", "value": "@n" }
+      ],
+      "cases": [
+        { "n": 256 },
+        { "n": 200 },
+        { "n": 255 }
+      ]
+    },
+    {
+      "name": "srotm",
+      "source": "kernels/srotm.f90",
+      "entry": "__lfortran_gpu_kernel_0",
+      "reference": "BLAS-1 srotm, the SPARAM(1) = -1 case where the full 2x2 H is applied. The flag dispatch is host side, so the kernel is the rotation proper. Four float scalars, more than any other kernel here, which is the argument-passing coverage it buys. x=8, y=2 through H = [[0.25, 0.5], [0.5, -0.25]] gives x=3, y=3.5, all exact.",
+      "args": [
+        { "kind": "buffer", "type": "f32", "role": "inout", "init": 8.0, "name": "x", "expect": 3.0 },
+        { "kind": "buffer", "type": "f32", "role": "inout", "init": 2.0, "name": "y", "expect": 3.5 },
+        { "kind": "scalar", "type": "f32", "value": 0.25 },
+        { "kind": "scalar", "type": "f32", "value": 0.5 },
+        { "kind": "scalar", "type": "f32", "value": 0.5 },
+        { "kind": "scalar", "type": "f32", "value": -0.25 },
+        { "kind": "scalar", "type": "i32", "value": "@n" },
+        { "kind": "scalar", "type": "i32", "value": "@n" }
+      ],
+      "cases": [
+        { "n": 256 },
+        { "n": 200 },
+        { "n": 255 }
+      ]
     }
   ]
 }

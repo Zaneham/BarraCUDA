@@ -171,13 +171,16 @@ def run_rdna(cu_path, k, n, workdir, gfx):
     bksz  = 64
     ngrps = (n + bksz - 1) // bksz
 
-    # One arena for all buffers plus the 64-byte kernarg block.
+    # One arena for all buffers plus the kernarg block. Each parameter takes an
+    # 8-byte slot with 18 bytes of hidden block and group dims behind them, so
+    # size it from the kernel; a fixed 64 runs off the end past five arguments.
     bufsz = n * 4
     nbuf  = sum(1 for a in k["args"] if a["kind"] == "buffer")
-    base  = lo_mem(bufsz * nbuf + 128)
+    kasz  = 8 * len(k["args"]) + 24
+    base  = lo_mem(bufsz * nbuf + kasz)
     kaoff = base + bufsz * nbuf
 
-    karg = (ctypes.c_uint8 * 64).from_address(kaoff)
+    karg = (ctypes.c_uint8 * kasz).from_address(kaoff)
     slot, bi = 0, 0
     out_addr = {}
     for i, a in enumerate(k["args"]):
