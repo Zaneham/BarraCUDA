@@ -211,7 +211,7 @@ static int l_shape_supported(tn_lower_t *L, uint32_t node_idx)
     snprintf(msg, sizeof(msg),
              "rank-2 tile (%s) needs matrix codegen "
              "(MFMA / mma.sync), not yet lowered", sbuf);
-    l_err(L, 99, l_tok(L, node_idx), msg);
+    l_err(L, 138, l_tok(L, node_idx), msg);
     return 0;
 }
 
@@ -237,7 +237,7 @@ static uint32_t l_lit(tn_lower_t *L, uint32_t node_idx)
     case TN_LIT_NONE:
         return BIR_MAKE_CONST(bir_const_int(L->bir, L->t_i32, 0));
     case TN_LIT_STRING:
-        l_err(L, 90, t, "string literals are not lowerable in sitting one");
+        l_err(L, 129, t, "string literals are not lowerable in sitting one");
         return BIR_VAL_NONE;
     default:
         return BIR_VAL_NONE;
@@ -272,7 +272,7 @@ static uint32_t l_name(tn_lower_t *L, uint32_t node_idx)
             uint32_t v = L->node_val[aux];
             if (v != BIR_VAL_NONE) return v;
         }
-        l_err(L, 91, l_tok(L, node_idx),
+        l_err(L, 130, l_tok(L, node_idx),
               "local referenced before it produced a BIR value");
         return BIR_VAL_NONE;
     }
@@ -282,7 +282,7 @@ static uint32_t l_name(tn_lower_t *L, uint32_t node_idx)
         /* Bare module / intrinsic / type names should not appear as
          * value expressions on their own; usually means the kernel
          * uses something not yet lowered. Report and continue. */
-        l_err(L, 92, l_tok(L, node_idx),
+        l_err(L, 131, l_tok(L, node_idx),
               "bare module or intrinsic name in expression position");
         return BIR_VAL_NONE;
     case TN_SYM_UNBOUND:
@@ -409,7 +409,7 @@ static uint32_t l_binop(tn_lower_t *L, uint32_t node_idx)
     uint32_t rhs = l_expr(L, l_kid(L, node_idx, 1));
     uint32_t r = l_emit_binop(L, (int)n->flags, lhs, rhs);
     if (r == BIR_VAL_NONE && lhs != BIR_VAL_NONE && rhs != BIR_VAL_NONE)
-        l_err(L, 93, l_tok(L, node_idx), "binop not yet lowered");
+        l_err(L, 132, l_tok(L, node_idx), "binop not yet lowered");
     return r;
 }
 
@@ -438,7 +438,7 @@ static uint32_t l_compare(tn_lower_t *L, uint32_t node_idx)
         case TN_CMP_EQ: pred = BIR_FCMP_OEQ; break;
         case TN_CMP_NE: pred = BIR_FCMP_ONE; break;
         default:
-            l_err(L, 96, l_tok(L, node_idx),
+            l_err(L, 135, l_tok(L, node_idx),
                   "comparison predicate not yet lowered for floats");
             return BIR_VAL_NONE;
         }
@@ -456,7 +456,7 @@ static uint32_t l_compare(tn_lower_t *L, uint32_t node_idx)
     case TN_CMP_EQ: pred = BIR_ICMP_EQ;  break;
     case TN_CMP_NE: pred = BIR_ICMP_NE;  break;
     default:
-        l_err(L, 96, l_tok(L, node_idx),
+        l_err(L, 135, l_tok(L, node_idx),
               "comparison predicate not yet lowered");
         return BIR_VAL_NONE;
     }
@@ -492,7 +492,7 @@ static uint32_t l_unop(tn_lower_t *L, uint32_t node_idx)
         return inst;
     }
     default:
-        l_err(L, 94, l_tok(L, node_idx),
+        l_err(L, 133, l_tok(L, node_idx),
               "unary operator not yet lowered");
         return BIR_VAL_NONE;
     }
@@ -782,7 +782,7 @@ static uint32_t l_intrinsic_call(tn_lower_t *L, uint32_t call_idx,
         uint32_t tn = l_pos_arg(L, call_idx, 1);
         uint32_t fn = l_pos_arg(L, call_idx, 2);
         if (cn == 0 || tn == 0 || fn == 0) {
-            l_err(L, 95, l_tok(L, call_idx),
+            l_err(L, 134, l_tok(L, call_idx),
                   "tl.where expects condition, true value, false value");
             return BIR_VAL_NONE;
         }
@@ -791,7 +791,7 @@ static uint32_t l_intrinsic_call(tn_lower_t *L, uint32_t call_idx,
         if (cond == BIR_VAL_NONE) return BIR_VAL_NONE;
         int ck = l_type_kind(L, l_val_type(L, cond));
         if (ck != BIR_TYPE_INT) {
-            l_err(L, 95, l_tok(L, call_idx),
+            l_err(L, 134, l_tok(L, call_idx),
                   "tl.where condition must lower to an integer/bool mask");
             return BIR_VAL_NONE;
         }
@@ -804,7 +804,7 @@ static uint32_t l_intrinsic_call(tn_lower_t *L, uint32_t call_idx,
         uint32_t fty = l_val_type(L, fv);
         uint32_t sty = l_tjoin(L, tty, fty);
         if (sty == BIR_VAL_NONE) {
-            l_err(L, 95, l_tok(L, call_idx),
+            l_err(L, 134, l_tok(L, call_idx),
                   "tl.where value types not yet lowerable");
             return BIR_VAL_NONE;
         }
@@ -843,7 +843,7 @@ static uint32_t l_intrinsic_call(tn_lower_t *L, uint32_t call_idx,
         snprintf(msg, sizeof(msg),
                  "intrinsic tl.%s not yet lowered in sitting one",
                  tn_intrinsic_name(intrinsic_id));
-        l_err(L, 95, l_tok(L, call_idx), msg);
+        l_err(L, 134, l_tok(L, call_idx), msg);
         return BIR_VAL_NONE;
     }
     }
@@ -902,7 +902,7 @@ static int l_tile(tn_lower_t *L, uint32_t node, int *out){
     int rows = (sh.rank>=1) ? sh.dims[0] : 1;
     int cols = (sh.rank>=2) ? sh.dims[1] : 1;
     if (rows<=0 || cols<=0 || rows*cols>TN_TILE_MAX){
-        l_err(L, 99, l_tok(L,node), "tile shape unsupported or too large");
+        l_err(L, 138, l_tok(L,node), "tile shape unsupported or too large");
         return -1;
     }
     switch (n->kind){
@@ -912,7 +912,7 @@ static int l_tile(tn_lower_t *L, uint32_t node, int *out){
             uint32_t aux = L->sema->node_sym_aux[node];
             if (aux<TN_MAX_NODES && L->node_tile[aux]>=0){ *out=L->node_tile[aux]; return 0; }
         }
-        l_err(L, 91, l_tok(L,node), "tile local referenced before defined");
+        l_err(L, 130, l_tok(L,node), "tile local referenced before defined");
         return -1;
     }
     case TN_NK_SUBSCRIPT: {
@@ -1065,7 +1065,7 @@ static uint32_t l_call(tn_lower_t *L, uint32_t node_idx)
         return l_intrinsic_call(L, node_idx, id);
     }
 
-    l_err(L, 96, l_tok(L, node_idx),
+    l_err(L, 135, l_tok(L, node_idx),
           "non-intrinsic call not yet lowered");
     return BIR_VAL_NONE;
 }
@@ -1090,11 +1090,11 @@ static uint32_t l_expr(tn_lower_t *L, uint32_t node_idx)
     case TN_NK_ATTR:
     case TN_NK_IFEXPR:
     case TN_NK_BOOLOP:
-        l_err(L, 97, l_tok(L, node_idx),
+        l_err(L, 136, l_tok(L, node_idx),
               "expression kind not yet lowered in sitting two");
         return BIR_VAL_NONE;
     case TN_NK_EXPR_SPAN:
-        l_err(L, 98, l_tok(L, node_idx),
+        l_err(L, 137, l_tok(L, node_idx),
               "opaque expression span left over from parser");
         return BIR_VAL_NONE;
     default:
@@ -1236,7 +1236,7 @@ static void l_stmt(tn_lower_t *L, uint32_t node_idx)
         uint32_t rhs_idx    = l_kid(L, node_idx, 1);
         const tn_node_t *tn = &L->parser->nodes[target_idx];
         if (tn->kind != TN_NK_NAME) {
-            l_err(L, 102, l_tok(L, target_idx),
+            l_err(L, 139, l_tok(L, target_idx),
                   "AugAssign target kind not yet lowered");
             break;
         }
@@ -1286,7 +1286,7 @@ static void l_stmt(tn_lower_t *L, uint32_t node_idx)
         case TN_AUG_SHL:  bop = TN_BOP_SHL;  break;
         case TN_AUG_SHR:  bop = TN_BOP_SHR;  break;
         default:
-            l_err(L, 103, l_tok(L, node_idx),
+            l_err(L, 140, l_tok(L, node_idx),
                   "AugAssign operator not yet lowered");
             break;
         }
@@ -1323,7 +1323,7 @@ static void l_stmt(tn_lower_t *L, uint32_t node_idx)
         l_for(L, node_idx);
         break;
     case TN_NK_WHILE:
-        l_err(L, 99, l_tok(L, node_idx),
+        l_err(L, 138, l_tok(L, node_idx),
               "while loops not yet lowered");
         break;
     default:

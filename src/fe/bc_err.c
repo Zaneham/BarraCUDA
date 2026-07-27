@@ -78,7 +78,22 @@ static const char *bc_dflt[BC_EID_MAX] = {
     /* E109 */ "not an lvalue (prefix)",
     /* E110 */ "unknown field in lvalue",
     /* E111 */ "not an lvalue",
-    /* E112-E129 */
+    /* ---- Triton frontend (E112-E125): lexer + parser, fixed messages ---- */
+    /* E112 */ "indentation too deeply nested",
+    /* E113 */ "inconsistent dedent",
+    /* E114 */ "unterminated string literal",
+    /* E115 */ "unexpected character '!'",
+    /* E116 */ "unexpected character",
+    /* E117 */ "lexer made no progress (internal bug)",
+    /* E118 */ "unterminated triple-quoted string",
+    /* E119 */ "too many AST children",
+    /* E120 */ "expected identifier",
+    /* E121 */ "expected identifier after '.'",
+    /* E122 */ "expected parameter name",
+    /* E123 */ "expected identifier after 'import'",
+    /* E124 */ "expected attribute name after '.'",
+    /* E125 */ "unrecognised expression",
+    /* E126-E149 */
 };
 
 /* ---- ABEND compiled-in defaults ----

@@ -412,7 +412,7 @@ static void s_resolve_attr(tn_sema_t *S, uint32_t node_idx)
         snprintf(msg, sizeof(msg),
                  "unknown intrinsic: %s.%s",
                  mod_id == TN_MOD_TL ? "tl" : "math", nb);
-        s_err(S, 80, t, msg);
+        s_err(S, 126, t, msg);
         s_annotate(S, node_idx, TN_SYM_UNBOUND, 0);
         return;
     }
@@ -645,7 +645,7 @@ static void s_walk(tn_sema_t *S, uint32_t node_idx)
         nb[nl] = '\0';
         char msg[128];
         snprintf(msg, sizeof(msg), "unbound name: %s", nb);
-        s_err(S, 81, tk, msg);
+        s_err(S, 127, tk, msg);
         s_annotate(S, node_idx, TN_SYM_UNBOUND, 0);
         return;
     }
@@ -903,7 +903,7 @@ static int s_call_shape_arg(tn_sema_t *S, uint32_t call_idx,
                 const tn_tok_t *t = NULL;
                 if (an->tok_off < P->lex->num_tokens)
                     t = &P->lex->tokens[an->tok_off];
-                s_err(S, 83, t,
+                s_err(S, 128, t,
                       "rank-3+ tile shapes are not modelled yet "
                       "(only rank-1 and rank-2 tiles are tracked)");
             }

@@ -5,6 +5,7 @@
  * departing only where Triton forbids something Python allows. */
 
 #include "triton.h"
+#include "bc_err.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -46,7 +47,9 @@ static void p_err(tn_parse_t *P, uint16_t eid, const char *msg)
     e->eid = eid;
     e->loc.line = t->line;
     e->loc.col  = t->col;
-    snprintf(e->msg, sizeof(e->msg), "%s", msg);
+    const char *cat = bc_efmt((bc_eid_t)eid);
+    snprintf(e->msg, sizeof(e->msg), "%s",
+             (cat && strcmp(cat, "unknown error") != 0) ? cat : msg);
 }
 
 static int p_expect(tn_parse_t *P, int kind, const char *msg)
@@ -89,7 +92,7 @@ static void p_finish(tn_parse_t *P, uint32_t node_idx)
 static void p_push_kid(tn_parse_t *P, uint32_t kid_idx)
 {
     if (P->kid_scratch_top >= TN_MAX_KID_SCRATCH) {
-        p_err(P, 61, "too many AST children in scratch");
+        p_err(P, 119, "too many AST children in scratch");
         return;
     }
     P->kid_scratch[P->kid_scratch_top++] = kid_idx;
@@ -120,7 +123,7 @@ static void p_set_kids(tn_parse_t *P, uint32_t node_idx,
         }
     } else {
         if (P->num_extra + n_kids > TN_MAX_EXTRA_KIDS) {
-            p_err(P, 61, "too many AST children in pool");
+            p_err(P, 119, "too many AST children in pool");
             n->num_kids = 0;
             P->kid_scratch_top = scratch_base;
             return;
@@ -596,7 +599,7 @@ static uint32_t p_postfix(tn_parse_t *P)
             uint32_t start = P->nodes[left].tok_off;
             p_advance(P);
             if (!p_at(P, TN_TOK_IDENT)) {
-                p_err(P, 70, "expected attribute name after '.'");
+                p_err(P, 124, "expected attribute name after '.'");
                 return left;
             }
             uint32_t attr_tok = P->cur;
@@ -832,7 +835,7 @@ static uint32_t p_atom(tn_parse_t *P)
 
     /* Anything else is unhandled. Emit a diagnostic and produce an
      * EXPR_SPAN fallback so the parser keeps making progress. */
-    p_err(P, 71, "unrecognised expression");
+    p_err(P, 125, "unrecognised expression");
     uint32_t node = p_alloc(P, TN_NK_EXPR_SPAN);
     P->nodes[node].tok_off = start;
     if (!p_at(P, TN_TOK_NEWLINE) && !p_at(P, TN_TOK_EOF))
@@ -862,7 +865,7 @@ static uint32_t p_dotted_name(tn_parse_t *P)
     uint32_t sb = P->kid_scratch_top;
     uint32_t node = p_alloc(P, TN_NK_DOTTED_NAME);
     if (!p_at(P, TN_TOK_IDENT)) {
-        p_err(P, 62, "expected identifier");
+        p_err(P, 120, "expected identifier");
         p_set_kids(P, node, sb);
         p_finish(P, node);
         return node;
@@ -871,7 +874,7 @@ static uint32_t p_dotted_name(tn_parse_t *P)
     while (p_at(P, TN_TOK_DOT)) {
         p_advance(P);
         if (!p_at(P, TN_TOK_IDENT)) {
-            p_err(P, 63, "expected identifier after '.'");
+            p_err(P, 121, "expected identifier after '.'");
             break;
         }
         p_advance(P);
@@ -997,7 +1000,7 @@ static uint32_t p_param(tn_parse_t *P)
     if (p_at(P, TN_TOK_STAR) || p_at(P, TN_TOK_DSTAR)) p_advance(P);
 
     if (!p_at(P, TN_TOK_IDENT)) {
-        p_err(P, 64, "expected parameter name");
+        p_err(P, 122, "expected parameter name");
         p_set_kids(P, node, sb);
         p_finish(P, node);
         return node;
@@ -1116,7 +1119,7 @@ static uint32_t p_from_import_stmt(tn_parse_t *P)
     } else {
         for (;;) {
             if (!p_at(P, TN_TOK_IDENT)) {
-                p_err(P, 65, "expected identifier after 'import'");
+                p_err(P, 123, "expected identifier after 'import'");
                 break;
             }
             p_advance(P);

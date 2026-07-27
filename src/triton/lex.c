@@ -4,6 +4,7 @@
  * positions and emits INDENT/DEDENT at block boundaries. */
 
 #include "triton.h"
+#include "bc_err.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -122,7 +123,11 @@ static void tn_err(tn_lex_t *L, uint16_t eid, const char *msg)
     e->eid = eid;
     e->loc.line = L->line;
     e->loc.col  = (uint16_t)(L->pos - L->line_start);
-    snprintf(e->msg, sizeof(e->msg), "%s", msg);
+    /* Prefer the shared catalogue (so --lang can translate); fall back to the
+     * inline text for any code not yet registered. */
+    const char *cat = bc_efmt((bc_eid_t)eid);
+    snprintf(e->msg, sizeof(e->msg), "%s",
+             (cat && strcmp(cat, "unknown error") != 0) ? cat : msg);
 }
 
 static void tn_emit(tn_lex_t *L, int kind, uint32_t off, uint32_t len)
@@ -215,7 +220,7 @@ static int tn_indent(tn_lex_t *L)
                   : 0;
         if (col > top) {
             if (L->indent_depth >= TN_MAX_INDENTS) {
-                tn_err(L, 50, "indentation too deeply nested");
+                tn_err(L, 112, "indentation too deeply nested");
                 return 0;
             }
             L->indents[L->indent_depth++] = col;
@@ -230,7 +235,7 @@ static int tn_indent(tn_lex_t *L)
                           ? L->indents[L->indent_depth - 1]
                           : 0;
             if (new_top != col) {
-                tn_err(L, 51, "inconsistent dedent");
+                tn_err(L, 113, "inconsistent dedent");
                 return 0;
             }
         }
@@ -373,7 +378,7 @@ static void tn_scan_str_at(tn_lex_t *L, uint32_t start)
             L->pos++;
             guard++;
         }
-        tn_err(L, 56, "unterminated triple-quoted string");
+        tn_err(L, 118, "unterminated triple-quoted string");
         tn_emit_at(L, TN_TOK_STRING, start, L->pos - start,
                    start_line, start_line_start);
         return;
@@ -393,7 +398,7 @@ static void tn_scan_str_at(tn_lex_t *L, uint32_t start)
             continue;
         }
         if (L->src[L->pos] == '\n') {
-            tn_err(L, 52, "unterminated string literal");
+            tn_err(L, 114, "unterminated string literal");
             tn_emit_at(L, TN_TOK_STRING, start, L->pos - start,
                        start_line, start_line_start);
             return;
@@ -563,11 +568,11 @@ static void tn_scan_op(tn_lex_t *L)
         if (tn_match2(L, '=')) { tn_emit_op(L, TN_TOK_NE, 2); return; }
         /* A bare ! is not valid Python. Report it and advance so the
          * parser can keep going. */
-        tn_err(L, 53, "unexpected character '!'");
+        tn_err(L, 115, "unexpected character '!'");
         L->pos++;
         return;
     default:
-        tn_err(L, 54, "unexpected character");
+        tn_err(L, 116, "unexpected character");
         L->pos++;
         return;
     }
@@ -600,7 +605,7 @@ int tn_tokenize(tn_lex_t *L)
     uint32_t guard = 0;
     while (L->pos < L->src_len) {
         if (++guard > L->src_len * 4) {
-            tn_err(L, 55, "lexer made no progress (internal bug)");
+            tn_err(L, 117, "lexer made no progress (internal bug)");
             return BC_ERR_TRITON;
         }
 
