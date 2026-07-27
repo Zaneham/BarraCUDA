@@ -32,6 +32,11 @@ typedef struct {
     uint32_t        anon_len;
     uint32_t        anon_cnt;
 
+    /* Enclosing struct name, so a constructor can be told apart from a
+     * declaration that happens to start with a type name. len 0 = not in one. */
+    uint32_t        cs_off;
+    uint16_t        cs_len;
+
     bc_error_t      errors[BC_MAX_ERRORS];
     int             num_errors;
 } parser_t;
