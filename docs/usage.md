@@ -11,8 +11,6 @@ make
 ### Requirements
 
 - A C99 compiler (gcc, clang, whatever you've got)
-- A will to live (optional but recommended)
-- LLVM is NOT required. Booth does its own instruction encoding like an adult.
 
 ## Command reference
 
