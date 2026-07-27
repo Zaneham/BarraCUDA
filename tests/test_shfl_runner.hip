@@ -1,4 +1,4 @@
-/* test_shfl_runner.hip — expects out[i] = in[i+1] for i<63, out[63] = in[63] */
+/* test_shfl_runner.hip — execution test for warp shuffle and vote intrinsics */
 #include <hip/hip_runtime.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     hipFunction_t kern;
     HIP_CHECK(hipModuleGetFunction(&kern, mod, "test_shfl"));
     float h_in[N], h_out[N];
-    for (int i = 0; i < N; i++) { h_in[i] = (float)(i * 10 + 1); h_out[i] = -1.0f; }
+    for (int i = 0; i < N; i++) { h_in[i] = (i < 16) ? 1.0f : -1.0f; h_out[i] = -1.0f; }
     float *d_out, *d_in;
     HIP_CHECK(hipMalloc(&d_out, N * sizeof(float)));
     HIP_CHECK(hipMalloc(&d_in,  N * sizeof(float)));
@@ -31,10 +31,16 @@ int main(int argc, char **argv) {
     HIP_CHECK(hipMemcpy(h_out, d_out, N * sizeof(float), hipMemcpyDeviceToHost));
     int pass = 0, fail = 0;
     for (int i = 0; i < N; i++) {
-        /* lane 63 reads from lane 64 which wraps — ds_bpermute
-         * with addr=256 reads lane 64%64=0 on GFX9 wave64.
-         * But on MI300X the last lane gets its own value. */
-        float expected = (i < 63) ? h_in[i + 1] : h_in[i];
+        float s0 = (i < 63) ? h_in[i + 1] : h_in[i];
+        float s1 = h_in[0];
+        float s2 = (i > 0) ? h_in[i - 1] : h_in[0];
+        float s3 = (i < 63) ? h_in[i + 1] : h_in[i];
+        float s4 = h_in[i ^ 1];
+        /* __ballot(val > 0.0f) — first 16 lanes positive -> mask 0x0000FFFFu (65535) */
+        unsigned int b = 0x0000FFFFu;
+        int a0 = 1; /* __any(val > 0.0f) */
+        int a1 = 0; /* __all(val > 0.0f) */
+        float expected = s0 + s1 + s2 + s3 + s4 + (float)b + (float)a0 + (float)a1;
         if (fabsf(h_out[i] - expected) < 0.5f) pass++;
         else { if (fail < 5) printf("[FAIL] i=%d: got %.1f expected %.1f\n", i, h_out[i], expected); fail++; }
     }

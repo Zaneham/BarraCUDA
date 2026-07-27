@@ -989,11 +989,13 @@ static void is_atm_store(const bir_inst_t *I)
 static void is_shfl(uint32_t idx, const bir_inst_t *I)
 {
     nv_opnd_t d = map_val(idx, I->type);
-    nv_opnd_t val = rslv(I->operands[0]);
-    nv_opnd_t lane = rslv(I->operands[1]);
+    uint32_t val_op = I->operands[1];
+    uint32_t lane_op = I->operands[2];
+    nv_opnd_t val = rslv(val_op);
+    nv_opnd_t lane = rslv(lane_op);
 
     if (val.kind != NV_MOP_REG)
-        val = mat_const(I->operands[0], NV_RF_U32);
+        val = mat_const(val_op, NV_RF_U32);
 
     uint16_t op;
     switch (I->op) {
@@ -1011,7 +1013,8 @@ static void is_shfl(uint32_t idx, const bir_inst_t *I)
 static void is_vote(uint32_t idx, const bir_inst_t *I)
 {
     nv_opnd_t d = map_val(idx, I->type);
-    nv_opnd_t pred = rslv(I->operands[0]);
+    uint32_t pred_op = I->operands[1];
+    nv_opnd_t pred = rslv(pred_op);
 
     if (pred.kind != NV_MOP_REG || pred.rfile != NV_RF_PRED) {
         uint16_t prn = new_vreg(NV_RF_PRED);
