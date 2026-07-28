@@ -157,6 +157,29 @@ For external contributors: fork the repo, make a branch off `master`, send a PR.
 
 Commits before PR merge can have any history shape you like: squash, rebase, merge commits, all fine. The squash at merge time flattens it all down. Write the commit message you want to see in `master`'s log.
 
+## Changelog
+
+Any user-visible change should come with a `CHANGELOG.md` entry, added under
+`## Unreleased` in the section that fits (Frontend, Tensix, Backends, CI and
+tests, and so on). Follow the existing shape:
+
+```
+- #123: what changed, in a sentence that makes sense to someone reading the
+  release notes rather than the diff
+  (Your Name)
+```
+
+Lead with the PR number where there is one, keep numbered entries in ascending
+order, and credit yourself. Credit reviewers and bug reporters too where they
+shaped the change.
+
+At release time these entries get gathered into the prose summary that heads
+each dated section, so write them as if someone else will read them cold.
+
+Small changes such as typo fixes, comment tidying or `.gitignore` additions
+don't need an entry. Apply the **`no-changelog-needed`** label to the PR and CI
+will skip the check.
+
 ## License
 
 Booth is Apache 2.0. By submitting a PR, you agree your contribution is licensed under the same terms and you represent that you have the right to do so — meaning the code is your own work, or derived from compatibly-licensed sources, and not copied from proprietary material.
