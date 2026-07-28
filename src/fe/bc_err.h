@@ -18,7 +18,7 @@
  * E100-E129  Lowering
  */
 
-#define BC_EID_MAX 130
+#define BC_EID_MAX 150
 
 typedef enum {
     BC_E000 = 0,   /* internal compiler error — the "this shouldn't happen" */
@@ -81,7 +81,25 @@ typedef enum {
     BC_E108 = 108, /* parameter not addressable */
     BC_E109 = 109, /* not an lvalue (prefix) */
     BC_E110 = 110, /* unknown field in lvalue */
-    BC_E111 = 111  /* not an lvalue */
+    BC_E111 = 111, /* not an lvalue */
+
+    /* ---- Triton frontend (E112-E140), block reserved to avoid the FE
+       collisions the Python path used to have. E112-E125 are catalogued
+       below; E126-E140 (sema/lower) carry runtime-built messages. ---- */
+    BC_E112 = 112, /* indentation too deeply nested */
+    BC_E113 = 113, /* inconsistent dedent */
+    BC_E114 = 114, /* unterminated string literal (triton) */
+    BC_E115 = 115, /* unexpected character '!' */
+    BC_E116 = 116, /* unexpected character (triton) */
+    BC_E117 = 117, /* lexer made no progress */
+    BC_E118 = 118, /* unterminated triple-quoted string */
+    BC_E119 = 119, /* too many AST children */
+    BC_E120 = 120, /* expected identifier */
+    BC_E121 = 121, /* expected identifier after '.' */
+    BC_E122 = 122, /* expected parameter name */
+    BC_E123 = 123, /* expected identifier after 'import' */
+    BC_E124 = 124, /* expected attribute name after '.' */
+    BC_E125 = 125  /* unrecognised expression */
 } bc_eid_t;
 
 /* Returns format string for eid -- loaded translation or compiled-in English */
