@@ -102,8 +102,11 @@ Booth — Changelog
   (Zane Hambly, 2026-07-23)
 
 - move the changelog to `CHANGELOG.md` and log changes per PR under Unreleased,
-  linked from the README, with a CI check that asks for an entry unless the PR
-  carries the `no-changelog-needed` label
+  with a CI check that asks for an entry unless the PR carries the
+  `no-changelog-needed` label
+  (Zane Hambly, 2026-07-28)
+
+- link the changelog from the README
   (Zane Hambly, 2026-07-28)
 
 ## 2026-07-14
