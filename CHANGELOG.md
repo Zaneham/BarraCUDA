@@ -6,99 +6,100 @@ Booth — Changelog
 ### Frontend
 
 - #142: parse function pointer declarators, and constructors and destructors
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-27)
 
 - #144: move the Triton errors into the shared error catalogue
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-28)
 
 - keep block comment state across lines, so a macro quoted in prose is no
   longer expanded
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-22)
 
 - stop dereferencing anonymous-struct name sentinels as source offsets
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-22)
 
 ### Triton
 
 - let `--cpu` and `--rv64` through the mode gate, and fail with a nonzero
   status rather than a silent zero
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-16)
 
 ### HIP
 
 - #137: support bare convergent warp and lane intrinsics
-  (Maou)
+  (Maou, 2026-07-27)
 
 ### Backends
 
 - #138: real high-half multiply on x86-64 and RV64, and an honest refusal
   where it cannot be done
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-26)
 
 - a divergent return masks lanes instead of ending the wave, so AMD kernels
   no longer lose the lanes that did not take the branch
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-25)
 
 ### Tensix
 
 - `--tt-chip` selects wormhole or blackhole, so L1 and text limits follow the
   target part instead of being fixed
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-23)
 
 - refuse i64 arithmetic instead of silently truncating it to 32-bit
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-22)
 
 - the RV32 backend gains control flow, calls, GEP and shared memory, and emits
   an ELF that tt-metal can load
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-22)
 
 - reserve a 64K `__shared__` slab at the top of L1
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-22)
 
 ### Runtime
 
 - #141: run LFortran `do concurrent` kernels on Booth, NVIDIA and AMD
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-26)
 
 ### Driver
 
 - collapse the C99 mode gates into one cascade
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-23)
 
 - let `--tdf` and `--tdf-fission` through the mode gates
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-23)
 
 ### Build
 
 - track header dependencies with `-MMD`, so a header edit no longer leaves
   stale objects linked in
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-22)
 
 - compile `nv_rt` and `bc_runtime`, platform-gated
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-16)
 
 ### CI and tests
 
 - #140: numeric regression against SLATEC known-good values, across cpu,
   rdna3 and rdna4
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-26)
 
 - #143: add srot and srotm to the numeric suite, and size the emulator kernarg
   block from the kernel rather than a fixed 64 bytes
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-27)
 
 - validate Tensix ELFs against tt-metal's loader and run RV64 under QEMU
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-23)
 
 - guard the divergent-return lowering against regressing to `s_endpgm`
-  (Zane Hambly)
+  (Zane Hambly, 2026-07-26)
 
 ### Documentation
 
-- drop the LLVM requirement from the usage documentation, and clarify the
-  compiler requirements in the README
-  (Zane Hambly)
+- drop the LLVM requirement from the usage documentation
+  (Zane Hambly, 2026-07-27)
 
+- clarify the compiler requirements in the README
+  (Zane Hambly, 2026-07-23)
 
 ## 2026-07-14
 

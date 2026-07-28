@@ -166,12 +166,13 @@ tests, and so on). Follow the existing shape:
 ```
 - #123: what changed, in a sentence that makes sense to someone reading the
   release notes rather than the diff
-  (Your Name)
+  (Your Name, 2026-07-28)
 ```
 
 Lead with the PR number where there is one, keep numbered entries in ascending
-order, and credit yourself. Credit reviewers and bug reporters too where they
-shaped the change.
+order, and credit yourself with the date the work landed. The rest of the file
+is organised by date, so entries carry one too. Credit reviewers and bug
+reporters as well where they shaped the change.
 
 At release time these entries get gathered into the prose summary that heads
 each dated section, so write them as if someone else will read them cold.
