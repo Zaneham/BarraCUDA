@@ -114,6 +114,11 @@ Booth — Changelog
 - link the changelog from the README
   (Zane Hambly, 2026-07-28)
 
+- document the Fortran path in `docs/usage.md`, from `do concurrent` through to
+  a compiled kernel, with the generated signature and the current limitations,
+  and link it from the README
+  (Zane Hambly, 2026-07-28)
+
 ## 2026-07-14
 
 Version 5.01. So long, and thanks for all the fish.

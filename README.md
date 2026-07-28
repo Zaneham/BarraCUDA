@@ -6,6 +6,10 @@ It is named to honour Kathleen Booth: creator of the first assembly language, co
 
 A running log of what's changed is in [CHANGELOG.md](CHANGELOG.md).
 
+**Update:** Fortran `do concurrent` kernels now compile to AMD, NVIDIA and
+x86-64 through LFortran, checked against SLATEC values in CI. See
+[Using Fortran](docs/usage.md#fortran).
+
 ## What It Does
 
 Takes CUDA C, HIP, or Triton source (the same files you'd hand to `nvcc`, `ROCm`, or Triton's JIT) and turns them into AMD RDNA 2/3/4 binaries, NVIDIA PTX, Tenstorrent Metalium C++ or native RV32IM, or just plain x86-64 you can run on a laptop with no GPU in it.

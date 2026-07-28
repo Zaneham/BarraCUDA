@@ -97,3 +97,99 @@ gcc -std=c99 -O2 -I src/runtime \
 ```
 
 Requires Linux with ROCm installed. See `examples/launch_saxpy.c` for a complete example.
+
+## Fortran
+
+Booth compiles Fortran `do concurrent` kernels by taking the CUDA source
+[LFortran](https://lfortran.org/) emits for its GPU offload and compiling that
+the rest of the way down. Elementwise arithmetic works today. See the
+limitations at the end before planning around it.
+
+Write a kernel the same way you would for LFortran:
+
+```fortran
+subroutine saxpy(x, y, a, n)
+  integer, intent(in) :: n
+  real, intent(in) :: x(n), a
+  real, intent(inout) :: y(n)
+  integer :: i
+  do concurrent (i = 1:n)
+    y(i) = a * x(i) + y(i)
+  end do
+end subroutine
+```
+
+Ask LFortran for the kernel source. No nvcc needed, the sidecar is written
+beside the object file:
+
+```bash
+lfortran --gpu=cuda -c saxpy.f90 -o saxpy.o
+# writes saxpy.o.cuda.cu
+```
+
+That file ends with a CUDA-runtime registration block, which is host glue for
+`cudaLaunchKernel` and means nothing here. Cut it:
+
+```bash
+sed '/Auto-generated kernel registration/,$d' saxpy.o.cuda.cu > saxpy.cu
+```
+
+Then compile it for whatever you have:
+
+```bash
+./kath --amdgpu-bin saxpy.cu -o saxpy.hsaco   # AMD RDNA3
+./kath --nvidia-ptx saxpy.cu -o saxpy.ptx     # NVIDIA
+./kath --cpu        saxpy.cu -o saxpy.o       # x86-64, no GPU needed
+```
+
+### Calling it
+
+Read the generated signature out of the `.cu` before you write a host driver,
+because it will not match the Fortran argument order:
+
+```c
+extern "C" __global__ void __lfortran_gpu_kernel_0(
+    float *x, float *y, float a, int n, int __loop_end_0)
+```
+
+Arrays come first, then scalars in symbol-table order rather than declaration
+order, then a trailing `__loop_end_0` carrying the loop bound. The `--cpu`
+backend adds one more argument on the end, `nthreads`, as it does for any
+kernel.
+
+`src/runtime/lf_gpu.c` implements LFortran's GPU offload ABI on top of the
+NVIDIA runtime, so a Fortran program can launch kernels Booth produced.
+`lf_gpu_hsa.c` is the AMD sibling.
+
+### What is tested
+
+`tests/numeric/` compiles Fortran kernels through this whole chain on every
+push and checks the results against SLATEC known-good values, across x86-64,
+RDNA3 and RDNA4. Six BLAS-1 routines so far: saxpy, sscal, scopy, sswap, srot
+and srotm.
+
+```bash
+KATH=./kath LFORTRAN=lfortran \
+python3 tests/numeric/run_numeric.py --backends cpu
+```
+
+See `tests/numeric/README.md` for adding a kernel.
+
+### Limitations
+
+Elementwise arithmetic only, and the reasons are all upstream of Booth:
+
+- No reductions, so sdot, sasum and snrm2 are absent. A `do concurrent` with a
+  `reduce` clause produces an empty kernel.
+- Nested loops inside a `do concurrent` are dropped, which blocks Chebyshev
+  recurrences and with them the SLATEC special functions
+  ([lfortran#12369](https://github.com/lfortran/lfortran/issues/12369)).
+- Intrinsics are emitted as `abs` and `exp` rather than `fabsf` and `expf`, so
+  transcendentals do not resolve.
+- Named constants used in a kernel body come through as uninitialised locals.
+
+Tenstorrent is not supported from Fortran yet. The baby cores are RV32IM with
+no FPU, so float has to go through a soft-float runtime, which is in progress.
+
+If something breaks and you cannot tell whether it is an LFortran gap or a
+Booth one, raise it here and it will get sorted out from this side.
