@@ -33,10 +33,17 @@ LIBS    = -lm
 # links into the Fortran executable, not into kath; it sits in HOSTRT so
 # the strict build keeps checking it.
 UNAME_S := $(shell uname -s 2>/dev/null)
-HOSTRT   = src/nvidia/nv_rt.o src/runtime/lf_gpu.o
+
+# Objects carry their host's format, so a Git Bash build and a WSL build in the
+# same checkout used to overwrite each other and hand the linker a mix of COFF
+# and ELF. That surfaces as undefined glibc symbols, which reads like a broken
+# toolchain rather than a stale tree. One object dir per host, no collision.
+OBJDIR  := build/$(UNAME_S)
+
+HOSTRT   = $(OBJDIR)/src/nvidia/nv_rt.o $(OBJDIR)/src/runtime/lf_gpu.o
 DL_LIB   =
 ifeq ($(UNAME_S),Linux)
-  HOSTRT += src/runtime/bc_runtime.o
+  HOSTRT += $(OBJDIR)/src/runtime/bc_runtime.o
   DL_LIB  = -ldl
 endif
 
@@ -46,7 +53,7 @@ endif
 # links one runtime or the other depending on the target.
 ALT_RT =
 ifeq ($(UNAME_S),Linux)
-  ALT_RT = src/runtime/lf_gpu_hsa.o
+  ALT_RT = $(OBJDIR)/src/runtime/lf_gpu_hsa.o
 endif
 
 SOURCES = src/main.c \
@@ -60,7 +67,7 @@ SOURCES = src/main.c \
           src/metal/emit.c \
           src/intel/emit.c \
           src/triton/lex.c src/triton/parse.c src/triton/sema.c src/triton/lower.c
-OBJECTS = $(SOURCES:.c=.o)
+OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o)
 TARGET  = kath
 
 all: $(TARGET) $(ALT_RT)
@@ -68,7 +75,8 @@ all: $(TARGET) $(ALT_RT)
 $(TARGET): $(OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-%.o: %.c
+$(OBJDIR)/%.o: %.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # ---- Test Suite ----
@@ -96,14 +104,14 @@ TSRC    = tests/tmain.c tests/tsmoke.c tests/tcomp.c tests/tenc.c \
           tests/tsoft_fp.c \
           tests/tsysprint.c
 
-TOBJS   = $(TSRC:.c=.o)
-COBJS   = src/ir/bir.o src/ir/bir_print.o src/ir/bir_lower.o src/ir/bir_mem2reg.o src/ir/bir_cfold.o src/ir/bir_dce.o src/ir/bir_struct.o src/ir/bir_insert.o src/ir/bir_sroa.o src/ir/bir_inline.o \
-          src/tdf/tdf.o src/tdf/tdf_lower.o src/tdf/tdf_fission.o src/tdf/tdf_place.o src/tdf/tdf_noc.o \
-          src/tensix/rv_enc.o src/tensix/rv_buf.o src/tensix/rv_elf.o src/tensix/rv_isel.o src/tensix/noc.o src/tensix/emit.o \
-          runtime/soft_fp.o runtime/sysprint.o \
-          src/amdgpu/amd_rplan.o src/amdgpu/encode.o src/amdgpu/enc_tab.o src/amdgpu/isel.o src/amdgpu/emit.o src/amdgpu/ra_ssa.o src/amdgpu/sched.o src/amdgpu/verify.o \
-          src/fe/bc_err.o src/fe/lexer.o src/fe/parser.o src/fe/preproc.o src/fe/sema.o \
-          src/runtime/bc_abend.o $(HOSTRT)
+TOBJS   = $(TSRC:%.c=$(OBJDIR)/%.o)
+COBJS   = $(OBJDIR)/src/ir/bir.o $(OBJDIR)/src/ir/bir_print.o $(OBJDIR)/src/ir/bir_lower.o $(OBJDIR)/src/ir/bir_mem2reg.o $(OBJDIR)/src/ir/bir_cfold.o $(OBJDIR)/src/ir/bir_dce.o $(OBJDIR)/src/ir/bir_struct.o $(OBJDIR)/src/ir/bir_insert.o $(OBJDIR)/src/ir/bir_sroa.o $(OBJDIR)/src/ir/bir_inline.o \
+          $(OBJDIR)/src/tdf/tdf.o $(OBJDIR)/src/tdf/tdf_lower.o $(OBJDIR)/src/tdf/tdf_fission.o $(OBJDIR)/src/tdf/tdf_place.o $(OBJDIR)/src/tdf/tdf_noc.o \
+          $(OBJDIR)/src/tensix/rv_enc.o $(OBJDIR)/src/tensix/rv_buf.o $(OBJDIR)/src/tensix/rv_elf.o $(OBJDIR)/src/tensix/rv_isel.o $(OBJDIR)/src/tensix/noc.o $(OBJDIR)/src/tensix/emit.o \
+          $(OBJDIR)/runtime/soft_fp.o $(OBJDIR)/runtime/sysprint.o \
+          $(OBJDIR)/src/amdgpu/amd_rplan.o $(OBJDIR)/src/amdgpu/encode.o $(OBJDIR)/src/amdgpu/enc_tab.o $(OBJDIR)/src/amdgpu/isel.o $(OBJDIR)/src/amdgpu/emit.o $(OBJDIR)/src/amdgpu/ra_ssa.o $(OBJDIR)/src/amdgpu/sched.o $(OBJDIR)/src/amdgpu/verify.o \
+          $(OBJDIR)/src/fe/bc_err.o $(OBJDIR)/src/fe/lexer.o $(OBJDIR)/src/fe/parser.o $(OBJDIR)/src/fe/preproc.o $(OBJDIR)/src/fe/sema.o \
+          $(OBJDIR)/src/runtime/bc_abend.o $(HOSTRT)
 
 test: $(TARGET) trunner
 	./trunner --all
@@ -111,26 +119,30 @@ test: $(TARGET) trunner
 trunner: $(TOBJS) $(COBJS)
 	$(CC) $(TCFLAGS) -o $@ $^ $(LIBS) $(DL_LIB)
 
-tests/%.o: tests/%.c
+$(OBJDIR)/tests/%.o: tests/%.c
+	@mkdir -p $(dir $@)
 	$(CC) $(TCFLAGS) -c $< -o $@
 
-src/runtime/%.o: src/runtime/%.c
+$(OBJDIR)/src/runtime/%.o: src/runtime/%.c
+	@mkdir -p $(dir $@)
 	$(CC) $(TCFLAGS) -c $< -o $@
 
 # Explicit, so it beats the generic %.o rule: nv_rt needs the POSIX visibility
 # TCFLAGS carries, and its neighbours in src/nvidia are compiler files that don't.
-src/nvidia/nv_rt.o: src/nvidia/nv_rt.c
+$(OBJDIR)/src/nvidia/nv_rt.o: src/nvidia/nv_rt.c
+	@mkdir -p $(dir $@)
 	$(CC) $(TCFLAGS) -c $< -o $@
 
 # Target-side runtime (soft-float, etc). Built with host gcc here
 # so we can host-test the IEEE math; Booth will compile the
 # same .c files separately when generating kernel ELFs.
-runtime/%.o: runtime/%.c
+$(OBJDIR)/runtime/%.o: runtime/%.c
+	@mkdir -p $(dir $@)
 	$(CC) $(TCFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJECTS) $(TARGET) $(TARGET).exe trunner trunner.exe $(TOBJS) $(HOSTRT) $(ALT_RT) src/runtime/*.o runtime/*.o
-	rm -f $(OBJECTS:.o=.d) $(TOBJS:.o=.d) $(HOSTRT:.o=.d) src/runtime/*.d runtime/*.d
+	rm -rf $(OBJDIR)
+	rm -f $(TARGET) $(TARGET).exe trunner trunner.exe
 
 # Header deps from -MMD. Without these a header edit leaves stale objects
 # linked in and the build silently disagrees with the source.
