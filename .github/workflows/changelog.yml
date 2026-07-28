@@ -1,0 +1,42 @@
+# Every user-visible change should land with a CHANGELOG.md entry. Trivial ones
+# (typos, comment tidying) carry the no-changelog-needed label instead.
+name: Changelog
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  entry:
+    name: CHANGELOG.md updated
+    runs-on: ubuntu-latest
+    if: >
+      !contains(github.event.pull_request.labels.*.name, 'no-changelog-needed')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check CHANGELOG.md was touched
+        run: |
+          base='${{ github.event.pull_request.base.sha }}'
+          if git diff --name-only --exit-code "$base" HEAD -- CHANGELOG.md > /dev/null
+          then
+            cat <<'EOF'
+          ------------------------------------------------------------------
+          This PR does not add a CHANGELOG.md entry.
+
+          Most changes should have one. Add it under "## Unreleased", in the
+          section that fits, following the existing format:
+
+              - #123: what changed, in a sentence someone reading release
+                notes would understand
+                (Your Name)
+
+          Small changes such as typo fixes or comment tidying do not need an
+          entry. Apply the "no-changelog-needed" label to skip this check.
+          ------------------------------------------------------------------
+          EOF
+            exit 1
+          fi
+          echo "CHANGELOG.md updated."

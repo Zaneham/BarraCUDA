@@ -1,7 +1,108 @@
 Booth — Changelog
 =================
 
-2026-07-14 — Version 5.01. So long, and thanks for all the fish.
+## Unreleased
+
+### Frontend
+
+- #142: parse function pointer declarators, and constructors and destructors
+  (Zane Hambly)
+
+- #144: move the Triton errors into the shared error catalogue
+  (Zane Hambly)
+
+- keep block comment state across lines, so a macro quoted in prose is no
+  longer expanded
+  (Zane Hambly)
+
+- stop dereferencing anonymous-struct name sentinels as source offsets
+  (Zane Hambly)
+
+### Triton
+
+- let `--cpu` and `--rv64` through the mode gate, and fail with a nonzero
+  status rather than a silent zero
+  (Zane Hambly)
+
+### HIP
+
+- #137: support bare convergent warp and lane intrinsics
+  (Maou)
+
+### Backends
+
+- #138: real high-half multiply on x86-64 and RV64, and an honest refusal
+  where it cannot be done
+  (Zane Hambly)
+
+- a divergent return masks lanes instead of ending the wave, so AMD kernels
+  no longer lose the lanes that did not take the branch
+  (Zane Hambly)
+
+### Tensix
+
+- `--tt-chip` selects wormhole or blackhole, so L1 and text limits follow the
+  target part instead of being fixed
+  (Zane Hambly)
+
+- refuse i64 arithmetic instead of silently truncating it to 32-bit
+  (Zane Hambly)
+
+- the RV32 backend gains control flow, calls, GEP and shared memory, and emits
+  an ELF that tt-metal can load
+  (Zane Hambly)
+
+- reserve a 64K `__shared__` slab at the top of L1
+  (Zane Hambly)
+
+### Runtime
+
+- #141: run LFortran `do concurrent` kernels on Booth, NVIDIA and AMD
+  (Zane Hambly)
+
+### Driver
+
+- collapse the C99 mode gates into one cascade
+  (Zane Hambly)
+
+- let `--tdf` and `--tdf-fission` through the mode gates
+  (Zane Hambly)
+
+### Build
+
+- track header dependencies with `-MMD`, so a header edit no longer leaves
+  stale objects linked in
+  (Zane Hambly)
+
+- compile `nv_rt` and `bc_runtime`, platform-gated
+  (Zane Hambly)
+
+### CI and tests
+
+- #140: numeric regression against SLATEC known-good values, across cpu,
+  rdna3 and rdna4
+  (Zane Hambly)
+
+- #143: add srot and srotm to the numeric suite, and size the emulator kernarg
+  block from the kernel rather than a fixed 64 bytes
+  (Zane Hambly)
+
+- validate Tensix ELFs against tt-metal's loader and run RV64 under QEMU
+  (Zane Hambly)
+
+- guard the divergent-return lowering against regressing to `s_endpgm`
+  (Zane Hambly)
+
+### Documentation
+
+- drop the LLVM requirement from the usage documentation, and clarify the
+  compiler requirements in the README
+  (Zane Hambly)
+
+
+## 2026-07-14
+
+Version 5.01. So long, and thanks for all the fish.
 BarraCUDA was a good pun and a bad description, so it swam off: the
 compiler is Booth now, the binary is `kath`, and the version jumps
 to mark the line. First release under the new name; the rename note
@@ -22,7 +123,9 @@ Thanks to the people who sent patches this cycle: @GauthamMK-0 for
 lowering `tl.where` to select and keeping the PTX header ASCII, and
 @kstppd for fixing the Makefile on non-x86 machines. Much appreciated.
 
-2026-06-29 — Renamed from BarraCUDA to Booth. The fish pun said
+## 2026-06-29
+
+Renamed from BarraCUDA to Booth. The fish pun said
 "CUDA" while the whole point of the project is not needing CUDA, so
 it had to go. Booth honours Kathleen Booth: she wrote the first
 assembly language and co-built the computer it ran on, which is the
@@ -34,7 +137,9 @@ good-first-issue rather than risked in one big sweep across the
 codegen. Every entry below this line predates the rename and still
 says BarraCUDA, because that's what happened.
 
-2026-06-13 — Diagnostics that read like Clang's. A new renderer
+## 2026-06-13
+
+Diagnostics that read like Clang's. A new renderer
 (src/fe/bc_render.c) gives every phase the same shape: error[Ennn]:
 message, a --> file:line:col line, the offending source line, and a
 caret under the column, coloured when stderr is a terminal and plain
@@ -42,7 +147,9 @@ when piped. main.c's eight per-phase error loops collapse to one
 bc_diag() call, and the parser now names the token it choked on (got
 ';') instead of its kind (got IDENT).
 
-2026-06-06 — The scalar backends finish the job, and a real
+## 2026-06-06
+
+The scalar backends finish the job, and a real
 workload drags three old bugs into the light. Building on
 yesterday's arithmetic, `--cpu` and `--rv64` gain the direct-ISA
 maths (sqrt, abs, round, floor, ceil, min and max), the libm
@@ -66,7 +173,9 @@ infinity stored as a rounding crumb. All three are closed, caught by
 compiling the same kernel with a stock compiler and diffing the two
 runs particle by particle until they agreed.
 
-2026-06-05 — The CPU and RISC-V backends learn most of their
+## 2026-06-05
+
+The CPU and RISC-V backends learn most of their
 arithmetic. The `--cpu` (x86-64) and `--rv64` emitters carried
 only a starter set of opcodes and everything else quietly returned
 zero, which is a fine way to compute the wrong answer with great
@@ -94,7 +203,9 @@ than walking the C stack off the edge. No GPU goes near any of it;
 it is the groundwork for running a whole kernel on a chip that
 never heard of one.
 
-2026-06-04 — Apple Silicon, by way of Metal. A CUDA, HIP or
+## 2026-06-04
+
+Apple Silicon, by way of Metal. A CUDA, HIP or
 Triton kernel now lowers to Metal Shading Language and compiles
 under Apple's own toolchain. The Metal emitter (`--metal`) walks
 BIR and writes MSL that `xcrun metal` accepts; the kernel
@@ -123,7 +234,9 @@ The Makefile learns to drop GCC-only warning flags and -Werror on
 clang so the macOS build goes through. 282 tests pass; AMD,
 NVIDIA and CPU output is unchanged.
 
-2026-05-29 — 0.5 release. The headline is that you can write a
+## 2026-05-29
+
+0.5 release. The headline is that you can write a
 Triton kernel, matmul and all, and run it on a CPU with no GPU.
 The CPU backend (`--cpu`) lowers BIR straight to x86-64
 with the SIMT model collapsed into a thread loop, and the rank-2
@@ -145,7 +258,9 @@ it), and the parse-dump fallback no longer fires by accident, so
 typedef-struct kernels compile through `--cpu` and `--parse` no
 longer segfaults on the synthetic anon name. Adds `--version`.
 
-2026-05-26 — Triton matmul K-loop, so big matrices work. The
+## 2026-05-26
+
+Triton matmul K-loop, so big matrices work. The
 Triton lowerer now lowers `for k in range(...)` as a real counted
 loop, which lets a matmul sweep an arbitrary contraction dimension
 K a BLOCK_K tile at a time instead of unrolling the whole thing.
@@ -159,7 +274,9 @@ blocks, so cfold and dce walked a truncated instruction range and
 quietly corrupted any kernel with control flow. Single output tile
 still; multi-block grids and tl.load mask= remain the next sitting.
 
-2026-05-25 — Triton matmul on the CPU. tl.dot now lowers for the
+## 2026-05-25
+
+Triton matmul on the CPU. tl.dot now lowers for the
 x86-64 backend, so a real Triton matmul kernel (load two tiles,
 tl.dot, store) compiles from Python and runs natively. Rank-2
 tiles take a new path in the Triton lowerer: because block sizes
@@ -174,7 +291,9 @@ Backed by BIR_ALLOCA scratch buffers in the CPU emitter. Verified
 single output tile, no K-loop tiling or masking, capped at 32x32;
 those are the next sitting.
 
-2026-05-25 — x86-64 CPU backend. A new --cpu flag turns a
+## 2026-05-25
+
+x86-64 CPU backend. A new --cpu flag turns a
 __global__ kernel into a host-runnable x86-64 ELF object, so
 CUDA and Triton kernels can be developed on a laptop with no
 GPU. Triton's canonical vector_add runs end to end (Python ->
@@ -198,7 +317,9 @@ other compilers, Skyhawk (JOVIAL J73) and Karearea (Fortran
 77). No point rewriting a perfectly good instruction encoder
 twice.
 
-2026-05-24 — Triton tile shape inference, sitting one. The sema
+## 2026-05-24
+
+Triton tile shape inference, sitting one. The sema
 pass now walks every expression bottom-up and annotates a
 (rank, dims, dtype) triple onto each AST node. Scalar, vec[N]
 and mat[M, N] all flow through; arange, zeros, broadcast and
@@ -209,7 +330,9 @@ next sitting, so block-size dims still print as `?` for now,
 which is fine for getting lowering to dispatch on rank. See
 issue #82.
 
-2026-05-24 — Tenstorrent native RV32IM backend. The baby
+## 2026-05-24
+
+Tenstorrent native RV32IM backend. The baby
 RISC-V cores on Wormhole now have a real codegen path that
 does not go through Metalium SFPI. New --rv-elf flag lands a
 .elf for a __global__ kernel; 13 of the small CUDA samples
@@ -229,7 +352,9 @@ with E110. Two frontend bugs found along the way are filed as
 (lexer treats apostrophes inside /* */ comments as char-literal
 starts). Test suite 256/256.
 
-2026-05-21 — Triton end-to-end test suite. 16 new tests in
+## 2026-05-21
+
+Triton end-to-end test suite. 16 new tests in
 tests/ttriton.c covering the four frontend stages (lex, parse,
 sema, IR) and the three backends a Triton kernel can land on
 (AMD GFX11, NVIDIA PTX, Tensix Metalium). The kernels live as
@@ -243,7 +368,9 @@ kernel does. Caught one real bug along the way: docstrings inside
 ExprStmt is now silently discarded the way it should be. Test
 suite stands at 107 cases, 106 pass, 1 skip.
 
-2026-05-21 — Triton frontend wired through to every backend. The
+## 2026-05-21
+
+Triton frontend wired through to every backend. The
 post-lowering pipeline (mem2reg, constant folding, dead code
 elimination, then per-backend codegen) lived inside the C99
 frontend block in main.c since the day the project gained its
@@ -268,7 +395,9 @@ returns BC_OK and the backend pipeline runs through. Test suite
 still 90/90, and a side-by-side compile of canonical.cu through
 all three backends confirms no regression on the CUDA path.
 
-2026-05-21 — Triton BIR lowering, sitting two. The vector add
+## 2026-05-21
+
+Triton BIR lowering, sitting two. The vector add
 kernel now lowers end to end into a syntactically valid BIR
 module: tl.program_id and tl.num_programs as before, plus
 tl.arange as BIR_THREAD_ID for the canonical Triton "one thread
@@ -297,7 +426,9 @@ kernel still chokes on its tile subscripts and the for loop, all
 of which are tracked for sitting three. Test suite 90/90 still
 passes.
 
-2026-05-21 — Triton BIR lowering, sitting one. The --triton --ir
+## 2026-05-21
+
+Triton BIR lowering, sitting one. The --triton --ir
 mode now walks the sema-annotated AST and produces a BIR module,
 the same intermediate representation the C99 frontend already
 feeds the backends. Triton kernels marked @triton.jit become
@@ -324,7 +455,9 @@ diagnostic), and per-parameter type inference (sitting one
 assumes every pointer is i32* and every scalar is i32). Test
 suite 90/90 still passes, all existing backends still compile.
 
-2026-05-20 — Triton sema, sitting one. The --triton --sema mode now
+## 2026-05-20
+
+Triton sema, sitting one. The --triton --sema mode now
 runs name resolution and intrinsic dispatch over the AST the parser
 produces. Every Name node is bound to one of: a kernel parameter,
 an assigned local, a for-loop variable, an imported module alias,
@@ -355,7 +488,9 @@ kernel including the for loop, AugAssign, and tuple subscripts
 and arity checking on intrinsic calls are deliberately deferred
 to sema sitting two. Test suite 90/90 still passes.
 
-2026-05-20 — Triton expression parser, sitting two. The opaque
+## 2026-05-20
+
+Triton expression parser, sitting two. The opaque
 ExprSpan token-range node is mostly retired and replaced by a real
 AST shape: Name, Literal (with int / float / string / None / True /
 False subkinds), Tuple, BinOp (thirteen arithmetic and bitwise
@@ -384,7 +519,9 @@ with keyword arguments. No regressions: CUDA -> AMD, HIP -> AMD,
 and Metal MSL emission all still work, test suite 90/90 still
 passes.
 
-2026-05-20 — Triton parser, sitting one. The --triton --parse mode
+## 2026-05-20
+
+Triton parser, sitting one. The --triton --parse mode
 now builds a real AST from the token stream the lexer produces.
 Every statement Triton kernels actually use has its own node kind:
 FuncDef with its parameter and decorator slots, Block for the
@@ -414,7 +551,9 @@ Validated on a Triton vector add and a matmul kernel including a
 for-loop body with += AugAssign and nested function calls. Dumps
 the full structural tree to stdout when --triton --parse is set.
 
-2026-05-20 — Triton frontend, first sitting. The --triton flag now
+## 2026-05-20
+
+Triton frontend, first sitting. The --triton flag now
 routes the input file through a brand new self contained Python
 tokenizer at src/triton/lex.c rather than through the C99
 preprocessor and lexer. The tokenizer handles the parts of Python's
@@ -431,7 +570,9 @@ add and matmul kernel: 393 tokens, zero errors, correct indent
 nesting through a 43 line file. Self contained as the rest of the
 compiler, no Python in the build pipeline anywhere.
 
-2026-05-20 — Apple Metal backend, first sitting. The --metal flag now
+## 2026-05-20
+
+Apple Metal backend, first sitting. The --metal flag now
 produces a complete and syntactically valid MSL source file rather
 than the polite refusal of the earlier stub. metal_compile walks
 every BIR function, picks out the __global__ kernels and __device__
@@ -447,7 +588,9 @@ remain TODO comments with a value-initialised return for any
 non-void __device__ helper. Hardware validation against xcrun metal
 on macOS is tracked as issue #68.
 
-2026-05-19 — HIP frontend mode (--hip, plus auto-detect on the .hip
+## 2026-05-19
+
+HIP frontend mode (--hip, plus auto-detect on the .hip
 file extension). HIP source is syntactically a superset of CUDA, so
 no new parser was required; the entire change is one block in main.c
 that predefines __HIPCC__, __HIP_DEVICE_COMPILE__, and the appropriate
@@ -458,7 +601,9 @@ a working GFX11 .hsaco end to end. Two clearly marked HIP NOTES
 blocks in main.c document exactly where the divergence lives and
 why everything else stays put.
 
-2026-05-19 — Apple Metal and Intel Arc Xe backend stubs (--metal,
+## 2026-05-19
+
+Apple Metal and Intel Arc Xe backend stubs (--metal,
 --intel-spirv with --xe-lpg / --xe-hpg / --xe-hpc / --xe2 variants).
 Just a stub for now: the directories exist, the headers declare
 module structs and entry points, the CLI flags parse, the modes
@@ -468,14 +613,18 @@ error code rather than actual machine code. Plan is MSL text emit
 for Apple and SPIR-V emit for Intel, both following the "let the
 vendor's driver finish" pattern that PTX already uses for NVIDIA.
 
-2026-03-18 — NVIDIA PTX backend (--nvidia-ptx). Compiles CUDA to PTX
+## 2026-03-18
+
+NVIDIA PTX backend (--nvidia-ptx). Compiles CUDA to PTX
 text, loaded via CUDA Driver API and JIT-compiled by the NVIDIA driver.
 Validated on RTX 4060 Ti running a Monte Carlo neutron transport
 benchmark with correct physics results. No NVCC required. Also:
 anonymous struct/union support in parser, sema, and lowerer
 (struct { float f; int i; } cvt; pattern).
 
-2026-03-14 — Divergence-aware SSA register allocator (--ssa-ra).
+## 2026-03-14
+
+Divergence-aware SSA register allocator (--ssa-ra).
 Eliminates all 186 VGPR spills on a 654-line Monte Carlo transport
 kernel — scratch traffic drops 78%, total instructions drop 28%.
 Exploits the 64:1 cost asymmetry between divergent and uniform VGPR
@@ -484,7 +633,9 @@ at 4 bytes each, divergent values stay in registers where they belong.
 Based on the divergence analysis of Sampaio et al. (2013). ~1,300
 lines of C99, all static memory, no malloc.
 
-2026-03-09 — Post-isel verification pass (bc_vfy). The encoder used
+## 2026-03-09
+
+Post-isel verification pass (bc_vfy). The encoder used
 to trust isel to produce valid machine instructions. It shouldn't
 have. bc_vfy runs twice (post-isel, post-RA) and catches 5 classes
 of encoding violation before the binary leaves the compiler. Its
@@ -494,34 +645,50 @@ every one a silent miscompile that would fault on hardware with
 diagnostics, because if IBM could do post-mortem dumps in 1964, we
 can do it for GPUs in 2026.
 
-2026-03-08 — Error localisation infrastructure. Every diagnostic
+## 2026-03-08
+
+Error localisation infrastructure. Every diagnostic
 now has a language-neutral ID (E001–E111). External translation
 files via --lang <file>. English reference at lang/en.txt, te reo
 Maori at lang/mi.txt. Unified error structs. Lowering errors now
 displayed.
 
-2026-03-05 — CDNA 3 additions: GFX942 backend hardening, MFMA,
+## 2026-03-05
+
+CDNA 3 additions: GFX942 backend hardening, MFMA,
 Wave64 divergence, tinygrad compat. 8/8 tests passing on MI300X
 (PR#56: https://github.com/Zaneham/BarraCUDA/pull/56).
 
-2026-03-05 — Instruction scheduling
+## 2026-03-05
+
+Instruction scheduling
 (PR#52: https://github.com/Zaneham/BarraCUDA/pull/52).
 
-2026-03-03 — CDNA 2 support (--gfx90a, MI250). Tinygrad
+## 2026-03-03
+
+CDNA 2 support (--gfx90a, MI250). Tinygrad
 compatibility.
 
-2026-02-28 — Tenstorrent Tensix backend (--tensix). Compiles CUDA
+## 2026-02-28
+
+Tenstorrent Tensix backend (--tensix). Compiles CUDA
 to TT-Metalium C++ for Blackhole. Constant folding
 (PR#51: https://github.com/Zaneham/BarraCUDA/pull/51). Dead code
 elimination (PR#48: https://github.com/Zaneham/BarraCUDA/pull/48).
 
-2026-02-25 — HSA runtime launcher
+## 2026-02-25
+
+HSA runtime launcher
 (PR#40: https://github.com/Zaneham/BarraCUDA/pull/40). RDNA 2
 support (--gfx1030, PR#38: https://github.com/Zaneham/BarraCUDA/pull/38).
 Test suite (PR#41: https://github.com/Zaneham/BarraCUDA/pull/41).
 
-2026-02-20 — RDNA 4 support
+## 2026-02-20
+
+RDNA 4 support
 (--gfx1200, PR#32: https://github.com/Zaneham/BarraCUDA/pull/32).
 
-2026-02-16 — Initial release. CUDA compiler targeting AMD RDNA 3
+## 2026-02-16
+
+Initial release. CUDA compiler targeting AMD RDNA 3
 (gfx1100).
