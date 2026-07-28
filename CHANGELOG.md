@@ -101,6 +101,11 @@ Booth — Changelog
 - clarify the compiler requirements in the README
   (Zane Hambly, 2026-07-23)
 
+- move the changelog to `CHANGELOG.md` and log changes per PR under Unreleased,
+  linked from the README, with a CI check that asks for an entry unless the PR
+  carries the `no-changelog-needed` label
+  (Zane Hambly, 2026-07-28)
+
 ## 2026-07-14
 
 Version 5.01. So long, and thanks for all the fish.

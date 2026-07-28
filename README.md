@@ -4,6 +4,8 @@
 
 It is named to honour Kathleen Booth: creator of the first assembly language, co-builder of the computer it first ran on, an early researcher into neural nets, a champion of women in computing, the daughter of a tax clerk, English by birth and Canadian by choice, and a mother. I believe it is fitting to name this after an incredible woman whose work this is built on. She built the machines her assembler ran on, which is exactly the bootstrapped "yeah, why not ay?" attitude this whole compiler is going for.
 
+A running log of what's changed is in [CHANGELOG.md](CHANGELOG.md).
+
 ## What It Does
 
 Takes CUDA C, HIP, or Triton source (the same files you'd hand to `nvcc`, `ROCm`, or Triton's JIT) and turns them into AMD RDNA 2/3/4 binaries, NVIDIA PTX, Tenstorrent Metalium C++ or native RV32IM, or just plain x86-64 you can run on a laptop with no GPU in it.
