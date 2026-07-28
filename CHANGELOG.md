@@ -77,6 +77,11 @@ Booth — Changelog
 - compile `nv_rt` and `bc_runtime`, platform-gated
   (Zane Hambly, 2026-07-16)
 
+- #146: give each host its own object directory under `build/`, so a Git Bash
+  build and a WSL build in one checkout stop overwriting each other and handing
+  the linker a mix of COFF and ELF
+  (Zane Hambly, 2026-07-28)
+
 ### CI and tests
 
 - #140: numeric regression against SLATEC known-good values, across cpu,
