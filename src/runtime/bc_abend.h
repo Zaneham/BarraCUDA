@@ -106,6 +106,13 @@ typedef struct {
  * extension is unavailable, armed=0 -- graceful degradation. */
 int  ab_init(ab_ctx_t *A, void *hsa_lib);
 
+/* Arm the CPU backend: POSIX sigaction on SIGSEGV/SIGILL/SIGFPE/SIGBUS,
+ * or Windows unhandled-exception filter. On fault, fills tea/reason/code,
+ * writes the dump to stderr, and terminates. Sibling to ab_init's HSA path
+ * -- call it when running --cpu kernels and you want the same diagnostic
+ * you would get from an AMD kernel that goes sideways. */
+int  ab_arm_cpu(ab_ctx_t *A);
+
 /* Shutdown -- currently a no-op, but good manners cost nothing. */
 void ab_shut(ab_ctx_t *A);
 

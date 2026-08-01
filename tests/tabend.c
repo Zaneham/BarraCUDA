@@ -48,6 +48,24 @@ static void ab_init_def(void)
 }
 TH_REG("abend", ab_init_def)
 
+/* Arms and confirms the flag; can't actually raise a fault in-process
+ * without terminating the test. Real behaviour is exercised by the
+ * --cpu launcher when a kernel goes sideways. */
+static void ab_arm_cpu_ok(void)
+{
+    ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
+    CHECK(A != NULL);
+    ab_init(A, NULL);
+    int rc = ab_arm_cpu(A);
+    CHEQ(rc, 0);
+    CHEQ(A->armed, 1);
+    ab_shut(A);
+    CHEQ(A->armed, 0);
+    free(A);
+    PASS();
+}
+TH_REG("abend", ab_arm_cpu_ok)
+
 static void ab_trak_one(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));

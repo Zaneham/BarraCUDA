@@ -57,6 +57,12 @@ Booth — Changelog
 
 ### Runtime
 
+- ABEND arms the CPU backend too: `ab_arm_cpu` hooks POSIX
+  SIGSEGV/SIGILL/SIGFPE/SIGBUS or the Windows unhandled-exception filter and
+  maps them onto the G0Cx taxonomy, so a `--cpu` kernel that faults gets
+  the same dump an AMD kernel would
+  (Zane Hambly, 2026-08-01)
+
 - #141: run LFortran `do concurrent` kernels on Booth, NVIDIA and AMD
   (Zane Hambly, 2026-07-26)
 
