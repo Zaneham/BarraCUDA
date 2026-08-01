@@ -13,12 +13,32 @@
 #include <dlfcn.h>
 #endif
 
+/* CPU backend: POSIX where we have it, SEH on Windows. Kept behind a
+ * pair of feature guards so the file still builds on the odd freestanding
+ * host that has neither. */
+#if defined(__linux__) || defined(__APPLE__) || defined(__unix__) \
+    || defined(__CYGWIN__)
+#define AB_HAS_POSIX 1
+#include <signal.h>
+#include <unistd.h>
+#endif
+#ifdef _WIN32
+#define AB_HAS_SEH 1
+#include <windows.h>
+#endif
+
 #include "bc_runtime.h"
 #include "bc_abend.h"
 #include "../fe/bc_err.h"
 #include <string.h>
 #include <time.h>
 #include <inttypes.h>
+#include <stdlib.h>
+
+/* Callback pointer, shared by whichever backend armed us last. HSA and
+ * SEH give us no userdata pointer to thread A through, so a file-scope
+ * global is what we get. One handler active at a time is the deal. */
+static ab_ctx_t *g_actx;
 
 /* ---- ABEND Code Strings ---- */
 
@@ -74,11 +94,6 @@ static uint16_t ab_rmap(uint32_t reason)
     if (reason & 1) return AB_G0C5;  /* page not present */
     return AB_G0FF;
 }
-
-/* Global pointer so the C callback can find our context.
- * Yes, a global. The HSA callback API gives us no userdata pointer.
- * AMD's API design is a masterclass in making simple things hard. */
-static ab_ctx_t *g_actx;
 
 /* HSA event types we care about */
 #define HSA_AMD_GPU_MEM_FAULT 0
@@ -138,10 +153,111 @@ int ab_init(ab_ctx_t *A, void *hsa_lib)
 void ab_shut(ab_ctx_t *A)
 {
     if (!A) return;
-#ifdef __linux__
     if (g_actx == A) g_actx = NULL;
-#endif
     A->armed = 0;
+}
+
+/* ---- CPU Fault Handlers ---- */
+
+/* fprintf and localtime are not async-signal-safe, so a dump written
+ * from inside the handler is technically UB. In practice on POSIX it
+ * lands intact from SIGSEGV nine times out of ten, and a slightly
+ * mangled ABEND still beats "Segmentation fault (core dumped)".
+ * Refining this to sigsetjmp/siglongjmp is a follow-up. */
+
+#ifdef AB_HAS_POSIX
+static void ab_sigh(int sig, siginfo_t *si, void *uc)
+{
+    (void)uc;
+    ab_ctx_t *A = g_actx;
+    if (!A) _exit(128 + sig);
+
+    A->tea    = (uint64_t)(uintptr_t)(si ? si->si_addr : (void *)0);
+    A->reason = (uint32_t)sig;
+    switch (sig) {
+    case SIGSEGV: A->code = AB_G0C4; break;  /* memory access */
+    case SIGILL:  A->code = AB_G0C1; break;  /* illegal instr */
+    case SIGFPE:  A->code = AB_G0C7; break;  /* data (arith)  */
+    case SIGBUS:  A->code = AB_G0C5; break;  /* addressing    */
+    default:      A->code = AB_G0FF; break;
+    }
+    A->faulted = 1;
+    (void)ab_dump(A, stderr);
+    _exit(128 + sig);
+}
+#endif
+
+#ifdef AB_HAS_SEH
+static LONG WINAPI ab_seh(EXCEPTION_POINTERS *ep)
+{
+    ab_ctx_t *A = g_actx;
+    if (!A || !ep || !ep->ExceptionRecord)
+        return EXCEPTION_CONTINUE_SEARCH;
+
+    const EXCEPTION_RECORD *er = ep->ExceptionRecord;
+    A->reason = (uint32_t)er->ExceptionCode;
+
+    /* ExceptionInformation[1] is the faulting VA for AV; every other
+     * case falls back to the faulting instruction pointer, which is
+     * still useful when your kernel decided to divide by zero. */
+    switch (er->ExceptionCode) {
+    case EXCEPTION_ACCESS_VIOLATION:
+        A->code = AB_G0C4;
+        A->tea  = (er->NumberParameters >= 2)
+                    ? (uint64_t)er->ExceptionInformation[1] : 0;
+        break;
+    case EXCEPTION_ILLEGAL_INSTRUCTION:
+        A->code = AB_G0C1;
+        A->tea  = (uint64_t)(uintptr_t)er->ExceptionAddress;
+        break;
+    case EXCEPTION_INT_DIVIDE_BY_ZERO:
+    case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+    case EXCEPTION_FLT_INVALID_OPERATION:
+        A->code = AB_G0C7;
+        A->tea  = (uint64_t)(uintptr_t)er->ExceptionAddress;
+        break;
+    case EXCEPTION_DATATYPE_MISALIGNMENT:
+        A->code = AB_G0C5;
+        A->tea  = (uint64_t)(uintptr_t)er->ExceptionAddress;
+        break;
+    default:
+        A->code = AB_G0FF;
+        A->tea  = (uint64_t)(uintptr_t)er->ExceptionAddress;
+        break;
+    }
+    A->faulted = 1;
+    (void)ab_dump(A, stderr);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+#endif
+
+int ab_arm_cpu(ab_ctx_t *A)
+{
+    if (!A) return -1;
+    g_actx = A;
+
+#ifdef AB_HAS_POSIX
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = ab_sigh;
+    sa.sa_flags     = SA_SIGINFO;
+    (void)sigemptyset(&sa.sa_mask);
+
+    /* All four or none. Half-armed is worse than not armed. */
+    int rc = 0;
+    rc |= sigaction(SIGSEGV, &sa, (struct sigaction *)0);
+    rc |= sigaction(SIGILL,  &sa, (struct sigaction *)0);
+    rc |= sigaction(SIGFPE,  &sa, (struct sigaction *)0);
+    rc |= sigaction(SIGBUS,  &sa, (struct sigaction *)0);
+    A->armed = (rc == 0) ? 1 : 0;
+    return (rc == 0) ? 0 : -1;
+#elif defined(AB_HAS_SEH)
+    (void)SetUnhandledExceptionFilter(ab_seh);
+    A->armed = 1;
+    return 0;
+#else
+    return -1;
+#endif
 }
 
 /* ---- Memory Tracking ---- */

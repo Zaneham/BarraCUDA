@@ -6,7 +6,7 @@ This is the bit where I admit I read a pile of z/OS manuals and got a little obs
 
 ## ABEND dumps
 
-When a kernel faults you get a real dump, not a shrug. `src/runtime/bc_abend.*` gives GPU faults proper IBM-style completion codes (G0Cx, the GPU cousins of S0Cx), correlates the faulting address against tracked allocations, and prints a dispatch snapshot. It's wired into the HSA runtime and fires automatically off the system event callback, so a memory aperture violation tells you which buffer and which dispatch went wrong instead of just dying quietly. Live on the AMD/HSA path.
+When a kernel faults you get a real dump, not a shrug. `src/runtime/bc_abend.*` gives GPU faults proper IBM-style completion codes (G0Cx, the GPU cousins of S0Cx), correlates the faulting address against tracked allocations, and prints a dispatch snapshot. It's wired into the HSA runtime and fires automatically off the system event callback, so a memory aperture violation tells you which buffer and which dispatch went wrong instead of just dying quietly. Live on the AMD/HSA path and, via `ab_arm_cpu`, on `--cpu` kernels too: POSIX `sigaction` on SIGSEGV/SIGILL/SIGFPE/SIGBUS, or a Windows unhandled-exception filter, mapped onto the same G0Cx taxonomy so a segfault in a `--cpu` kernel looks like an AMD one.
 
 ## SNAP (`--snap`)
 
