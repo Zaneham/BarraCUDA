@@ -10,7 +10,7 @@ When a kernel faults you get a real dump, not a shrug. `src/runtime/bc_abend.*` 
 
 ## SNAP (`--snap`)
 
-A parameter dump, basically. The mainframe crowd had this in the 70s and I kept wishing for it while debugging. With `--snap` the AMD backend writes each kernel parameter's register value into a host-visible buffer on entry, so when things go sideways you can read the evidence instead of staring at disassembly like it owes you money. AMD only for now.
+A parameter dump, basically. The mainframe crowd had this in the 70s and I kept wishing for it while debugging. With `--snap` the AMD backend writes each kernel parameter's register value into a host-visible buffer on entry, so when things go sideways you can read the evidence instead of staring at disassembly like it owes you money. The AMD compiler-side instrumentation is AMD-only; on every backend the ABEND dump also renders the launcher-side kernarg block (captured by `ab_snag`) as a hex+ASCII SNAP section, so `--cpu`, NVIDIA, and Tensix all get "here are the argument bytes the kernel actually saw" for free.
 
 ## SYSPRINT
 

@@ -327,6 +327,37 @@ static void ab_dump_disp(void)
 }
 TH_REG("abend", ab_dump_disp)
 
+static void ab_dump_snap(void)
+{
+    ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
+    CHECK(A != NULL);
+    ab_init(A, NULL);
+    A->code = AB_G0C4;
+
+    /* Distinctive bytes so we can see them in the hex + ASCII gutter. */
+    bc_kernel_t k;
+    memset(&k, 0, sizeof(k));
+    k.kernarg_size = 24;
+    uint8_t args[24] = {
+        0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78,
+        'H','e','l','l','o',' ','k','a', 't','h','!',0,0,0,0,0
+    };
+    ab_snag(A, &k, "snap_demo", "cpu",
+            1, 1, 1, 1, 1, 1, args, 24);
+
+    int n = ab_snap(A, obuf, (int)sizeof(obuf));
+    CHECK(n > 0);
+    CHECK(strstr(obuf, "SNAP") != NULL);
+    CHECK(strstr(obuf, "+0000") != NULL);          /* offset gutter */
+    CHECK(strstr(obuf, "DEADBEEF") != NULL);       /* hex */
+    CHECK(strstr(obuf, "Hello kath!") != NULL);    /* ASCII gutter */
+
+    ab_shut(A);
+    free(A);
+    PASS();
+}
+TH_REG("abend", ab_dump_snap)
+
 static void ab_dump_smap(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));

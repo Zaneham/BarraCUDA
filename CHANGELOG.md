@@ -62,6 +62,12 @@ Booth — Changelog
 
 ### Runtime
 
+- ABEND dump renders the captured kernarg block as a mainframe-style SNAP
+  section (offset gutter, four 4-byte hex groups, ASCII on the right), so
+  the arg bytes the launcher handed off are visible on every backend that
+  calls `ab_snag`, not just AMD
+  (Zane Hambly, 2026-08-02)
+
 - ABEND arms the CPU backend too: `ab_arm_cpu` hooks POSIX
   SIGSEGV/SIGILL/SIGFPE/SIGBUS or the Windows unhandled-exception filter and
   maps them onto the G0Cx taxonomy, so a `--cpu` kernel that faults gets
