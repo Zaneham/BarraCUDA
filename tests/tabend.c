@@ -349,8 +349,12 @@ static void ab_dump_snap(void)
     CHECK(n > 0);
     CHECK(strstr(obuf, "SNAP") != NULL);
     CHECK(strstr(obuf, "+0000") != NULL);          /* offset gutter */
-    CHECK(strstr(obuf, "DEADBEEF") != NULL);       /* hex */
-    CHECK(strstr(obuf, "Hello kath!") != NULL);    /* ASCII gutter */
+    CHECK(strstr(obuf, "+0010") != NULL);          /* second row */
+    CHECK(strstr(obuf, "DEADBEEF") != NULL);       /* hex row 0 */
+    CHECK(strstr(obuf, "74682100") != NULL);       /* hex row 1 */
+    /* ASCII gutter splits at 16B, so "Hello kath!" is never contiguous. */
+    CHECK(strstr(obuf, "Hello ka") != NULL);
+    CHECK(strstr(obuf, "th!") != NULL);
 
     ab_shut(A);
     free(A);
