@@ -36,7 +36,7 @@ bc_sp_register_sink("DEMO.RESULT", my_sink, NULL);
 bc_sp_drain(&buf);                                 /* sinks fire */
 ```
 
-See `examples/sysprint_kernel.cu` + `examples/launch_sysprint.c` for a full end-to-end demo. Works on the NVIDIA PTX and Tensix backends; the AMD path currently trips a regalloc bug on the byte-copy loop ([open issue](https://github.com/Zaneham/Booth/issues)), which gets its own follow-up.
+See `examples/sysprint_kernel.cu` + `examples/launch_sysprint.c` for a full end-to-end demo. Works on the AMD, NVIDIA PTX and Tensix backends.
 
 ## TDF (Tile DataFlow)
 

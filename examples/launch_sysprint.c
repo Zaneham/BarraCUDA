@@ -9,11 +9,6 @@
  *             -o sp_demo.hsaco examples/sysprint_kernel.cu
  *         ./launch_sysprint sp_demo.hsaco
  *
- * Currently the AMD codegen for the payload-copy loop is hitting
- * a regalloc bug (s_add_u32: VGPR in scalar source). The NVIDIA
- * PTX and Tensix Metalium backends compile the kernel cleanly;
- * AMD coverage will catch up once the codegen issue is fixed.
- *
  * The launcher itself is the canonical pattern: allocate the
  * SYSPRINT buffer in host-coherent memory, hand its pointer to
  * the kernel as part of the kernarg block, dispatch, drain on
