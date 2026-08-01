@@ -402,6 +402,28 @@ static void ab_line(FILE *out)
     fprintf(out, " ============================================================\n");
 }
 
+/* SNAP-style hex+ASCII dump. 16 bytes per line, +XXXX offset gutter,
+ * four 4-byte groups, ASCII on the right with non-print as '.'. Same
+ * shape as an IBM SNAP or z/OS storage dump. */
+static void ab_hex(FILE *out, const uint8_t *bytes, uint32_t n)
+{
+    uint32_t i, j;
+    for (i = 0; i < n; i += 16) {
+        fprintf(out, "   +%04X  ", i);
+        for (j = 0; j < 16; j++) {
+            if (i + j < n) fprintf(out, "%02X", bytes[i + j]);
+            else           fprintf(out, "  ");
+            if ((j & 3) == 3 && j < 15) fputc(' ', out);
+        }
+        fputs("  ", out);
+        for (j = 0; j < 16 && i + j < n; j++) {
+            uint8_t b = bytes[i + j];
+            fputc((b >= 0x20 && b < 0x7F) ? (int)b : '.', out);
+        }
+        fputc('\n', out);
+    }
+}
+
 int ab_dump(const ab_ctx_t *A, FILE *out)
 {
     if (!A || !out) return -1;
@@ -482,6 +504,19 @@ int ab_dump(const ab_ctx_t *A, FILE *out)
                 D->block[0], D->block[1], D->block[2]);
         if (D->args_sz > 0)
             fprintf(out, "   Args  %u bytes\n", D->args_sz);
+        fprintf(out, "\n");
+    }
+
+    /* ---- SNAP (kernarg / arg-block bytes) ----
+     * What MVS had in 1972 and CUDA still doesn't: the actual argument
+     * bytes the launcher handed off, so a wrong-sized pointer or a
+     * struct-padding surprise is visible instead of theoretical. */
+    if (D->args_sz > 0) {
+        uint32_t n = D->args_sz;
+        if (n > sizeof(A->args_snap)) n = (uint32_t)sizeof(A->args_snap);
+        fprintf(out, " SNAP (arg block, %u byte%s):\n",
+                n, (n == 1) ? "" : "s");
+        ab_hex(out, A->args_snap, n);
         fprintf(out, "\n");
     }
 
