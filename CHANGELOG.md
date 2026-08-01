@@ -31,6 +31,11 @@ Booth — Changelog
 
 ### Backends
 
+- seed atomic RMW as divergent in the AMD divergence analysis, so a GEP off
+  an `atomicAdd` result no longer takes the scalar path and emits
+  `s_add_u32` with a VGPR source; unblocks per-thread SYSPRINT on AMD
+  (Zane Hambly, 2026-08-01)
+
 - #138: real high-half multiply on x86-64 and RV64, and an honest refusal
   where it cannot be done
   (Zane Hambly, 2026-07-26)

@@ -241,6 +241,11 @@ static void divergence_analysis(const bir_func_t *F)
             case BIR_SHFL_DOWN: case BIR_SHFL_XOR:
             case BIR_ALLOCA: /* per-thread scratch — inherently divergent */
             case BIR_MFMA:  /* matrix result is a collective warp operation */
+            /* atomic RMW: lanes serialise, each sees a different old value. oh yeah fixin it now: ZH */
+            case BIR_ATOMIC_ADD: case BIR_ATOMIC_SUB:
+            case BIR_ATOMIC_AND: case BIR_ATOMIC_OR: case BIR_ATOMIC_XOR:
+            case BIR_ATOMIC_MIN: case BIR_ATOMIC_MAX:
+            case BIR_ATOMIC_XCHG: case BIR_ATOMIC_CAS:
                 mark_divergent(idx);
                 break;
             case BIR_PARAM:
