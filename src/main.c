@@ -23,6 +23,8 @@
 #include "rv_isel.h"
 #include "cpu.h"
 #include "rv64.h"
+#include "backend.h"
+#include "backend_cfg.h"
 #include <stdlib.h>
 
 static char       source_buf[BC_MAX_SOURCE];
@@ -38,19 +40,11 @@ static bir_module_t *bir_module; /* heap-allocated (~11 MB) */
  * path can both call it without duplicating two hundred lines of
  * backend wiring. */
 
-typedef struct {
-    int             no_mem2reg, no_cfold, no_dce, no_sched, no_sroa;
-    int             mode_ir, mode_tdf, mode_tdf_fission;
-    int             mode_amdgpu, mode_amdgpu_bin;
-    int             mode_tensix, mode_nvidia, nv_bkhit;
-    int             mode_metal, mode_intel, mode_rv_elf, mode_cpu, mode_rv64;
-    amd_target_t    amd_target;
-    uint32_t        amd_elfm;
-    const char     *amd_chip;
-    int             snap_mode;
-    intel_target_t  intel_target;
-    const char     *output_file;
-} backend_cfg_t;
+/* be_cfg_t definition lives in src/backend/backend_cfg.h so every
+ * backend descriptor sees the same field layout. Alias kept for the
+ * few local uses below that predate the move; new code should use
+ * be_cfg_t directly. */
+typedef be_cfg_t backend_cfg_t;
 
 /* TDF module and lowering scratch live in BSS, not on the stack.
  * The struct is ~20 KB and trips -Wstack-usage hard if you put it
@@ -164,210 +158,12 @@ static int run_bir_backends(bir_module_t *bir, const backend_cfg_t *cfg)
                bir->num_funcs, bir->num_globals, bir->num_insts);
     }
 
-    if (cfg->mode_amdgpu || cfg->mode_amdgpu_bin) {
-        amd_module_t *amd = (amd_module_t *)malloc(sizeof(amd_module_t));
-        if (!amd) {
-            fprintf(stderr, "error: failed to allocate AMD module\n");
-            return BC_ERR_IO;
-        }
-        amd->target = cfg->amd_target;
-        amd->elf_mach = cfg->amd_elfm;
-        amd->snap_mode = (uint8_t)cfg->snap_mode;
-        snprintf(amd->chip_name, sizeof(amd->chip_name), "%s", cfg->amd_chip);
-        int arc = amdgpu_compile(bir, amd);
-        if (arc == BC_OK) {
-            vfy_res_t v1 = bc_vfy(amd, VFY_ISEL);
-            if (v1.errs) {
-                fprintf(stderr, "verify: %u error(s) after isel\n", v1.errs);
-                arc = BC_ERR_VERIFY;
-            }
-        }
-        if (arc == BC_OK) {
-            if (!cfg->no_sched) amdgpu_sched(amd);
-            amdgpu_regalloc(amd);
-            vfy_res_t v2 = bc_vfy(amd, VFY_RA);
-            if (v2.errs) {
-                fprintf(stderr, "verify: %u error(s) after regalloc\n", v2.errs);
-                arc = BC_ERR_VERIFY;
-            }
-        }
-        if (arc == BC_OK) {
-            if (cfg->mode_amdgpu_bin)
-                amdgpu_emit_elf(amd,
-                    cfg->output_file ? cfg->output_file : "a.hsaco");
-            else
-                amdgpu_emit_asm(amd, stdout);
-        } else {
-            if (arc != BC_ERR_VERIFY)
-                fprintf(stderr, "error: AMDGPU compilation failed\n");
-            rc = arc;
-        }
-        free(amd);
-    }
-
-    if (cfg->mode_nvidia) {
-        nv_module_t *nvm = (nv_module_t *)malloc(sizeof(nv_module_t));
-        if (!nvm) {
-            fprintf(stderr, "error: failed to allocate NVIDIA module\n");
-            return BC_ERR_IO;
-        }
-        int nrc = nv_compile(bir, nvm);
-        if (nrc == BC_OK) {
-            nvm->bkhit = (uint8_t)cfg->nv_bkhit;
-            nv_emit_ptx(nvm, cfg->output_file ? cfg->output_file : "a.ptx");
-        } else {
-            fprintf(stderr, "error: NVIDIA PTX compilation failed\n");
-            rc = nrc;
-        }
-        free(nvm);
-    }
-
-    if (cfg->mode_metal) {
-        metal_module_t *mm = (metal_module_t *)malloc(sizeof(metal_module_t));
-        if (!mm) {
-            fprintf(stderr, "error: failed to allocate Metal module\n");
-            return BC_ERR_IO;
-        }
-        int mrc = metal_compile(bir, mm);
-        if (mrc == BC_OK) {
-            metal_emit_msl(mm, cfg->output_file ? cfg->output_file : "a.metal");
-        } else {
-            fprintf(stderr, "error: Metal backend compilation failed\n");
-            rc = mrc;
-        }
-        free(mm);
-    }
-
-    if (cfg->mode_intel) {
-        intel_module_t *im = (intel_module_t *)malloc(sizeof(intel_module_t));
-        if (!im) {
-            fprintf(stderr, "error: failed to allocate Intel module\n");
-            return BC_ERR_IO;
-        }
-        int irc = intel_compile(bir, im, cfg->intel_target);
-        if (irc == BC_OK) {
-            intel_emit_spirv(im, cfg->output_file ? cfg->output_file : "a.spv");
-        } else {
-            fprintf(stderr,
-                "error: Intel SPIR-V backend not yet a working compiler\n");
-            rc = irc;
-        }
-        free(im);
-    }
-
-    /* Native RV32IM emission for the baby cores. Picks the first
-     * function in the BIR module (which is the first CUDA kernel
-     * defined in the source) and runs it through the bring-up isel
-     * into an ELF that the tt-metal host loader can drop onto a
-     * baby core. Soft-float not yet linked in; integer kernels
-     * only for now. */
-    if (cfg->mode_cpu) {
-        static cpu_mod_t cm;
-        if (bir->num_funcs == 0u) { fprintf(stderr,"error: no functions\n"); return BC_ERR_TDF; }
-        cpu_init(&cm, bir);
-        cpu_emit(&cm);
-        const char *path = cfg->output_file ? cfg->output_file : "a.o";
-        if (cpu_elf(&cm, path) != 0) { fprintf(stderr,"cpu: elf write failed\n"); return BC_ERR_IO; }
-        fprintf(stderr, "wrote %s (%u bytes x86-64)\n", path, cm.codelen);
-    }
-
-    if (cfg->mode_rv64) {
-        static rv64_mod_t vm;
-        if (bir->num_funcs == 0u) { fprintf(stderr,"error: no functions\n"); return BC_ERR_TDF; }
-        rv64_init(&vm, bir);
-        rv64_emit(&vm);
-        const char *path = cfg->output_file ? cfg->output_file : "a.o";
-        if (rv64_elf(&vm, path) != 0) { fprintf(stderr,"rv64: elf write failed\n"); return BC_ERR_IO; }
-        fprintf(stderr, "wrote %s (%u bytes RV64)\n", path, vm.codelen);
-    }
-
-    if (cfg->mode_rv_elf) {
-        static rv_buf_t rv_code;
-        rv_buf_init(&rv_code);
-        if (bir->num_funcs == 0u) {
-            fprintf(stderr, "error: BIR module has no functions\n");
-            return BC_ERR_TDF;
-        }
-        /* Module, not just function 0: rv_isel_func records call patches but
-         * only rv_isel_module resolves them, so a BIR_CALL through this path
-         * would otherwise keep its placeholder and trap as an illegal insn. */
-        int irc = rv_isel_module(bir, &rv_code);
-        if (irc != BC_OK) return irc;
-        const char *path = cfg->output_file ? cfg->output_file : "a.elf";
-        int erc = rv_elf_write(&rv_code, path);
-        if (erc != BC_OK) return erc;
-        fprintf(stderr, "wrote %s (%u bytes code, %u instructions)\n",
-                path, rv_buf_nbytes(&rv_code),
-                rv_buf_n_words(&rv_code));
-    }
-
-    /* Tensix needs additional reader/writer/host emission besides
-     * the compute kernel, which is why it lives slightly off the
-     * shared shape. */
-    if (cfg->mode_tensix) {
-        tt_module_t *ttm = (tt_module_t *)malloc(sizeof(tt_module_t));
-        if (!ttm) {
-            fprintf(stderr, "error: failed to allocate Tensix module\n");
-            return BC_ERR_IO;
-        }
-        int trc = tensix_compile(bir, ttm);
-        if (trc == BC_OK) {
-            tensix_coarsen(ttm);
-            tensix_regalloc(ttm);
-            const char *compute_path =
-                cfg->output_file ? cfg->output_file : "a_compute.cpp";
-            tensix_analyze_datamov(bir, ttm, &ttm->dmov);
-            tensix_emit_metalium(ttm, compute_path);
-            /* Raw Tensix machine code alongside the Metalium C++: the encoded
-             * 32-bit word stream, decodable by ttas/Kahu. */
-            {
-                char bin_path[BC_MAX_PATH];
-                const char *st2 = strstr(compute_path, "_compute");
-                int bp = st2 ? (int)(st2 - compute_path)
-                             : (int)strlen(compute_path);
-                snprintf(bin_path, sizeof(bin_path), "%.*s_compute.bin",
-                         bp, compute_path);
-                tensix_emit_binary(ttm, bin_path);
-                /* The math core's RISC-V .ttinsn stream that issues them. */
-                snprintf(bin_path, sizeof(bin_path), "%.*s_compute.ttinsn",
-                         bp, compute_path);
-                tensix_emit_ttinsn(ttm, bin_path);
-            }
-            char host_path[BC_MAX_PATH];
-            char reader_path[BC_MAX_PATH];
-            char writer_path[BC_MAX_PATH];
-            const char *stem = strstr(compute_path, "_compute");
-            int pfx;
-            if (stem) pfx = (int)(stem - compute_path);
-            else {
-                const char *dot = strrchr(compute_path, '.');
-                pfx = dot ? (int)(dot - compute_path)
-                          : (int)strlen(compute_path);
-            }
-            snprintf(host_path,   sizeof(host_path),
-                     "%.*s_host.cpp",   pfx, compute_path);
-            snprintf(reader_path, sizeof(reader_path),
-                     "%.*s_reader.cpp", pfx, compute_path);
-            snprintf(writer_path, sizeof(writer_path),
-                     "%.*s_writer.cpp", pfx, compute_path);
-            tensix_emit_reader(ttm, &ttm->dmov, reader_path);
-            tensix_emit_writer(ttm, &ttm->dmov, writer_path);
-            tensix_emit_host_full(ttm, &ttm->dmov, host_path,
-                                  reader_path, compute_path, writer_path);
-            /* The same three cores as baby-core machine code, one shared L1
-             * address map. The Metalium C++ above is the dev path; these ELFs
-             * are the toolchain-free path. */
-            {
-                char elf_stem[BC_MAX_PATH];
-                snprintf(elf_stem, sizeof(elf_stem), "%.*s", pfx, compute_path);
-                tensix_emit_kernel_elves(ttm, &ttm->dmov, elf_stem);
-            }
-        } else {
-            fprintf(stderr, "error: Tensix compilation failed\n");
-            rc = trc;
-        }
-        free(ttm);
-    }
+    /* All backend dispatch flows through be_run. Each backend
+     * (amdgpu, nvptx, metal, intel, cpu-x86, cpu-rv64, tensix,
+     * tensix-rv32) is a be_desc_t in src/<name>/<name>_be.c and
+     * registered in src/backend/backends.c. See docs/backends.md. */
+    int brc = be_run((struct bir_module *)bir, (struct be_cfg *)cfg);
+    if (brc != BE_OK && rc == BC_OK) rc = BC_ERR_VERIFY;
 
     return rc;
 }

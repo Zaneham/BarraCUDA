@@ -29,6 +29,17 @@ Booth — Changelog
 - #137: support bare convergent warp and lane intrinsics
   (Maou, 2026-07-27)
 
+### Architecture
+
+- introduce a backend contract (`be_desc_t`) and a static registration
+  list so adding a new backend is a weekend project rather than a
+  career decision; every existing backend now sits behind the same
+  eight-op shape (is_on, isel, sched, regalloc, verify, emit, mfree),
+  the driver iterates `be_list` instead of a copy-pasted if-chain,
+  and a reference skeleton in `src/backend/skeleton/` plus
+  `docs/backends.md` document the walkthrough for external contributors
+  (Zane Hambly, 2026-08-02)
+
 ### Backends
 
 - seed atomic RMW as divergent in the AMD divergence analysis, so a GEP off
