@@ -149,6 +149,13 @@ CLAUDE.md
 /a_compute.bin
 /a_compute.ttinsn
 
+# gcov instrumentation and the reports make coverage builds from it
+*.gcda
+*.gcno
+*.gcov
+/coverage.txt
+/coverage-html/
+
 # Header dependency files from -MMD
 *.d
 tdf_flag_out.txt

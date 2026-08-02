@@ -115,6 +115,10 @@ Booth — Changelog
 - guard the divergent-return lowering against regressing to `s_endpgm`
   (Zane Hambly, 2026-07-26)
 
+- #154: `make coverage` builds an instrumented tree and reports line coverage
+  via gcovr, with a CI job that posts the summary and uploads the HTML
+  (Zane Hambly, 2026-08-02)
+
 ### Documentation
 
 - drop the LLVM requirement from the usage documentation

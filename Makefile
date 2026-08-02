@@ -12,6 +12,10 @@ else
   GCC_ONLY =
 endif
 
+# Empty for a normal build. `make coverage` re-invokes make with this set, and
+# it lands at the end of CFLAGS/TCFLAGS so its -O0 beats the -O2 above.
+COVFLAGS =
+
 CFLAGS  = -std=c99 -MMD -MP -Wall -Wextra -pedantic -O2 \
           -Wshadow -Wstrict-prototypes -Wmissing-prototypes \
           -Wformat=2 -Wundef -Wcast-align -Wnull-dereference \
@@ -19,7 +23,8 @@ CFLAGS  = -std=c99 -MMD -MP -Wall -Wextra -pedantic -O2 \
           -Wdouble-promotion -Wswitch-enum -Wwrite-strings \
           -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fPIE $(CF_PROT) \
           $(GCC_ONLY) \
-          -Isrc -Isrc/fe -Isrc/ir -Isrc/tdf -Isrc/amdgpu -Isrc/tensix -Isrc/nvidia -Isrc/metal -Isrc/intel -Isrc/triton -Isrc/cpu -Isrc/runtime
+          -Isrc -Isrc/fe -Isrc/ir -Isrc/tdf -Isrc/amdgpu -Isrc/tensix -Isrc/nvidia -Isrc/metal -Isrc/intel -Isrc/triton -Isrc/cpu -Isrc/runtime \
+          $(COVFLAGS)
 LDFLAGS = -pie
 LIBS    = -lm
 # Linux/ELF only: -Wl,-z,relro,-z,now -Wl,-z,noexecstack
@@ -82,7 +87,7 @@ $(OBJDIR)/%.o: %.c
 # ---- Test Suite ----
 TCFLAGS = -std=c99 -MMD -MP -D_POSIX_C_SOURCE=200809L -Wall -Wextra -O0 -g \
           -Isrc -Isrc/fe -Isrc/ir -Isrc/tdf -Isrc/amdgpu -Isrc/tensix -Isrc/nvidia -Isrc/metal -Isrc/intel -Isrc/triton -Isrc/cpu -Isrc/runtime \
-          -Iruntime
+          -Iruntime $(COVFLAGS)
 TSRC    = tests/tmain.c tests/tsmoke.c tests/tcomp.c tests/tenc.c \
           tests/ttabs.c tests/ttypes.c tests/terrs.c tests/tphase.c \
           tests/tdce.c \
@@ -140,12 +145,45 @@ $(OBJDIR)/runtime/%.o: runtime/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(TCFLAGS) -c $< -o $@
 
-clean:
-	rm -rf $(OBJDIR)
+# ---- Coverage ----
+# Instrumented objects live in their own tree. Sharing one with the normal build
+# means a later `make test` relinks against gcov objects and dies on missing
+# __gcov symbols, which reads like a broken toolchain rather than a stale tree.
+COVDIR  := build/cov-$(UNAME_S)
+
+# kath is instrumented too, not just trunner: trv_elf, ttdf and ttriton shell out
+# to ./kath, so a lot of the backend is only reached through the real binary.
+# -U_FORTIFY_SOURCE because glibc #warnings at -O0 when it's set, and -Werror
+# turns that into a build failure.
+# -w because -O0 drops the value-range info that lets -Wformat-truncation prove
+# its bounds at -O2, so the strict set fires on code that is fine. The normal
+# build is the warnings gate; this one only counts lines.
+COV_CF   = --coverage -O0 -U_FORTIFY_SOURCE -w
+
+# Both binaries land in the repo root whichever tree built them, so clear them
+# first to force an instrumented link, and again at the end so the next plain
+# `make` doesn't quietly keep running the instrumented one.
+coverage:
 	rm -f $(TARGET) $(TARGET).exe trunner trunner.exe
+	find $(COVDIR) -name '*.gcda' -delete 2>/dev/null || true
+	$(MAKE) OBJDIR=$(COVDIR) COVFLAGS="$(COV_CF)" $(TARGET) trunner
+	-./trunner --all
+	@command -v gcovr >/dev/null 2>&1 || { echo "gcovr not found. pip install gcovr"; exit 1; }
+	@mkdir -p coverage-html
+	gcovr --root . --object-directory $(COVDIR) \
+	      --filter 'src/' --filter 'runtime/' \
+	      --exclude-unreachable-branches \
+	      --print-summary --txt coverage.txt --html-details coverage-html/index.html
+	rm -f $(TARGET) $(TARGET).exe trunner trunner.exe
+	@echo "report: coverage.txt and coverage-html/index.html"
+
+clean:
+	rm -rf $(OBJDIR) $(COVDIR)
+	rm -f $(TARGET) $(TARGET).exe trunner trunner.exe
+	rm -rf coverage.txt coverage-html
 
 # Header deps from -MMD. Without these a header edit leaves stale objects
 # linked in and the build silently disagrees with the source.
 -include $(OBJECTS:.o=.d) $(TOBJS:.o=.d) $(HOSTRT:.o=.d)
 
-.PHONY: all clean test
+.PHONY: all clean test coverage
