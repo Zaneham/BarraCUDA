@@ -100,6 +100,7 @@ TSRC    = tests/tmain.c tests/tsmoke.c tests/tcomp.c tests/tenc.c \
           tests/twarpsize.c \
           tests/tabend.c \
           tests/tregalloc.c \
+          tests/tra_ssa.c \
           tests/tguard.c \
           tests/ttriton.c \
           tests/ttdf.c \

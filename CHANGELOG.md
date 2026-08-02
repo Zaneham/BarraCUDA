@@ -119,6 +119,12 @@ Booth — Changelog
   via gcovr, with a CI job that posts the summary and uploads the HTML
   (Zane Hambly, 2026-08-02)
 
+- #154: cover the SSA register allocator, which had never been run by a test.
+  Six fixtures and any `--max-vgprs` below 8 leave virtual registers
+  unallocated under `--ssa-ra`; those are pinned in `tests/tra_ssa.c` until
+  the allocator is fixed
+  (Zane Hambly, 2026-08-02)
+
 ### Documentation
 
 - drop the LLVM requirement from the usage documentation
