@@ -54,6 +54,23 @@ int be_run(const struct bir_module *M, const be_cfg_t *cfg)
 {
     if (M == NULL || cfg == NULL) return BE_EINPUT;
 
+    /* One target per run. They all emit to cfg->output_file, so asking for
+     * several used to write each over the last and leave whichever sorted
+     * last in be_list, under the name you picked, with a zero exit. Run
+     * kath once per target instead. */
+    uint32_t on = 0;
+    for (uint32_t i = 0; i < BE_MAX && be_list[i] != NULL; i++)
+        if (be_list[i]->is_on != NULL && be_list[i]->is_on(cfg)) on++;
+
+    if (on > 1) {
+        fprintf(stderr, "error: %u backends selected, pick one:", on);
+        for (uint32_t i = 0; i < BE_MAX && be_list[i] != NULL; i++)
+            if (be_list[i]->is_on != NULL && be_list[i]->is_on(cfg))
+                fprintf(stderr, " %s", be_list[i]->name);
+        fprintf(stderr, "\n");
+        return BE_EINPUT;
+    }
+
     int first = BE_OK;
 
     for (uint32_t i = 0; i < BE_MAX && be_list[i] != NULL; i++) {

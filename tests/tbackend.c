@@ -58,3 +58,35 @@ static void be_feats_sane(void)
     PASS();
 }
 TH_REG("backend", be_feats_sane)
+
+/* ---- one target per run ----
+ * Every backend emits to cfg->output_file, so several at once used to
+ * write over each other and leave whichever sorted last in be_list. */
+
+static char be_obuf[TH_BUFSZ];
+
+static void be_one_target(void)
+{
+    int rc = th_run(BC_BIN " --amdgpu-bin --nvidia-ptx --metal "
+                    "tests/vector_add.cu -o be_multi.out",
+                    be_obuf, TH_BUFSZ);
+    CHNE(rc, 0);
+    CHECK(strstr(be_obuf, "pick one") != NULL);
+    /* and nothing written, so a build system cannot pick up the wrong one */
+    FILE *f = fopen("be_multi.out", "r");
+    CHECK(f == NULL);
+    if (f) fclose(f);
+    remove("be_multi.out");
+    PASS();
+}
+TH_REG("backend", be_one_target)
+
+static void be_one_target_ok(void)
+{
+    int rc = th_run(BC_BIN " --nvidia-ptx tests/vector_add.cu -o be_single.ptx",
+                    be_obuf, TH_BUFSZ);
+    CHEQ(rc, 0);
+    remove("be_single.ptx");
+    PASS();
+}
+TH_REG("backend", be_one_target_ok)
