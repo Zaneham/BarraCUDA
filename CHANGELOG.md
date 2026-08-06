@@ -5,9 +5,9 @@ Booth — Changelog
 
 ### Frontend
 
-- double-precision `fmax`, `fmin` and `fmod`. The ocean kernels in Jorge
-  Galvez's do-concurrent benchmarks call them, and only the `f`-suffixed
-  single-precision forms were recognised
+- double-precision `fmax`, `fmin` and `fmod`. The ocean kernels in
+  [Jorge Galvez](https://github.com/JorgeG94)'s do-concurrent benchmarks call
+  them, and only the `f`-suffixed single-precision forms were recognised
   (Zane Hambly, 2026-08-06)
 
 - raise the cap on arguments in one call to 64, and say so when a call goes
