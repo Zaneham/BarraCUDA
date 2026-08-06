@@ -185,6 +185,38 @@ uninstall:
 	rm -f $(BINDIR)/$(TARGET)$(EXE)
 	rm -rf $(SHAREDIR) $(CMAKEDIR)
 
+# ---- Coverage ----
+# Instrumented objects live in their own tree. Sharing one with the normal build
+# means a later `make test` relinks against gcov objects and dies on missing
+# __gcov symbols, which reads like a broken toolchain rather than a stale tree.
+COVDIR  := build/cov-$(UNAME_S)
+
+# kath is instrumented too, not just trunner: trv_elf, ttdf and ttriton shell out
+# to ./kath, so a lot of the backend is only reached through the real binary.
+# -U_FORTIFY_SOURCE because glibc #warnings at -O0 when it's set, and -Werror
+# turns that into a build failure.
+# -w because -O0 drops the value-range info that lets -Wformat-truncation prove
+# its bounds at -O2, so the strict set fires on code that is fine. The normal
+# build is the warnings gate; this one only counts lines.
+COV_CF   = --coverage -O0 -U_FORTIFY_SOURCE -w
+
+# Both binaries land in the repo root whichever tree built them, so clear them
+# first to force an instrumented link, and again at the end so the next plain
+# `make` doesn't quietly keep running the instrumented one.
+coverage:
+	rm -f $(TARGET) $(TARGET).exe trunner trunner.exe
+	find $(COVDIR) -name '*.gcda' -delete 2>/dev/null || true
+	$(MAKE) OBJDIR=$(COVDIR) COVFLAGS="$(COV_CF)" $(TARGET) trunner
+	-./trunner --all
+	@command -v gcovr >/dev/null 2>&1 || { echo "gcovr not found. pip install gcovr"; exit 1; }
+	@mkdir -p coverage-html
+	gcovr --root . --object-directory $(COVDIR) \
+	      --filter 'src/' --filter 'runtime/' \
+	      --exclude-unreachable-branches \
+	      --print-summary --txt coverage.txt --html-details coverage-html/index.html
+	rm -f $(TARGET) $(TARGET).exe trunner trunner.exe
+	@echo "report: coverage.txt and coverage-html/index.html"
+
 clean:
 	rm -rf $(OBJDIR) $(COVDIR)
 	rm -f $(TARGET) $(TARGET).exe trunner trunner.exe
@@ -194,4 +226,4 @@ clean:
 # linked in and the build silently disagrees with the source.
 -include $(OBJECTS:.o=.d) $(TOBJS:.o=.d) $(HOSTRT:.o=.d)
 
-.PHONY: all clean test install uninstall
+.PHONY: all clean test install uninstall coverage
