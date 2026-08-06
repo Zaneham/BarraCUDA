@@ -1249,7 +1249,7 @@ static void isel_conversion(uint32_t idx, const bir_inst_t *I, int div)
             {BIR_CEIL,AMD_V_CEIL_F32},{BIR_FTRUNC,AMD_V_TRUNC_F32},
             {BIR_RNDNE,AMD_V_RNDNE_F32},
         };
-        for (int mi = 0; mi < 11; mi++) {
+        for (int mi = 0; mi < (int)(sizeof m1 / sizeof m1[0]); mi++) {
             if (m1[mi].bo == I->op) {
                 emit1(m1[mi].ao, mop_vreg_v((uint16_t)vr), ensure_vgpr(src));
                 break;
