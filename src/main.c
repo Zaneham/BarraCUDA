@@ -966,6 +966,15 @@ int main(int argc, char *argv[])
                 free(sema_ctx);
                 return sema_rc;
             }
+
+            /* Only --sema used to act on these. Every other mode printed the
+             * errors, carried on into codegen, wrote an output file and exited
+             * zero, so a build system saw a clean compile and a kernel that
+             * had been lowered from source we had already rejected. */
+            if (sema_ctx->num_errors > 0) {
+                free(sema_ctx);
+                return 1;
+            }
         }
 
         if (want_bir && P.num_errors == 0) {
