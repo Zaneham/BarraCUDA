@@ -150,9 +150,13 @@ BINDIR   = $(DESTDIR)$(PREFIX)/bin
 SHAREDIR = $(DESTDIR)$(PREFIX)/share/booth
 CMAKEDIR = $(DESTDIR)$(PREFIX)/lib/cmake/Booth
 
-VER_MAJOR := $(shell sed -n 's/^#define BC_VERSION_MAJOR[[:space:]]*\([0-9][0-9]*\).*/\1/p' src/barracuda.h)
-VER_MINOR := $(shell sed -n 's/^#define BC_VERSION_MINOR[[:space:]]*\([0-9][0-9]*\).*/\1/p' src/barracuda.h)
-VER_PATCH := $(shell sed -n 's/^#define BC_VERSION_PATCH[[:space:]]*\([0-9][0-9]*\).*/\1/p' src/barracuda.h)
+# Matching on the macro name rather than the whole "#define" line: make 3.81,
+# which is what macOS ships, takes a # inside $(shell) as the start of a
+# comment and swallows the rest of the call. Quoting does not save it, and
+# neither does awk over sed, so the # simply has to go.
+VER_MAJOR := $(shell awk '$$2 == "BC_VERSION_MAJOR" {print $$3}' src/barracuda.h)
+VER_MINOR := $(shell awk '$$2 == "BC_VERSION_MINOR" {print $$3}' src/barracuda.h)
+VER_PATCH := $(shell awk '$$2 == "BC_VERSION_PATCH" {print $$3}' src/barracuda.h)
 VERSION   := $(VER_MAJOR).$(VER_MINOR).$(VER_PATCH)
 
 # MinGW gcc appends .exe when -o names no suffix, so the built file is not
