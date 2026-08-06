@@ -1,5 +1,4 @@
 #include "sema.h"
-#include "../amd_target_defs.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
@@ -1590,13 +1589,13 @@ static void check_func_def(sema_ctx_t *S, uint32_t node)
 
 /* ---- Initialization ---- */
 
-void sema_init(sema_ctx_t *S, const parser_t *P, uint32_t root, int amd_target)
+void sema_init(sema_ctx_t *S, const parser_t *P, uint32_t root, int warp_size)
 {
     (void)root;
     memset(S, 0, sizeof(*S));
     S->P   = P;
     S->src = P->src;
-    S->amd_target = amd_target;
+    S->warp_size = warp_size;
 
     st_void(S);    /* 0 */
     st_bool(S);    /* 1 */

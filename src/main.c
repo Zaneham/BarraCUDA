@@ -60,8 +60,9 @@ static int target_for_cfg(const backend_cfg_t *cfg)
      * for the dump label and for when Tensix fission starts doing
      * something interesting on its own branch. */
     if (cfg->mode_tdf_fission) return TD_TGT_TENSIX;
-    if (cfg->mode_tensix) return TD_TGT_TENSIX;
-    if (cfg->mode_nvidia) return TD_TGT_NVIDIA;
+    const be_desc_t *b = be_active();
+    if (b != NULL && strcmp(b->name, "tensix") == 0) return TD_TGT_TENSIX;
+    if (b != NULL && strcmp(b->name, "nvptx")  == 0) return TD_TGT_NVIDIA;
     return TD_TGT_AMD;
 }
 
@@ -95,10 +96,12 @@ static int run_bir_backends(bir_module_t *bir, const backend_cfg_t *cfg)
      * so splice the callee bodies in before anything else runs. mem2reg then
      * cleans up the inlined parameter stores as if they were always local.
      * CPU, RV64 and Metal emit real calls and are left untouched. */
-    if (cfg->mode_amdgpu || cfg->mode_amdgpu_bin ||
-        cfg->mode_nvidia || cfg->mode_tensix) {
-        int irc = bir_inline_device(bir);
-        if (irc != BC_OK) return irc;
+    {
+        const be_desc_t *b = be_active();
+        if (b != NULL && (b->feats & BE_F_NOCALL)) {
+            int irc = bir_inline_device(bir);
+            if (irc != BC_OK) return irc;
+        }
     }
 
     /* Optimisation passes: same shape regardless of frontend. */
@@ -230,10 +233,14 @@ static void usage(const char *prog)
         "  --amdgpu-bin  Compile to AMDGPU ELF code object (.hsaco)\n"
         "  --tt-chip C   Tenstorrent part: wormhole or blackhole "
         "(default blackhole)\n"
-        "  --gfx90a      Target CDNA 2 (gfx90a, MI250)\n"
-        "  --gfx942      Target CDNA 3 (gfx942, MI300X)\n"
-        "  --gfx1030     Target RDNA 2 (gfx1030)\n"
-        "  --gfx1200     Target RDNA 4 (gfx1200)\n"
+        "  AMD targets (default --gfx1100):\n"
+        "    CDNA 2   --gfx90a (MI250)\n"
+        "    CDNA 3   --gfx942 (MI300X)\n"
+        "    RDNA 2   --gfx1030 --gfx1031 --gfx1032 --gfx1033 --gfx1034\n"
+        "             --gfx1035 --gfx1036\n"
+        "    RDNA 3   --gfx1100 --gfx1101 --gfx1102 --gfx1103\n"
+        "    RDNA 3.5 --gfx1150 --gfx1151 --gfx1152 --gfx1153\n"
+        "    RDNA 4   --gfx1200 --gfx1201\n"
         "  --no-graphcolor  Force linear scan register allocation\n"
         "  --ssa-ra         Divergence-aware SSA register allocation\n"
         "  --max-vgprs N    Cap VGPR count for regalloc (forces spills)\n"
@@ -253,6 +260,10 @@ static void usage(const char *prog)
         "  --xe2         Target Xe2 (Lunar Lake, next-gen Arc)\n"
         "  -o <file>     Output file (for --amdgpu, --amdgpu-bin, --tensix, --nvidia-ptx,\n"
         "                --metal, --intel-spirv). --amdgpu writes to stdout without it.\n"
+        "  --snap        AMD: write each kernel parameter's register value into a\n"
+        "                host-visible buffer on entry, for the ABEND dump to read back\n"
+        "  --bkhit       NVIDIA: add a __bkhit counter parameter each block atomically\n"
+        "                increments, so you can see which blocks actually ran\n"
         "  --lang <file> Load translated error messages\n"
         "  --version     Print version and exit\n"
         "  --help        Show this message\n"
@@ -271,30 +282,15 @@ int main(int argc, char *argv[])
     int mode_ir = 0;
     int mode_tdf = 0;
     int mode_tdf_fission = 0;
-    int mode_amdgpu = 0;
-    int mode_amdgpu_bin = 0;
-    int mode_cpu = 0;
-    int mode_rv64 = 0;
-    int mode_tensix = 0;
-    int mode_nvidia = 0;
-    int mode_metal = 0;
-    int mode_intel = 0;
-    int mode_rv_elf = 0;
     int mode_hip = 0;           /* HIP frontend: see HIP NOTES below */
     int mode_triton = 0;        /* Triton frontend: see TRITON NOTES below */
-    intel_target_t intel_target = INTEL_TARGET_XE_HPG;
-    int nv_bkhit = 0;
     int no_mem2reg = 0;
     int no_cfold = 0;
     int no_dce = 0;
     int no_sroa = 0;
     int no_sched = 0;
     int no_pp = 0;
-    int snap_mode = 0;
     td_chip_t tt_chip = TD_CHIP_BH;
-    amd_target_t amd_target = AMD_TARGET_GFX1100;
-    uint32_t     amd_elfm  = 0x41;       /* EF_AMDGPU_MACH for exact chip */
-    const char  *amd_chip  = "gfx1100";  /* chip string for ELF metadata */
 
     /* Collect -I and -D options for preprocessor */
     const char *include_paths[PP_MAX_INCLUDE_PATHS];
@@ -320,86 +316,20 @@ int main(int argc, char *argv[])
             mode_tdf = 1;
         else if (strcmp(argv[i], "--tdf-fission") == 0)
             mode_tdf_fission = 1;
-        else if (strcmp(argv[i], "--rv-elf") == 0)
-            mode_rv_elf = 1;
-        else if (strcmp(argv[i], "--cpu") == 0)
-            mode_cpu = 1;
-        else if (strcmp(argv[i], "--rv64") == 0)
-            mode_rv64 = 1;
         else if (strcmp(argv[i], "--pp") == 0)
             mode_pp = 1;
         else if (strcmp(argv[i], "--no-pp") == 0)
             no_pp = 1;
-        else if (strcmp(argv[i], "--amdgpu") == 0)
-            mode_amdgpu = 1;
-        else if (strcmp(argv[i], "--amdgpu-bin") == 0)
-            mode_amdgpu_bin = 1;
         /* CDNA 2 (GFX9) */
-        else if (strcmp(argv[i], "--gfx90a") == 0)
-            { amd_target = AMD_TARGET_GFX90A; amd_elfm = 0x3F; amd_chip = "gfx90a"; }
         /* CDNA 3 (GFX9.4.2) */
-        else if (strcmp(argv[i], "--gfx942") == 0)
-            { amd_target = AMD_TARGET_GFX942; amd_elfm = 0x54C; amd_chip = "gfx942"; } /* xnack=off sramecc=off */
         /* RDNA 2 (GFX10.3) */
-        else if (strcmp(argv[i], "--gfx1030") == 0)
-            { amd_target = AMD_TARGET_GFX1030; amd_elfm = 0x36; amd_chip = "gfx1030"; }
-        else if (strcmp(argv[i], "--gfx1031") == 0)
-            { amd_target = AMD_TARGET_GFX1030; amd_elfm = 0x37; amd_chip = "gfx1031"; }
-        else if (strcmp(argv[i], "--gfx1032") == 0)
-            { amd_target = AMD_TARGET_GFX1030; amd_elfm = 0x38; amd_chip = "gfx1032"; }
-        else if (strcmp(argv[i], "--gfx1033") == 0)
-            { amd_target = AMD_TARGET_GFX1030; amd_elfm = 0x39; amd_chip = "gfx1033"; }
-        else if (strcmp(argv[i], "--gfx1034") == 0)
-            { amd_target = AMD_TARGET_GFX1030; amd_elfm = 0x3e; amd_chip = "gfx1034"; }
-        else if (strcmp(argv[i], "--gfx1035") == 0)
-            { amd_target = AMD_TARGET_GFX1030; amd_elfm = 0x3d; amd_chip = "gfx1035"; }
-        else if (strcmp(argv[i], "--gfx1036") == 0)
-            { amd_target = AMD_TARGET_GFX1030; amd_elfm = 0x45; amd_chip = "gfx1036"; }
         /* RDNA 3 (GFX11) */
-        else if (strcmp(argv[i], "--gfx1100") == 0)
-            { amd_target = AMD_TARGET_GFX1100; amd_elfm = 0x41; amd_chip = "gfx1100"; }
-        else if (strcmp(argv[i], "--gfx1101") == 0)
-            { amd_target = AMD_TARGET_GFX1100; amd_elfm = 0x46; amd_chip = "gfx1101"; }
-        else if (strcmp(argv[i], "--gfx1102") == 0)
-            { amd_target = AMD_TARGET_GFX1100; amd_elfm = 0x47; amd_chip = "gfx1102"; }
-        else if (strcmp(argv[i], "--gfx1103") == 0)
-            { amd_target = AMD_TARGET_GFX1100; amd_elfm = 0x44; amd_chip = "gfx1103"; }
         /* RDNA 3.5 (GFX11.5) */
-        else if (strcmp(argv[i], "--gfx1150") == 0)
-            { amd_target = AMD_TARGET_GFX1100; amd_elfm = 0x43; amd_chip = "gfx1150"; }
-        else if (strcmp(argv[i], "--gfx1151") == 0)
-            { amd_target = AMD_TARGET_GFX1100; amd_elfm = 0x4a; amd_chip = "gfx1151"; }
-        else if (strcmp(argv[i], "--gfx1152") == 0)
-            { amd_target = AMD_TARGET_GFX1100; amd_elfm = 0x55; amd_chip = "gfx1152"; }
-        else if (strcmp(argv[i], "--gfx1153") == 0)
-            { amd_target = AMD_TARGET_GFX1100; amd_elfm = 0x58; amd_chip = "gfx1153"; }
         /* RDNA 4 (GFX12) */
-        else if (strcmp(argv[i], "--gfx1200") == 0)
-            { amd_target = AMD_TARGET_GFX1200; amd_elfm = 0x48; amd_chip = "gfx1200"; }
-        else if (strcmp(argv[i], "--gfx1201") == 0)
-            { amd_target = AMD_TARGET_GFX1200; amd_elfm = 0x4e; amd_chip = "gfx1201"; }
-        else if (strcmp(argv[i], "--tensix") == 0)
-            mode_tensix = 1;
-        else if (strcmp(argv[i], "--nvidia-ptx") == 0)
-            mode_nvidia = 1;
-        else if (strcmp(argv[i], "--metal") == 0)
-            mode_metal = 1;
-        else if (strcmp(argv[i], "--intel-spirv") == 0)
-            mode_intel = 1;
-        else if (strcmp(argv[i], "--xe-lpg") == 0)
-            intel_target = INTEL_TARGET_XE_LPG;
-        else if (strcmp(argv[i], "--xe-hpg") == 0)
-            intel_target = INTEL_TARGET_XE_HPG;
-        else if (strcmp(argv[i], "--xe-hpc") == 0)
-            intel_target = INTEL_TARGET_XE_HPC;
-        else if (strcmp(argv[i], "--xe2") == 0)
-            intel_target = INTEL_TARGET_XE2;
         else if (strcmp(argv[i], "--hip") == 0)
             mode_hip = 1;
         else if (strcmp(argv[i], "--triton") == 0)
             mode_triton = 1;
-        else if (strcmp(argv[i], "--bkhit") == 0)
-            nv_bkhit = 1;
         else if (strcmp(argv[i], "--tt-chip") == 0 && i + 1 < argc) {
             if (td_pchip(argv[++i], &tt_chip) != BC_OK) {
                 fprintf(stderr, "unknown Tenstorrent chip: %s "
@@ -433,20 +363,23 @@ int main(int argc, char *argv[])
             no_sroa = 1;
         else if (strcmp(argv[i], "--no-sched") == 0)
             no_sched = 1;
-        else if (strcmp(argv[i], "--no-graphcolor") == 0)
-            amd_ra_lin = 1;
-        else if (strcmp(argv[i], "--ssa-ra") == 0)
-            amd_ra_ssa = 1;
-        else if (strcmp(argv[i], "--max-vgprs") == 0 && i + 1 < argc)
-            amd_max_vgpr = atoi(argv[++i]);
-        else if (strcmp(argv[i], "--snap") == 0)
-            snap_mode = 1;
         else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             usage(argv[0]);
             return 0;
         } else if (argv[i][0] != '-')
             file = argv[i];
         else {
+            /* Not one of the driver's, so offer it round the backend
+             * registry before calling it unknown. Target selection and
+             * every target-specific knob lives in the backend that owns
+             * it, which is why main no longer has a --gfx list. */
+            int used_next = 0;
+            int taken = be_parse_flag(argv[i],
+                                      (i + 1 < argc) ? argv[i + 1] : NULL,
+                                      &used_next);
+            if (taken < 0) return 1;
+            if (taken > 0) { i += used_next; continue; }
+
             fprintf(stderr, "unknown option: %s\n", argv[i]);
             usage(argv[0]);
             return 1;
@@ -465,9 +398,7 @@ int main(int argc, char *argv[])
      * --tdf reached some gates and not others. Triton keeps its own list below;
      * it gates a different frontend and does not accept --rv-elf. */
     int want_bir  = mode_ir || mode_tdf || mode_tdf_fission ||
-                    mode_amdgpu || mode_amdgpu_bin || mode_tensix ||
-                    mode_nvidia || mode_metal || mode_intel ||
-                    mode_rv_elf || mode_cpu || mode_rv64;
+                    be_num_on() > 0u;
     int want_sema = mode_sema || want_bir;
 
     if (!mode_pp && !mode_lex && !mode_parse && !want_sema)
@@ -537,9 +468,7 @@ int main(int argc, char *argv[])
         }
         /* One list, used by both the gate and the sema/lower decision below.
          * It was two, they disagreed, and --cpu fell down the gap. */
-        int want_backend = mode_amdgpu || mode_amdgpu_bin ||
-                           mode_tensix || mode_nvidia ||
-                           mode_metal || mode_intel || mode_cpu || mode_rv64;
+        int want_backend = be_num_on() > 0u;
         if (mode_parse || mode_sema || mode_ir || want_backend) {
             tn_parse_t *tnp = (tn_parse_t *)malloc(sizeof(tn_parse_t));
             if (!tnp) {
@@ -587,19 +516,6 @@ int main(int argc, char *argv[])
                         cfg.mode_ir    = mode_ir;
                         cfg.mode_tdf   = mode_tdf;
                         cfg.mode_tdf_fission = mode_tdf_fission;
-                        cfg.mode_rv_elf      = mode_rv_elf; cfg.mode_cpu = mode_cpu; cfg.mode_rv64 = mode_rv64;
-                        cfg.mode_amdgpu     = mode_amdgpu;
-                        cfg.mode_amdgpu_bin = mode_amdgpu_bin;
-                        cfg.mode_tensix     = mode_tensix;
-                        cfg.mode_nvidia     = mode_nvidia;
-                        cfg.nv_bkhit        = nv_bkhit;
-                        cfg.mode_metal      = mode_metal;
-                        cfg.mode_intel      = mode_intel;
-                        cfg.amd_target      = amd_target;
-                        cfg.amd_elfm        = amd_elfm;
-                        cfg.amd_chip        = amd_chip;
-                        cfg.snap_mode       = snap_mode;
-                        cfg.intel_target    = intel_target;
                         cfg.output_file     = output_file;
                         brc = run_bir_backends(bir_module, &cfg);
                     }
@@ -662,7 +578,11 @@ int main(int argc, char *argv[])
         if (mode_hip) {
             pp_define(pp, "__HIPCC__", "1");
             pp_define(pp, "__HIP_DEVICE_COMPILE__", "1");
-            if (mode_nvidia)
+            /* Which platform HIP thinks it is compiling for follows the
+             * selected target, so ask the registry rather than keep a
+             * copy of the mode flag here. */
+            const be_desc_t *hb = be_active();
+            if (hb != NULL && strcmp(hb->name, "nvptx") == 0)
                 pp_define(pp, "__HIP_PLATFORM_NVIDIA__", "1");
             else
                 pp_define(pp, "__HIP_PLATFORM_AMD__", "1");
@@ -733,7 +653,7 @@ int main(int argc, char *argv[])
                 fprintf(stderr, "error: failed to allocate sema context\n");
                 return 1;
             }
-            sema_init(sema_ctx, &P, root, (int)amd_target);
+            sema_init(sema_ctx, &P, root, (int)be_warp_size());
             sema_check(sema_ctx, root);
 
             bc_diag(file, lex_src, sema_ctx->errors, sema_ctx->num_errors);
@@ -774,19 +694,6 @@ int main(int argc, char *argv[])
                 cfg.mode_ir    = mode_ir;
                 cfg.mode_tdf   = mode_tdf;
                 cfg.mode_tdf_fission = mode_tdf_fission;
-                cfg.mode_rv_elf = mode_rv_elf; cfg.mode_cpu = mode_cpu; cfg.mode_rv64 = mode_rv64;
-                cfg.mode_amdgpu     = mode_amdgpu;
-                cfg.mode_amdgpu_bin = mode_amdgpu_bin;
-                cfg.mode_tensix     = mode_tensix;
-                cfg.mode_nvidia     = mode_nvidia;
-                cfg.nv_bkhit        = nv_bkhit;
-                cfg.mode_metal      = mode_metal;
-                cfg.mode_intel      = mode_intel;
-                cfg.amd_target      = amd_target;
-                cfg.amd_elfm        = amd_elfm;
-                cfg.amd_chip        = amd_chip;
-                cfg.snap_mode       = snap_mode;
-                cfg.intel_target    = intel_target;
                 cfg.output_file     = output_file;
                 int brc = run_bir_backends(bir_module, &cfg);
                 if (brc != BC_OK) rc = brc;

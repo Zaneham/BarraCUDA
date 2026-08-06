@@ -8,15 +8,27 @@
 #include "barracuda.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* ---- x86-64 ---- */
 
-static int x86_on(const be_cfg_t *cfg) { return cfg->mode_cpu; }
+typedef struct { int on; } cpu_opts_t;
+
+static const char *const x86_flags[] = { "--cpu", NULL };
+
+static int x86_parse(const char *arg, const char *next, void *o)
+{
+    (void)next;
+    if (strcmp(arg, "--cpu") == 0) { ((cpu_opts_t *)o)->on = 1; }
+    return 0;
+}
+
+static int x86_on(const void *o) { return ((const cpu_opts_t *)o)->on; }
 
 static int x86_isel(const struct bir_module *M, const be_cfg_t *cfg,
-                    void **out_mmod)
+                    const void *o, void **out_mmod)
 {
-    (void)cfg;
+    (void)cfg; (void)o;
     const bir_module_t *bir = (const bir_module_t *)M;
     if (bir->num_funcs == 0u) {
         fprintf(stderr, "error: no functions\n");
@@ -30,9 +42,10 @@ static int x86_isel(const struct bir_module *M, const be_cfg_t *cfg,
     return BE_OK;
 }
 
-static int x86_emit(const void *mmod, const be_cfg_t *cfg, const char *out)
+static int x86_emit(const void *mmod, const be_cfg_t *cfg, const void *o,
+                   const char *out)
 {
-    (void)cfg;
+    (void)cfg; (void)o;
     const cpu_mod_t *cm = mmod;
     const char *p = out ? out : "a.o";
     if (cpu_elf(cm, p) != 0) {
@@ -47,6 +60,9 @@ const be_desc_t be_x86 = {
     .name    = "cpu-x86-64",
     .triple  = "x86_64-unknown-none",
     .feats   = BE_F_SCALAR | BE_F_TRANSC | BE_F_F64,
+    .opts_size = sizeof(cpu_opts_t),
+    .flags   = x86_flags,
+    .parse   = x86_parse,
     .is_on   = x86_on,
     .isel    = x86_isel,
     .emit    = x86_emit,
@@ -55,12 +71,21 @@ const be_desc_t be_x86 = {
 
 /* ---- RV64 ---- */
 
-static int rv_on(const be_cfg_t *cfg) { return cfg->mode_rv64; }
+static const char *const rv_flags[] = { "--rv64", NULL };
+
+static int rv_parse(const char *arg, const char *next, void *o)
+{
+    (void)next;
+    if (strcmp(arg, "--rv64") == 0) { ((cpu_opts_t *)o)->on = 1; }
+    return 0;
+}
+
+static int rv_on(const void *o) { return ((const cpu_opts_t *)o)->on; }
 
 static int rv_isel(const struct bir_module *M, const be_cfg_t *cfg,
-                   void **out_mmod)
+                   const void *o, void **out_mmod)
 {
-    (void)cfg;
+    (void)cfg; (void)o;
     const bir_module_t *bir = (const bir_module_t *)M;
     if (bir->num_funcs == 0u) {
         fprintf(stderr, "error: no functions\n");
@@ -74,9 +99,10 @@ static int rv_isel(const struct bir_module *M, const be_cfg_t *cfg,
     return BE_OK;
 }
 
-static int rv_emit(const void *mmod, const be_cfg_t *cfg, const char *out)
+static int rv_emit(const void *mmod, const be_cfg_t *cfg, const void *o,
+                   const char *out)
 {
-    (void)cfg;
+    (void)cfg; (void)o;
     const rv64_mod_t *vm = mmod;
     const char *p = out ? out : "a.o";
     if (rv64_elf(vm, p) != 0) {
@@ -91,6 +117,9 @@ const be_desc_t be_rv64 = {
     .name    = "cpu-rv64",
     .triple  = "riscv64-unknown-none",
     .feats   = BE_F_SCALAR | BE_F_TRANSC | BE_F_F64,
+    .opts_size = sizeof(cpu_opts_t),
+    .flags   = rv_flags,
+    .parse   = rv_parse,
     .is_on   = rv_on,
     .isel    = rv_isel,
     .emit    = rv_emit,

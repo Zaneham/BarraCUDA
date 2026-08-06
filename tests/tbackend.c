@@ -51,7 +51,7 @@ static void be_feats_sane(void)
         BE_F_SIMT | BE_F_SCALAR | BE_F_ATOMIC | BE_F_SHARED |
         BE_F_WARP | BE_F_MFMA | BE_F_BARRIER | BE_F_DIV |
         BE_F_SCRATCH | BE_F_TRANSC | BE_F_F16 | BE_F_F64 |
-        BE_F_BF16 | BE_F_MULTIOUT;
+        BE_F_BF16 | BE_F_MULTIOUT | BE_F_NOCALL;
     for (uint32_t i = 0; be_list[i] != NULL && i < 64; i++) {
         CHEQ(be_list[i]->feats & ~all, 0u);
     }
@@ -90,3 +90,69 @@ static void be_one_target_ok(void)
     PASS();
 }
 TH_REG("backend", be_one_target_ok)
+
+/* ---- no two backends claim the same flag ----
+ * Flags are declared in the descriptor rather than discovered, so a
+ * collision is a static error we can catch here instead of a
+ * first-past-the-post race decided by be_list order. */
+
+static void be_flags_unique(void)
+{
+    for (uint32_t i = 0; be_list[i] != NULL && i < 64; i++) {
+        if (be_list[i]->flags == NULL) continue;
+        for (uint32_t a = 0; be_list[i]->flags[a] != NULL; a++) {
+            for (uint32_t j = i + 1; be_list[j] != NULL && j < 64; j++) {
+                if (be_list[j]->flags == NULL) continue;
+                for (uint32_t b = 0; be_list[j]->flags[b] != NULL; b++) {
+                    CHECK(strcmp(be_list[i]->flags[a],
+                                 be_list[j]->flags[b]) != 0);
+                }
+            }
+        }
+    }
+    PASS();
+}
+TH_REG("backend", be_flags_unique)
+
+/* ---- a declared flag is a parsed flag ----
+ * The list and parse() could drift apart, which would leave a flag
+ * routed to a backend that then ignores it. Offering each one back
+ * through the registry proves the pairing still holds. */
+
+static void be_flags_parse(void)
+{
+    for (uint32_t i = 0; be_list[i] != NULL && i < 64; i++) {
+        if (be_list[i]->flags == NULL) continue;
+        CHECK(be_list[i]->parse != NULL);
+        CHECK(be_list[i]->opts_size <= BE_OPTS_MAX);
+        for (uint32_t a = 0; be_list[i]->flags[a] != NULL; a++) {
+            int used = 0;
+            /* "1" as the value so a flag wanting one is satisfied */
+            CHEQ(be_parse_flag(be_list[i]->flags[a], "1", &used), 1);
+        }
+    }
+    PASS();
+}
+TH_REG("backend", be_flags_parse)
+
+/* ---- every backend flag is documented ----
+ * Backends own their flags now, so --help can fall behind without
+ * anything in the driver noticing. */
+
+static char be_hbuf[TH_BUFSZ];
+
+static void be_flags_documented(void)
+{
+    th_run(BC_BIN " --help", be_hbuf, TH_BUFSZ);
+    for (uint32_t i = 0; be_list[i] != NULL && i < 64; i++) {
+        if (be_list[i]->flags == NULL) continue;
+        for (uint32_t a = 0; be_list[i]->flags[a] != NULL; a++) {
+            if (strstr(be_hbuf, be_list[i]->flags[a]) == NULL) {
+                printf("\n    undocumented: %s\n", be_list[i]->flags[a]);
+                CHECK(0);
+            }
+        }
+    }
+    PASS();
+}
+TH_REG("backend", be_flags_documented)

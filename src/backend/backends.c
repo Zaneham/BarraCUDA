@@ -38,6 +38,68 @@ const be_desc_t * const be_list[] = {
     NULL
 };
 
+/* One slot per registered backend, indexed the same as be_list. Static
+ * because a compiler run has exactly one of each and JPL style keeps
+ * malloc out of the driver. */
+static be_opts_t be_opts_store[BE_MAX];
+
+int be_parse_flag(const char *arg, const char *next, int *used_next)
+{
+    if (arg == NULL || used_next == NULL) return 0;
+    *used_next = 0;
+
+    for (uint32_t i = 0; i < BE_MAX && be_list[i] != NULL; i++) {
+        const be_desc_t *b = be_list[i];
+        if (b->flags == NULL || b->parse == NULL) continue;
+
+        for (uint32_t f = 0; b->flags[f] != NULL; f++) {
+            if (strcmp(arg, b->flags[f]) != 0) continue;
+
+            /* A descriptor wanting more room than the slot holds would
+             * scribble over its neighbour, so refuse rather than trust it. */
+            if (b->opts_size > BE_OPTS_MAX) {
+                fprintf(stderr, "backend %s: opts_size %u exceeds %u\n",
+                        b->name, b->opts_size, (uint32_t)BE_OPTS_MAX);
+                return -1;
+            }
+
+            int n = b->parse(arg, next, be_opts_store[i].raw);
+            if (n < 0) return -1;
+            *used_next = n;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+uint32_t be_num_on(void)
+{
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < BE_MAX && be_list[i] != NULL; i++)
+        if (be_list[i]->is_on != NULL && be_list[i]->is_on(be_opts_store[i].raw))
+            n++;
+    return n;
+}
+
+const be_desc_t *be_active(void)
+{
+    for (uint32_t i = 0; i < BE_MAX && be_list[i] != NULL; i++)
+        if (be_list[i]->is_on != NULL && be_list[i]->is_on(be_opts_store[i].raw))
+            return be_list[i];
+    return NULL;
+}
+
+uint32_t be_warp_size(void)
+{
+    for (uint32_t i = 0; i < BE_MAX && be_list[i] != NULL; i++) {
+        const be_desc_t *b = be_list[i];
+        if (b->is_on == NULL || !b->is_on(be_opts_store[i].raw)) continue;
+        if (b->warp_size == NULL) break;
+        return b->warp_size(be_opts_store[i].raw);
+    }
+    return 32u;
+}
+
 const be_desc_t *be_find(const char *name)
 {
     if (name == NULL) return NULL;
@@ -58,14 +120,13 @@ int be_run(const struct bir_module *M, const be_cfg_t *cfg)
      * several used to write each over the last and leave whichever sorted
      * last in be_list, under the name you picked, with a zero exit. Run
      * kath once per target instead. */
-    uint32_t on = 0;
-    for (uint32_t i = 0; i < BE_MAX && be_list[i] != NULL; i++)
-        if (be_list[i]->is_on != NULL && be_list[i]->is_on(cfg)) on++;
+    uint32_t on = be_num_on();
 
     if (on > 1) {
         fprintf(stderr, "error: %u backends selected, pick one:", on);
         for (uint32_t i = 0; i < BE_MAX && be_list[i] != NULL; i++)
-            if (be_list[i]->is_on != NULL && be_list[i]->is_on(cfg))
+            if (be_list[i]->is_on != NULL &&
+                be_list[i]->is_on(be_opts_store[i].raw))
                 fprintf(stderr, " %s", be_list[i]->name);
         fprintf(stderr, "\n");
         return BE_EINPUT;
@@ -75,8 +136,9 @@ int be_run(const struct bir_module *M, const be_cfg_t *cfg)
 
     for (uint32_t i = 0; i < BE_MAX && be_list[i] != NULL; i++) {
         const be_desc_t *b = be_list[i];
+        const void *opts = be_opts_store[i].raw;
 
-        if (b->is_on == NULL || !b->is_on(cfg)) continue;
+        if (b->is_on == NULL || !b->is_on(opts)) continue;
 
         /* A registered backend without isel or emit is a descriptor
          * bug, not a runtime condition; complain and skip. */
@@ -87,7 +149,7 @@ int be_run(const struct bir_module *M, const be_cfg_t *cfg)
         }
 
         void *mmod = NULL;
-        int rc = b->isel(M, cfg, &mmod);
+        int rc = b->isel(M, cfg, opts, &mmod);
         if (rc != BE_OK) {
             if (first == BE_OK) first = rc;
             if (mmod != NULL && b->mfree != NULL) b->mfree(mmod);
@@ -114,7 +176,7 @@ int be_run(const struct bir_module *M, const be_cfg_t *cfg)
             if (rc != BE_OK) goto fail;
         }
 
-        rc = b->emit(mmod, cfg, cfg->output_file);
+        rc = b->emit(mmod, cfg, opts, cfg->output_file);
         if (rc != BE_OK && first == BE_OK) first = rc;
 
         if (b->mfree != NULL) b->mfree(mmod);

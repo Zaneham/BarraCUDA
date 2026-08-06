@@ -26,12 +26,23 @@ typedef struct {
     const bir_module_t   *bir;
 } tt_wrap_t;
 
-static int tt_on(const be_cfg_t *cfg) { return cfg->mode_tensix; }
+typedef struct { int on; } tt_opts_t;
+
+static const char *const tt_flags[] = { "--tensix", NULL };
+
+static int tt_parse(const char *arg, const char *next, void *o)
+{
+    (void)next;
+    if (strcmp(arg, "--tensix") == 0) { ((tt_opts_t *)o)->on = 1; }
+    return 0;
+}
+
+static int tt_on(const void *o) { return ((const tt_opts_t *)o)->on; }
 
 static int tt_isel(const struct bir_module *M, const be_cfg_t *cfg,
-                   void **out_mmod)
+                   const void *o, void **out_mmod)
 {
-    (void)cfg;
+    (void)cfg; (void)o;
     tt_wrap_t *w = calloc(1, sizeof(*w));
     if (w == NULL) return BE_ENOMEM;
     w->tt = calloc(1, sizeof(*w->tt));
@@ -52,9 +63,10 @@ static int tt_isel(const struct bir_module *M, const be_cfg_t *cfg,
 
 /* Metalium emits five siblings off a compute-path stem; the file
  * juggling isn't obvious but matches what main.c did before. */
-static int tt_emit(const void *mmod, const be_cfg_t *cfg, const char *out)
+static int tt_emit(const void *mmod, const be_cfg_t *cfg, const void *o,
+                   const char *out)
 {
-    (void)cfg;
+    (void)cfg; (void)o;
     const tt_wrap_t *w = mmod;
     tt_module_t *ttm = w->tt;
     const char *compute = out ? out : "a_compute.cpp";
@@ -100,8 +112,11 @@ static void tt_free(void *mmod)
 const be_desc_t be_tsx = {
     .name    = "tensix",
     .triple  = NULL,
-    .feats   = BE_F_SIMT | BE_F_SHARED | BE_F_BARRIER | BE_F_MFMA
+    .feats   = BE_F_SIMT | BE_F_SHARED | BE_F_BARRIER | BE_F_MFMA | BE_F_NOCALL
              | BE_F_MULTIOUT | BE_F_F16 | BE_F_BF16,
+    .opts_size = sizeof(tt_opts_t),
+    .flags   = tt_flags,
+    .parse   = tt_parse,
     .is_on   = tt_on,
     .isel    = tt_isel,
     .emit    = tt_emit,
@@ -110,12 +125,21 @@ const be_desc_t be_tsx = {
 
 /* ---- Baby-core RV32IM ---- */
 
-static int rvc_on(const be_cfg_t *cfg) { return cfg->mode_rv_elf; }
+static const char *const rvc_flags[] = { "--rv-elf", NULL };
+
+static int rvc_parse(const char *arg, const char *next, void *o)
+{
+    (void)next;
+    if (strcmp(arg, "--rv-elf") == 0) { ((tt_opts_t *)o)->on = 1; }
+    return 0;
+}
+
+static int rvc_on(const void *o) { return ((const tt_opts_t *)o)->on; }
 
 static int rvc_isel(const struct bir_module *M, const be_cfg_t *cfg,
-                    void **out_mmod)
+                    const void *o, void **out_mmod)
 {
-    (void)cfg;
+    (void)cfg; (void)o; (void)o;
     const bir_module_t *bir = (const bir_module_t *)M;
     if (bir->num_funcs == 0u) {
         fprintf(stderr, "error: BIR module has no functions\n");
@@ -129,9 +153,10 @@ static int rvc_isel(const struct bir_module *M, const be_cfg_t *cfg,
     return BE_OK;
 }
 
-static int rvc_emit(const void *mmod, const be_cfg_t *cfg, const char *out)
+static int rvc_emit(const void *mmod, const be_cfg_t *cfg, const void *o,
+                   const char *out)
 {
-    (void)cfg;
+    (void)cfg; (void)o;
     const rv_buf_t *code = mmod;
     const char *p = out ? out : "a.elf";
     if (rv_elf_write(code, p) != BC_OK) return BE_EIO;
@@ -144,6 +169,9 @@ const be_desc_t be_rvcore = {
     .name    = "tensix-rv32",
     .triple  = "riscv32-unknown-none",
     .feats   = BE_F_SCALAR,
+    .opts_size = sizeof(tt_opts_t),
+    .flags   = rvc_flags,
+    .parse   = rvc_parse,
     .is_on   = rvc_on,
     .isel    = rvc_isel,
     .emit    = rvc_emit,
