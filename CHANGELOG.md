@@ -39,6 +39,11 @@ Booth — Changelog
   no longer lose the lanes that did not take the branch
   (Zane Hambly, 2026-07-25)
 
+- `--amdgpu` honours `-o`, and the register-plan line goes to stderr rather
+  than into the middle of the assembly on stdout, where it stopped the result
+  assembling
+  (Zane Hambly, 2026-08-06)
+
 ### Tensix
 
 - `--tt-chip` selects wormhole or blackhole, so L1 and text limits follow the
@@ -82,6 +87,11 @@ Booth — Changelog
   the linker a mix of COFF and ELF
   (Zane Hambly, 2026-07-28)
 
+- `make install`, honouring `PREFIX` and `DESTDIR`, and a CMake package config
+  alongside it, so a downstream project can `find_package(Booth)` and build
+  kernels with `booth_add_kernel()`
+  (Zane Hambly, 2026-08-06)
+
 ### CI and tests
 
 - #140: numeric regression against SLATEC known-good values, across cpu,
@@ -99,6 +109,10 @@ Booth — Changelog
   (Zane Hambly, 2026-07-26)
 
 ### Documentation
+
+- document consuming Booth from CMake in `docs/cmake.md`, and link it from the
+  README
+  (Zane Hambly, 2026-08-06)
 
 - drop the LLVM requirement from the usage documentation
   (Zane Hambly, 2026-07-27)
