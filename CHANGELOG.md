@@ -16,10 +16,6 @@ Booth — Changelog
   same ocean benchmarks was rejected and told the wrong number
   (Zane Hambly, 2026-08-06)
 
-- size the builtin tables from the tables themselves rather than a
-  hand-counted length that had to be edited in step
-  (Zane Hambly, 2026-08-06)
-
 - #142: parse function pointer declarators, and constructors and destructors
   (Zane Hambly, 2026-07-27)
 
@@ -144,15 +140,6 @@ Booth — Changelog
   block from the kernel rather than a fixed 64 bytes
   (Zane Hambly, 2026-07-27)
 
-- cover the 23-argument call, the argument cap, and semantic errors being
-  fatal
-  (Zane Hambly, 2026-08-06)
-
-- build an example CMake consumer against a staged install, and check the
-  target list in the package config has not drifted from the flags the
-  compiler accepts
-  (Zane Hambly, 2026-08-06)
-
 - validate Tensix ELFs against tt-metal's loader and run RV64 under QEMU
   (Zane Hambly, 2026-07-23)
 
@@ -160,10 +147,6 @@ Booth — Changelog
   (Zane Hambly, 2026-07-26)
 
 ### Documentation
-
-- document consuming Booth from CMake in `docs/cmake.md`, and link it from the
-  README
-  (Zane Hambly, 2026-08-06)
 
 - drop the LLVM requirement from the usage documentation
   (Zane Hambly, 2026-07-27)
