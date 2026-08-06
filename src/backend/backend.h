@@ -25,13 +25,17 @@ typedef enum {
     BE_ENOMEM  = -9
 } be_ret_t;
 
-/* ---- Verify phase ---- */
+/* ---- Verify phase ----
+ * Only the two the driver actually calls. Phases for post-sched and
+ * post-emit were declared here first, but nothing invoked them and the
+ * AMD adapter folds every non-ISEL phase onto its post-regalloc check,
+ * so a backend implementing them would have been checking physical
+ * registers on a module that still had virtual ones. Add them back with
+ * the call sites, not before. */
 
 typedef enum {
     BE_VFY_ISEL,
-    BE_VFY_SCHED,
-    BE_VFY_RA,
-    BE_VFY_EMIT
+    BE_VFY_RA
 } be_vfy_t;
 
 /* ---- Feature flags ----

@@ -41,7 +41,7 @@ const be_desc_t * const be_list[] = {
 const be_desc_t *be_find(const char *name)
 {
     if (name == NULL) return NULL;
-    for (uint32_t i = 0; be_list[i] != NULL && i < BE_MAX; i++) {
+    for (uint32_t i = 0; i < BE_MAX && be_list[i] != NULL; i++) {
         if (be_list[i]->name != NULL &&
             strcmp(be_list[i]->name, name) == 0) {
             return be_list[i];
@@ -56,7 +56,7 @@ int be_run(const struct bir_module *M, const be_cfg_t *cfg)
 
     int first = BE_OK;
 
-    for (uint32_t i = 0; be_list[i] != NULL && i < BE_MAX; i++) {
+    for (uint32_t i = 0; i < BE_MAX && be_list[i] != NULL; i++) {
         const be_desc_t *b = be_list[i];
 
         if (b->is_on == NULL || !b->is_on(cfg)) continue;
