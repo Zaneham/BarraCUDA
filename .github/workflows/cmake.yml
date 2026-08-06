@@ -63,11 +63,12 @@ jobs:
       - uses: actions/checkout@v4
 
       # The package config carries its own copy of the target list so it can
-      # reject a typo at configure time. That copy has to keep up with main.c,
-      # and nothing else would notice if it did not.
+      # reject a typo at configure time. That copy has to keep up with the
+      # backends, which is where target flags are declared now, and nothing
+      # else would notice if it did not.
       - name: Compare target lists
         run: |
-          grep -oE '"--(gfx[0-9]+[a-z]?|xe[0-9a-z-]*)"' src/main.c \
+          grep -ohE '"--(gfx[0-9]+[a-z]?|xe[0-9a-z-]*)"' src/*/*_be.c \
             | tr -d '"' | sed 's/^--//' | sort -u > /tmp/kath_arches
           sed -n '/set(_arches/,/)/p' cmake/BoothConfig.cmake.in \
             | sed -e 's/set(_arches//' -e 's/)//' | tr -s ' \t' '\n' \
@@ -75,7 +76,7 @@ jobs:
           if ! diff -u /tmp/kath_arches /tmp/cmake_arches; then
             echo
             echo "The target list in cmake/BoothConfig.cmake.in has drifted from"
-            echo "the flags main.c accepts. Lines marked - are in the compiler but"
+            echo "the flags the backends declare. Lines marked - are in the compiler but"
             echo "not the package config; + is the other way round."
             exit 1
           fi
