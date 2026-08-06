@@ -195,7 +195,21 @@ static int run_bir_backends(bir_module_t *bir, const backend_cfg_t *cfg)
             if (cfg->mode_amdgpu_bin)
                 amdgpu_emit_elf(amd,
                     cfg->output_file ? cfg->output_file : "a.hsaco");
-            else
+            else if (cfg->output_file) {
+                /* -o used to be silently ignored here, so a build system had
+                 * no way to ask for the assembly other than capturing stdout.
+                 * No -o still means stdout, which is what anyone piping it
+                 * today already relies on. */
+                FILE *af = fopen(cfg->output_file, "w");
+                if (!af) {
+                    fprintf(stderr, "error: cannot open %s for writing\n",
+                            cfg->output_file);
+                    rc = BC_ERR_IO;
+                } else {
+                    amdgpu_emit_asm(amd, af);
+                    fclose(af);
+                }
+            } else
                 amdgpu_emit_asm(amd, stdout);
         } else {
             if (arc != BC_ERR_VERIFY)
@@ -459,7 +473,8 @@ static void usage(const char *prog)
         "  --xe-hpg      Target Xe-HPG (Alchemist, Battlemage) [default]\n"
         "  --xe-hpc      Target Xe-HPC (Ponte Vecchio)\n"
         "  --xe2         Target Xe2 (Lunar Lake, next-gen Arc)\n"
-        "  -o <file>     Output file (for --amdgpu-bin, --tensix, --nvidia-ptx, --metal, --intel-spirv)\n"
+        "  -o <file>     Output file (for --amdgpu, --amdgpu-bin, --tensix, --nvidia-ptx,\n"
+        "                --metal, --intel-spirv). --amdgpu writes to stdout without it.\n"
         "  --lang <file> Load translated error messages\n"
         "  --version     Print version and exit\n"
         "  --help        Show this message\n"
@@ -950,6 +965,15 @@ int main(int argc, char *argv[])
                 int sema_rc = sema_ctx->num_errors > 0 ? 1 : 0;
                 free(sema_ctx);
                 return sema_rc;
+            }
+
+            /* Only --sema used to act on these. Every other mode printed the
+             * errors, carried on into codegen, wrote an output file and exited
+             * zero, so a build system saw a clean compile and a kernel that
+             * had been lowered from source we had already rejected. */
+            if (sema_ctx->num_errors > 0) {
+                free(sema_ctx);
+                return 1;
             }
         }
 

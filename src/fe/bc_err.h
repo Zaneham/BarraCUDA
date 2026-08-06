@@ -68,6 +68,7 @@ typedef enum {
     BC_E079 = 79,  /* do-while condition must be scalar type */
     BC_E080 = 80,  /* switch expression must be integer type */
     BC_E081 = 81,  /* __global__ function must return void */
+    BC_E082 = 82,  /* '%s' passes more than %d arguments */
 
     /* ---- Lowering (E100-E129) ---- */
     BC_E100 = 100, /* too many labels (max 256) */

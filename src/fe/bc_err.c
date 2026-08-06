@@ -63,7 +63,8 @@ static const char *bc_dflt[BC_EID_MAX] = {
     /* E079 */ "do-while condition must be scalar type",
     /* E080 */ "switch expression must be integer type",
     /* E081 */ "__global__ function must return void",
-    /* E082-E099 */ NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+    /* E082 */ "'%s' passes more than %d arguments",
+    /* E083-E099 */ NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
 
     /* ---- Lowering ---- */
     /* E100 */ "too many labels (max 256)",

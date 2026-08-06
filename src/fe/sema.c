@@ -623,7 +623,8 @@ static const cuda_builtin_t cuda_builtins[] = {
     {"__cosf",1,0,0},{"tanf",1,0,0},{"fabsf",1,0,0},{"fabs",1,0,0},
     {"floorf",1,0,0},{"ceilf",1,0,0},{"truncf",1,0,0},{"roundf",1,0,0},
     {"rintf",1,0,0},{"tanhf",1,0,0},{"copysignf",2,0,0},
-    {"fmaxf",2,0,0},{"fminf",2,0,0},{"fmodf",2,0,0},{"powf",2,0,0},{"__powf",2,0,0},
+    {"fmaxf",2,0,0},{"fminf",2,0,0},{"fmax",2,0,0},{"fmin",2,0,0},
+    {"fmodf",2,0,0},{"powf",2,0,0},{"__powf",2,0,0},
     {NULL, 0, 0, 0}
 };
 
@@ -966,12 +967,19 @@ static uint32_t check_expr(sema_ctx_t *S, uint32_t node)
         char cname[128];
         get_text(S, callee_n, cname, sizeof(cname));
 
-        uint32_t arg_types[16];
+        uint32_t arg_types[BC_MAX_ARGS];
         int nargs = 0;
         uint32_t arg = ND(S, callee_n)->next_sibling;
-        while (arg && nargs < 16) {
+        while (arg && nargs < BC_MAX_ARGS) {
             arg_types[nargs++] = check_expr(S, arg);
             arg = ND(S, arg)->next_sibling;
+        }
+        /* Running past the cap used to leave nargs sitting at it, so the arity
+         * checks below reported a count we had invented rather than the one
+         * the call actually has. Say what happened instead of guessing. */
+        if (arg) {
+            sema_error(S, node, BC_E082, cname, BC_MAX_ARGS);
+            return annotate(S, node, st_int(S));
         }
 
         /* ---- Cooperative groups: namespace::func() and handle.method() ---- */

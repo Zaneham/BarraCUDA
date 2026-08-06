@@ -36,6 +36,7 @@ The binary is `kath` (after Kathleen but if she picked Australia or New Zealand 
 ## Documentation
 
 - **[Usage](docs/usage.md)** — every backend, every flag, and the runtime launcher
+- **[CMake](docs/cmake.md)** — installing Booth and compiling kernels from a CMake project
 - **[Feature status](docs/features.md)** — what compiles today, and what doesn't yet
 - **[Mainframe curios](docs/mainframe.md)** — ABEND dumps, SNAP, SYSPRINT, TDF
 - **[Validated hardware](docs/hardware.md)** — the silicon it's been tested on, and the test suite
@@ -65,6 +66,7 @@ Based in New Zealand, where it's already tomorrow and the GPUs are just as confu
 ## Acknowledgements
 
 - **Fernando Magno Quintão Pereira** and the **Compilers Lab at UFMG** (Universidade Federal de Minas Gerais). Fernando reached out after seeing the project, pointed me to the divergence analysis papers, and offered guidance. The SSA register allocator exists because of that conversation.
+- **[Jorge Galvez](https://github.com/JorgeG94)** for sending me his `do concurrent` Fortran benchmarks and letting me run tests on them. Three real frontend bugs turned up in an afternoon, which is exactly what you want somebody else's code to do.
 - **The academic community**: Cooper, Harvey & Kennedy for dominators; Braun & Hack for SSA spilling; Sampaio, Souza, Collange & Pereira for divergence analysis. I'm just a hobbyist who reads papers and writes C. The actual hard work was done by the researchers.
 - **Steven Muchnick** for *Advanced Compiler Design and Implementation*. If this compiler does anything right, that book is why.
 - **Low Level** for the Zero to Hero C course and the YouTube channel. That's where I learnt C.

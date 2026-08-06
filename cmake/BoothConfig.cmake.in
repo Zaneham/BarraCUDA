@@ -1,0 +1,181 @@
+# Booth package config, for find_package(Booth CONFIG).
+#
+# Booth is a compiler, not a library, so there is nothing here to link
+# against. What you get is the kath binary as an imported target and a
+# booth_add_kernel() rule that runs it over a source file at build time.
+
+set(Booth_VERSION "@BOOTH_VERSION@")
+
+# This file installs to <prefix>/lib/cmake/Booth, so the prefix is three
+# levels up. Deriving it rather than baking it in keeps a relocated or
+# staged install working.
+get_filename_component(_booth_prefix "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+
+find_program(Booth_EXECUTABLE
+    NAMES kath
+    HINTS "${_booth_prefix}/bin")
+
+if(NOT Booth_EXECUTABLE)
+    set(Booth_FOUND FALSE)
+    set(Booth_NOT_FOUND_MESSAGE
+        "Booth config was found but the kath binary was not; expected it in ${_booth_prefix}/bin")
+    return()
+endif()
+
+if(NOT TARGET Booth::kath)
+    add_executable(Booth::kath IMPORTED)
+    set_target_properties(Booth::kath PROPERTIES IMPORTED_LOCATION "${Booth_EXECUTABLE}")
+endif()
+
+# Message catalogues for --lang. Absent on a binary-only install, so callers
+# should treat this as a hint rather than a guarantee.
+set(Booth_LANG_DIR "${_booth_prefix}/share/booth/lang")
+
+# booth_add_kernel(<name>
+#     SOURCE <file>
+#     BACKEND amdgpu|amdgpu-bin|nvidia-ptx|tensix|rv-elf|cpu|rv64|metal|intel-spirv
+#     [LANGUAGE CUDA|HIP|TRITON]
+#     [ARCH <gfx…|xe…>]
+#     [TT_CHIP blackhole|wormhole]
+#     [OUTPUT <file>]
+#     [EXCLUDE_FROM_ALL]
+#     [INCLUDE_DIRECTORIES <dir>…]
+#     [COMPILE_DEFINITIONS <name[=val]>…]
+#     [OPTIONS <flag>…]
+#     [DEPENDS <file>…])
+#
+# Adds a custom target <name> that compiles SOURCE with kath. The output path
+# lands in the BOOTH_KERNEL_OUTPUT property on that target, and in a
+# <name>_OUTPUT variable in the caller's scope.
+#
+# The tables below live inside the function on purpose: a package config is
+# included in whatever scope called find_package, so anything left at
+# directory scope would go missing when the function is called from a sibling
+# directory that never called it.
+function(booth_add_kernel name)
+    set(_backends amdgpu amdgpu-bin nvidia-ptx tensix rv-elf cpu rv64 metal intel-spirv)
+    # Default suffix per backend, index-matched to _backends. Text for the
+    # assembly and source-emitting backends, loadable images for the rest.
+    set(_exts     ".s"   ".hsaco"   ".ptx"      ".cpp" ".elf"  ".o" ".o"  ".metal" ".spv")
+    set(_arches
+        gfx90a gfx942
+        gfx1030 gfx1031 gfx1032 gfx1033 gfx1034 gfx1035 gfx1036
+        gfx1100 gfx1101 gfx1102 gfx1103
+        gfx1150 gfx1151 gfx1152 gfx1153
+        gfx1200 gfx1201
+        xe-lpg xe-hpg xe-hpc xe2)
+
+    cmake_parse_arguments(PARSE_ARGV 1 BK
+        "EXCLUDE_FROM_ALL"
+        "SOURCE;BACKEND;LANGUAGE;ARCH;TT_CHIP;OUTPUT;LANG"
+        "OPTIONS;INCLUDE_DIRECTORIES;COMPILE_DEFINITIONS;DEPENDS")
+
+    if(BK_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR "booth_add_kernel(${name}): unrecognised arguments: ${BK_UNPARSED_ARGUMENTS}")
+    endif()
+    if(NOT BK_SOURCE)
+        message(FATAL_ERROR "booth_add_kernel(${name}): SOURCE is required")
+    endif()
+    if(NOT BK_BACKEND)
+        message(FATAL_ERROR "booth_add_kernel(${name}): BACKEND is required, one of: ${_backends}")
+    endif()
+
+    # list(FIND) rather than IN_LIST, which would rely on the consumer's
+    # CMP0057 being NEW.
+    list(FIND _backends "${BK_BACKEND}" _bi)
+    if(_bi EQUAL -1)
+        message(FATAL_ERROR "booth_add_kernel(${name}): unknown BACKEND '${BK_BACKEND}', want one of: ${_backends}")
+    endif()
+
+    # kath takes one input file per invocation, so a kernel is one source.
+    get_filename_component(_src "${BK_SOURCE}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+
+    set(_args "--${BK_BACKEND}")
+
+    if(BK_LANGUAGE)
+        string(TOUPPER "${BK_LANGUAGE}" _lang)
+        if(_lang STREQUAL "HIP")
+            list(APPEND _args --hip)
+        elseif(_lang STREQUAL "TRITON")
+            list(APPEND _args --triton)
+        elseif(NOT _lang STREQUAL "CUDA")
+            message(FATAL_ERROR "booth_add_kernel(${name}): LANGUAGE must be CUDA, HIP or TRITON")
+        endif()
+    endif()
+
+    if(BK_ARCH)
+        list(FIND _arches "${BK_ARCH}" _ai)
+        if(_ai EQUAL -1)
+            message(FATAL_ERROR "booth_add_kernel(${name}): unknown ARCH '${BK_ARCH}', want one of: ${_arches}")
+        endif()
+        list(APPEND _args "--${BK_ARCH}")
+    endif()
+
+    if(BK_TT_CHIP)
+        if(NOT BK_TT_CHIP MATCHES "^(blackhole|wormhole)$")
+            message(FATAL_ERROR "booth_add_kernel(${name}): TT_CHIP must be blackhole or wormhole")
+        endif()
+        list(APPEND _args --tt-chip "${BK_TT_CHIP}")
+    endif()
+
+    foreach(_d IN LISTS BK_INCLUDE_DIRECTORIES)
+        list(APPEND _args -I "${_d}")
+    endforeach()
+    foreach(_d IN LISTS BK_COMPILE_DEFINITIONS)
+        list(APPEND _args -D "${_d}")
+    endforeach()
+    if(BK_LANG)
+        list(APPEND _args --lang "${BK_LANG}")
+    endif()
+    list(APPEND _args ${BK_OPTIONS})
+
+    if(BK_OUTPUT)
+        get_filename_component(_out "${BK_OUTPUT}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+    else()
+        list(GET _exts ${_bi} _ext)
+        set(_out "${CMAKE_CURRENT_BINARY_DIR}/${name}${_ext}")
+    endif()
+
+    get_filename_component(_outdir "${_out}" DIRECTORY)
+    file(MAKE_DIRECTORY "${_outdir}")
+
+    # --tensix emits a whole Metalium program, not one file: the compute kernel
+    # at OUTPUT plus reader/writer/host sources and their ELFs. Two naming rules
+    # are in play, one off the stem and one off the full OUTPUT name, so both
+    # are spelled out. Declaring them as byproducts is what lets `clean` reach
+    # them and stops Ninja treating them as unexplained.
+    set(_byproducts "")
+    if(BK_BACKEND STREQUAL "tensix")
+        get_filename_component(_outname "${_out}" NAME)
+        # Booth strips only the final extension, so a regex rather than NAME_WE
+        # (strips from the first dot) or NAME_WLE (needs CMake 3.14).
+        string(REGEX REPLACE "\\.[^./\\\\]*$" "" _stem "${_outname}")
+        foreach(_s _host.cpp _reader.cpp _writer.cpp _compute.elf _reader.elf _writer.elf)
+            list(APPEND _byproducts "${_outdir}/${_stem}${_s}")
+        endforeach()
+        foreach(_s _compute.bin _compute.ttinsn)
+            list(APPEND _byproducts "${_outdir}/${_outname}${_s}")
+        endforeach()
+    endif()
+
+    # Depending on the binary rebuilds kernels when the compiler itself
+    # changes. kath emits no depfile, so an edited header will not retrigger
+    # this on its own; list headers in DEPENDS if you need that.
+    add_custom_command(
+        OUTPUT "${_out}"
+        BYPRODUCTS ${_byproducts}
+        COMMAND "${Booth_EXECUTABLE}" ${_args} -o "${_out}" "${_src}"
+        DEPENDS "${_src}" "${Booth_EXECUTABLE}" ${BK_DEPENDS}
+        COMMENT "Booth ${BK_BACKEND}: ${name}"
+        VERBATIM)
+
+    if(BK_EXCLUDE_FROM_ALL)
+        add_custom_target(${name} DEPENDS "${_out}")
+    else()
+        add_custom_target(${name} ALL DEPENDS "${_out}")
+    endif()
+    set_target_properties(${name} PROPERTIES BOOTH_KERNEL_OUTPUT "${_out}")
+    set(${name}_OUTPUT "${_out}" PARENT_SCOPE)
+endfunction()
+
+set(Booth_FOUND TRUE)

@@ -5,6 +5,17 @@ Booth — Changelog
 
 ### Frontend
 
+- double-precision `fmax`, `fmin` and `fmod`. The ocean kernels in
+  [Jorge Galvez](https://github.com/JorgeG94)'s do-concurrent benchmarks call
+  them, and only the `f`-suffixed single-precision forms were recognised
+  (Zane Hambly, 2026-08-06)
+
+- raise the cap on arguments in one call to 64, and say so when a call goes
+  past it. Sema stopped counting at 16 and then reported an arity mismatch
+  against the count it had stopped at, so a correct 23-argument call in the
+  same ocean benchmarks was rejected and told the wrong number
+  (Zane Hambly, 2026-08-06)
+
 - #142: parse function pointer declarators, and constructors and destructors
   (Zane Hambly, 2026-07-27)
 
@@ -40,9 +51,19 @@ Booth — Changelog
   where it cannot be done
   (Zane Hambly, 2026-07-26)
 
+- metal: refuse a kernel that uses `double` rather than narrowing it to
+  `float`. Apple GPUs have no fp64, and quietly halving the precision the
+  source asked for is worse than saying so
+  (Zane Hambly, 2026-08-06)
+
 - a divergent return masks lanes instead of ending the wave, so AMD kernels
   no longer lose the lanes that did not take the branch
   (Zane Hambly, 2026-07-25)
+
+- `--amdgpu` honours `-o`, and the register-plan line goes to stderr rather
+  than into the middle of the assembly on stdout, where it stopped the result
+  assembling
+  (Zane Hambly, 2026-08-06)
 
 ### Tensix
 
@@ -79,6 +100,11 @@ Booth — Changelog
 
 ### Driver
 
+- semantic errors fail the compile. Every mode but `--sema` printed them and
+  then carried on into codegen, wrote an output file and exited zero, so a
+  build system saw a clean compile of source we had already rejected
+  (Zane Hambly, 2026-08-06)
+
 - collapse the C99 mode gates into one cascade
   (Zane Hambly, 2026-07-23)
 
@@ -98,6 +124,11 @@ Booth — Changelog
   build and a WSL build in one checkout stop overwriting each other and handing
   the linker a mix of COFF and ELF
   (Zane Hambly, 2026-07-28)
+
+- `make install`, honouring `PREFIX` and `DESTDIR`, and a CMake package config
+  alongside it, so a downstream project can `find_package(Booth)` and build
+  kernels with `booth_add_kernel()`
+  (Zane Hambly, 2026-08-06)
 
 ### CI and tests
 

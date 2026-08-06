@@ -146,37 +146,44 @@ $(OBJDIR)/runtime/%.o: runtime/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(TCFLAGS) -c $< -o $@
 
-# ---- Coverage ----
-# Instrumented objects live in their own tree. Sharing one with the normal build
-# means a later `make test` relinks against gcov objects and dies on missing
-# __gcov symbols, which reads like a broken toolchain rather than a stale tree.
-COVDIR  := build/cov-$(UNAME_S)
+# ---- Install ----
+# Booth is consumed as a compiler rather than a library, so an install is the
+# binary, the message catalogues --lang reads, and a CMake package config so
+# downstream CMake projects can find_package(Booth) and run kath as a build
+# step. Version comes out of the header so there is one place to bump it.
+PREFIX  ?= /usr/local
+BINDIR   = $(DESTDIR)$(PREFIX)/bin
+SHAREDIR = $(DESTDIR)$(PREFIX)/share/booth
+CMAKEDIR = $(DESTDIR)$(PREFIX)/lib/cmake/Booth
 
-# kath is instrumented too, not just trunner: trv_elf, ttdf and ttriton shell out
-# to ./kath, so a lot of the backend is only reached through the real binary.
-# -U_FORTIFY_SOURCE because glibc #warnings at -O0 when it's set, and -Werror
-# turns that into a build failure.
-# -w because -O0 drops the value-range info that lets -Wformat-truncation prove
-# its bounds at -O2, so the strict set fires on code that is fine. The normal
-# build is the warnings gate; this one only counts lines.
-COV_CF   = --coverage -O0 -U_FORTIFY_SOURCE -w
+# Matching on the macro name rather than the whole "#define" line: make 3.81,
+# which is what macOS ships, takes a # inside $(shell) as the start of a
+# comment and swallows the rest of the call. Quoting does not save it, and
+# neither does awk over sed, so the # simply has to go.
+VER_MAJOR := $(shell awk '$$2 == "BC_VERSION_MAJOR" {print $$3}' src/barracuda.h)
+VER_MINOR := $(shell awk '$$2 == "BC_VERSION_MINOR" {print $$3}' src/barracuda.h)
+VER_PATCH := $(shell awk '$$2 == "BC_VERSION_PATCH" {print $$3}' src/barracuda.h)
+VERSION   := $(VER_MAJOR).$(VER_MINOR).$(VER_PATCH)
 
-# Both binaries land in the repo root whichever tree built them, so clear them
-# first to force an instrumented link, and again at the end so the next plain
-# `make` doesn't quietly keep running the instrumented one.
-coverage:
-	rm -f $(TARGET) $(TARGET).exe trunner trunner.exe
-	find $(COVDIR) -name '*.gcda' -delete 2>/dev/null || true
-	$(MAKE) OBJDIR=$(COVDIR) COVFLAGS="$(COV_CF)" $(TARGET) trunner
-	-./trunner --all
-	@command -v gcovr >/dev/null 2>&1 || { echo "gcovr not found. pip install gcovr"; exit 1; }
-	@mkdir -p coverage-html
-	gcovr --root . --object-directory $(COVDIR) \
-	      --filter 'src/' --filter 'runtime/' \
-	      --exclude-unreachable-branches \
-	      --print-summary --txt coverage.txt --html-details coverage-html/index.html
-	rm -f $(TARGET) $(TARGET).exe trunner trunner.exe
-	@echo "report: coverage.txt and coverage-html/index.html"
+# MinGW gcc appends .exe when -o names no suffix, so the built file is not
+# always $(TARGET); clean has always known this, install needs to as well.
+EXE :=
+ifneq (,$(findstring MINGW,$(UNAME_S)))
+  EXE := .exe
+endif
+
+install: $(TARGET)
+	install -d $(BINDIR) $(SHAREDIR)/lang $(CMAKEDIR)
+	install -m 755 $(TARGET)$(EXE) $(BINDIR)/$(TARGET)$(EXE)
+	install -m 644 lang/en.txt lang/mi.txt $(SHAREDIR)/lang/
+	sed -e 's/@BOOTH_VERSION@/$(VERSION)/g' -e 's/@BOOTH_VERSION_MAJOR@/$(VER_MAJOR)/g' \
+	    cmake/BoothConfig.cmake.in > $(CMAKEDIR)/BoothConfig.cmake
+	sed -e 's/@BOOTH_VERSION@/$(VERSION)/g' -e 's/@BOOTH_VERSION_MAJOR@/$(VER_MAJOR)/g' \
+	    cmake/BoothConfigVersion.cmake.in > $(CMAKEDIR)/BoothConfigVersion.cmake
+
+uninstall:
+	rm -f $(BINDIR)/$(TARGET)$(EXE)
+	rm -rf $(SHAREDIR) $(CMAKEDIR)
 
 clean:
 	rm -rf $(OBJDIR) $(COVDIR)
@@ -187,4 +194,4 @@ clean:
 # linked in and the build silently disagrees with the source.
 -include $(OBJECTS:.o=.d) $(TOBJS:.o=.d) $(HOSTRT:.o=.d)
 
-.PHONY: all clean test coverage
+.PHONY: all clean test install uninstall
