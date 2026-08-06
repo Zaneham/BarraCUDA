@@ -5,6 +5,17 @@ Booth — Changelog
 
 ### Frontend
 
+- double-precision `fmax`, `fmin` and `fmod`. The ocean kernels in
+  [Jorge Galvez](https://github.com/JorgeG94)'s do-concurrent benchmarks call
+  them, and only the `f`-suffixed single-precision forms were recognised
+  (Zane Hambly, 2026-08-06)
+
+- raise the cap on arguments in one call to 64, and say so when a call goes
+  past it. Sema stopped counting at 16 and then reported an arity mismatch
+  against the count it had stopped at, so a correct 23-argument call in the
+  same ocean benchmarks was rejected and told the wrong number
+  (Zane Hambly, 2026-08-06)
+
 - #142: parse function pointer declarators, and constructors and destructors
   (Zane Hambly, 2026-07-27)
 
@@ -39,6 +50,11 @@ Booth — Changelog
 - #138: real high-half multiply on x86-64 and RV64, and an honest refusal
   where it cannot be done
   (Zane Hambly, 2026-07-26)
+
+- metal: refuse a kernel that uses `double` rather than narrowing it to
+  `float`. Apple GPUs have no fp64, and quietly halving the precision the
+  source asked for is worse than saying so
+  (Zane Hambly, 2026-08-06)
 
 - a divergent return masks lanes instead of ending the wave, so AMD kernels
   no longer lose the lanes that did not take the branch
@@ -84,6 +100,11 @@ Booth — Changelog
 
 ### Driver
 
+- semantic errors fail the compile. Every mode but `--sema` printed them and
+  then carried on into codegen, wrote an output file and exited zero, so a
+  build system saw a clean compile of source we had already rejected
+  (Zane Hambly, 2026-08-06)
+
 - collapse the C99 mode gates into one cascade
   (Zane Hambly, 2026-07-23)
 
@@ -119,11 +140,6 @@ Booth — Changelog
   block from the kernel rather than a fixed 64 bytes
   (Zane Hambly, 2026-07-27)
 
-- build an example CMake consumer against a staged install, and check the
-  target list in the package config has not drifted from the flags the
-  compiler accepts
-  (Zane Hambly, 2026-08-06)
-
 - validate Tensix ELFs against tt-metal's loader and run RV64 under QEMU
   (Zane Hambly, 2026-07-23)
 
@@ -131,10 +147,6 @@ Booth — Changelog
   (Zane Hambly, 2026-07-26)
 
 ### Documentation
-
-- document consuming Booth from CMake in `docs/cmake.md`, and link it from the
-  README
-  (Zane Hambly, 2026-08-06)
 
 - drop the LLVM requirement from the usage documentation
   (Zane Hambly, 2026-07-27)

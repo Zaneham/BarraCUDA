@@ -1410,7 +1410,7 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
                 {"atomicMax", BIR_ATOMIC_MAX}, {"atomicExch",BIR_ATOMIC_XCHG},
             };
             int matched = 0;
-            for (int bi = 0; bi < 8; bi++) {
+            for (int bi = 0; bi < (int)(sizeof atab / sizeof atab[0]); bi++) {
                 if (strcmp(cname, atab[bi].n) != 0) continue;
                 uint32_t an = ND(L, callee_n)->next_sibling;
                 uint32_t a0 = lower_expr(L, an);
@@ -1470,7 +1470,7 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
                 {"__shfl_down",      BIR_SHFL_DOWN,0},
                 {"__shfl_xor",       BIR_SHFL_XOR, 0},
             };
-            for (int bi = 0; bi < 8; bi++) {
+            for (int bi = 0; bi < (int)(sizeof stab / sizeof stab[0]); bi++) {
                 if (strcmp(cname, stab[bi].n) != 0) continue;
                 uint32_t sa[4];
                 int sn = 0;
@@ -1502,7 +1502,7 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
                 {"__any",         BIR_VOTE_ANY, 0},
                 {"__all",         BIR_VOTE_ALL, 0},
             };
-            for (int bi = 0; bi < 6; bi++) {
+            for (int bi = 0; bi < (int)(sizeof vtab / sizeof vtab[0]); bi++) {
                 if (strcmp(cname, vtab[bi].n) != 0) continue;
                 uint32_t an = ND(L, callee_n)->next_sibling;
                 uint32_t a0, a1;
@@ -1672,7 +1672,7 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
                 {"floorf",BIR_FLOOR},{"ceilf",BIR_CEIL},
                 {"truncf",BIR_FTRUNC},{"roundf",BIR_RNDNE},{"rintf",BIR_RNDNE},
             };
-            for (int mi = 0; mi < 16; mi++) {
+            for (int mi = 0; mi < (int)(sizeof mt1 / sizeof mt1[0]); mi++) {
                 if (strcmp(cname, mt1[mi].n) != 0) continue;
                 uint32_t an = ND(L, callee_n)->next_sibling;
                 uint32_t v = lower_expr(L, an);
@@ -1687,8 +1687,9 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
         {
             static const struct { const char *n; uint16_t op; } mt2[] = {
                 {"fmaxf",BIR_FMAX},{"fminf",BIR_FMIN},{"fmodf",BIR_FREM},
+                {"fmax",BIR_FMAX},{"fmin",BIR_FMIN},{"fmod",BIR_FREM},
             };
-            for (int mi = 0; mi < 3; mi++) {
+            for (int mi = 0; mi < (int)(sizeof mt2 / sizeof mt2[0]); mi++) {
                 if (strcmp(cname, mt2[mi].n) != 0) continue;
                 uint32_t an = ND(L, callee_n)->next_sibling;
                 uint32_t a0 = lower_expr(L, an);
@@ -1861,7 +1862,7 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
                 {"f64_16x16x4f64",      21},
             };
             const char *sfx = cname + 22;
-            for (int mi = 0; mi < 22; mi++) {
+            for (int mi = 0; mi < (int)(sizeof mfma_tab / sizeof mfma_tab[0]); mi++) {
                 if (strcmp(sfx, mfma_tab[mi].sfx) != 0) continue;
                 /* 3 args: A, B, C(accum) */
                 uint32_t an = ND(L, callee_n)->next_sibling;
@@ -1888,7 +1889,7 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
                 {"num_groups", BIR_GRID_DIM},
             };
             const char *rest = cname + 11;
-            for (int oi = 0; oi < 4; oi++) {
+            for (int oi = 0; oi < (int)(sizeof ockl / sizeof ockl[0]); oi++) {
                 if (strcmp(rest, ockl[oi].sfx) != 0) continue;
                 /* arg is literal dim (0/1/2) */
                 uint32_t an = ND(L, callee_n)->next_sibling;
@@ -1913,7 +1914,7 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
                 {"floor", 5, BIR_FLOOR}, {"ceil",  4, BIR_CEIL},
                 {"trunc", 5, BIR_FTRUNC},{"rint",  4, BIR_RNDNE},
             };
-            for (int oi = 0; oi < 8; oi++) {
+            for (int oi = 0; oi < (int)(sizeof ou / sizeof ou[0]); oi++) {
                 if (strncmp(rest, ou[oi].n, ou[oi].len) == 0
                     && rest[ou[oi].len] == '_') {
                     uint32_t an = ND(L, callee_n)->next_sibling;
@@ -1928,7 +1929,7 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
             static const struct { const char *n; size_t len; uint16_t op; } ob[] = {
                 {"fmax", 4, BIR_FMAX}, {"fmin", 4, BIR_FMIN},
             };
-            for (int oi = 0; oi < 2; oi++) {
+            for (int oi = 0; oi < (int)(sizeof ob / sizeof ob[0]); oi++) {
                 if (strncmp(rest, ob[oi].n, ob[oi].len) == 0
                     && rest[ob[oi].len] == '_') {
                     uint32_t an = ND(L, callee_n)->next_sibling;
@@ -1978,12 +1979,19 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
         uint32_t ret_t = L->M->types[ftype].inner;
 
         /* Lower arguments */
-        uint32_t args[16];
+        uint32_t args[BC_MAX_ARGS];
         int nargs = 0;
         uint32_t arg = ND(L, callee_n)->next_sibling;
-        while (arg && nargs < 16) {
+        while (arg && nargs < BC_MAX_ARGS) {
             args[nargs++] = lower_expr(L, arg);
             arg = ND(L, arg)->next_sibling;
+        }
+        /* Sema rejects this first, so reaching it means the two caps have
+         * drifted apart. Dropping the tail would emit a call with the wrong
+         * operands and no sign anything was lost. */
+        if (arg) {
+            lower_error(L, node, BC_E082, "call", BC_MAX_ARGS);
+            return BIR_VAL_NONE;
         }
 
         if (1 + nargs <= BIR_OPERANDS_INLINE) {

@@ -132,8 +132,14 @@ static int mt_etype(metal_module_t *mm, uint32_t ti)
         switch (T->width) {
         case 16: return mt_wstr(mm, "half");
         case 32: return mt_wstr(mm, "float");
-        case 64: /* MSL does not have double on most Apple GPUs */
-                 return mt_wstr(mm, "float");
+        case 64:
+                 /* Apple GPUs have no fp64 and MSL has no double, so there is
+                  * nothing honest to emit here. Silently narrowing to float
+                  * would compile a kernel that quietly computes to half the
+                  * precision the source asked for. */
+                 fprintf(stderr, "metal: fp64 is not available on Apple GPUs; "
+                                 "kernel uses double and cannot be lowered\n");
+                 return 0;
         default: return mt_wstr(mm, "float");
         }
     case BIR_TYPE_BFLOAT:
