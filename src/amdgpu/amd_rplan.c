@@ -135,10 +135,12 @@ void amd_rplan(amd_module_t *A)
         rp_alloc(MF, A->target, &st);
 
         const char *name = A->bir->strings + MF->name;
-        printf("  rplan %s: wave%u, sgp_imp=%u, scratch=%s, "
-               "%u loads, %u stores\n",
-               name, MF->wavefront_size, MF->imp_sgp,
-               st.n_alloca ? "yes" : "no",
-               st.n_loads, st.n_stores);
+        /* stderr, not stdout: --amdgpu writes assembly to stdout when no -o is
+         * given, and a diagnostic in that stream is a .s that won't assemble. */
+        fprintf(stderr, "  rplan %s: wave%u, sgp_imp=%u, scratch=%s, "
+                "%u loads, %u stores\n",
+                name, MF->wavefront_size, MF->imp_sgp,
+                st.n_alloca ? "yes" : "no",
+                st.n_loads, st.n_stores);
     }
 }

@@ -140,6 +140,45 @@ $(OBJDIR)/runtime/%.o: runtime/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(TCFLAGS) -c $< -o $@
 
+# ---- Install ----
+# Booth is consumed as a compiler rather than a library, so an install is the
+# binary, the message catalogues --lang reads, and a CMake package config so
+# downstream CMake projects can find_package(Booth) and run kath as a build
+# step. Version comes out of the header so there is one place to bump it.
+PREFIX  ?= /usr/local
+BINDIR   = $(DESTDIR)$(PREFIX)/bin
+SHAREDIR = $(DESTDIR)$(PREFIX)/share/booth
+CMAKEDIR = $(DESTDIR)$(PREFIX)/lib/cmake/Booth
+
+# Matching on the macro name rather than the whole "#define" line: make 3.81,
+# which is what macOS ships, takes a # inside $(shell) as the start of a
+# comment and swallows the rest of the call. Quoting does not save it, and
+# neither does awk over sed, so the # simply has to go.
+VER_MAJOR := $(shell awk '$$2 == "BC_VERSION_MAJOR" {print $$3}' src/barracuda.h)
+VER_MINOR := $(shell awk '$$2 == "BC_VERSION_MINOR" {print $$3}' src/barracuda.h)
+VER_PATCH := $(shell awk '$$2 == "BC_VERSION_PATCH" {print $$3}' src/barracuda.h)
+VERSION   := $(VER_MAJOR).$(VER_MINOR).$(VER_PATCH)
+
+# MinGW gcc appends .exe when -o names no suffix, so the built file is not
+# always $(TARGET); clean has always known this, install needs to as well.
+EXE :=
+ifneq (,$(findstring MINGW,$(UNAME_S)))
+  EXE := .exe
+endif
+
+install: $(TARGET)
+	install -d $(BINDIR) $(SHAREDIR)/lang $(CMAKEDIR)
+	install -m 755 $(TARGET)$(EXE) $(BINDIR)/$(TARGET)$(EXE)
+	install -m 644 lang/en.txt lang/mi.txt $(SHAREDIR)/lang/
+	sed -e 's/@BOOTH_VERSION@/$(VERSION)/g' -e 's/@BOOTH_VERSION_MAJOR@/$(VER_MAJOR)/g' \
+	    cmake/BoothConfig.cmake.in > $(CMAKEDIR)/BoothConfig.cmake
+	sed -e 's/@BOOTH_VERSION@/$(VERSION)/g' -e 's/@BOOTH_VERSION_MAJOR@/$(VER_MAJOR)/g' \
+	    cmake/BoothConfigVersion.cmake.in > $(CMAKEDIR)/BoothConfigVersion.cmake
+
+uninstall:
+	rm -f $(BINDIR)/$(TARGET)$(EXE)
+	rm -rf $(SHAREDIR) $(CMAKEDIR)
+
 clean:
 	rm -rf $(OBJDIR)
 	rm -f $(TARGET) $(TARGET).exe trunner trunner.exe
@@ -148,4 +187,4 @@ clean:
 # linked in and the build silently disagrees with the source.
 -include $(OBJECTS:.o=.d) $(TOBJS:.o=.d) $(HOSTRT:.o=.d)
 
-.PHONY: all clean test
+.PHONY: all clean test install uninstall

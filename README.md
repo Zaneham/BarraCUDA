@@ -36,6 +36,7 @@ The binary is `kath` (after Kathleen but if she picked Australia or New Zealand 
 ## Documentation
 
 - **[Usage](docs/usage.md)** — every backend, every flag, and the runtime launcher
+- **[CMake](docs/cmake.md)** — installing Booth and compiling kernels from a CMake project
 - **[Feature status](docs/features.md)** — what compiles today, and what doesn't yet
 - **[Mainframe curios](docs/mainframe.md)** — ABEND dumps, SNAP, SYSPRINT, TDF
 - **[Validated hardware](docs/hardware.md)** — the silicon it's been tested on, and the test suite

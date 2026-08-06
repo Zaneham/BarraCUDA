@@ -1,0 +1,82 @@
+# Booth has no CMake build of its own; these jobs check the other direction,
+# that a CMake project can still consume an installed Booth.
+name: CMake package
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  consumer:
+    name: Example consumer builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Booth
+        run: make
+
+      - name: Install to a prefix
+        run: make install PREFIX="$PWD/_prefix"
+
+      - name: Configure the example
+        run: cmake -S examples/cmake -B _example -DCMAKE_PREFIX_PATH="$PWD/_prefix"
+
+      - name: Build the example
+        run: cmake --build _example
+
+      - name: Check the artefacts
+        run: |
+          cd _example
+          for f in vadd_ptx.ptx vadd_gfx942.hsaco vadd_asm.s vadd_tt.cpp vadd_host.o; do
+            test -s "$f" || { echo "missing or empty: $f"; exit 1; }
+          done
+          # --tensix emits a whole Metalium program, so the siblings the
+          # package config declares as byproducts have to be there too.
+          for f in vadd_tt_host.cpp vadd_tt_reader.cpp vadd_tt_writer.cpp; do
+            test -s "$f" || { echo "missing or empty tensix sibling: $f"; exit 1; }
+          done
+          # --amdgpu once ignored -o and wrote to stdout with the register-plan
+          # line mixed in. Assembly on line one is what says it still honours it.
+          head -1 vadd_asm.s | grep -q amdgcn_target || {
+            echo "vadd_asm.s does not start with assembly:"; head -3 vadd_asm.s; exit 1; }
+          echo "all artefacts present"
+
+      - name: Rebuild does no work
+        run: |
+          out=$(cmake --build _example)
+          echo "$out"
+          # if, not &&: under bash -e a failing grep in an && list would fail
+          # the step in exactly the case we want to pass.
+          if echo "$out" | grep -q "Booth "; then
+            echo "second build recompiled a kernel"
+            exit 1
+          fi
+          echo "incremental build was a no-op"
+
+  arch-sync:
+    name: Arch list matches the compiler
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The package config carries its own copy of the target list so it can
+      # reject a typo at configure time. That copy has to keep up with main.c,
+      # and nothing else would notice if it did not.
+      - name: Compare target lists
+        run: |
+          grep -oE '"--(gfx[0-9]+[a-z]?|xe[0-9a-z-]*)"' src/main.c \
+            | tr -d '"' | sed 's/^--//' | sort -u > /tmp/kath_arches
+          sed -n '/set(_arches/,/)/p' cmake/BoothConfig.cmake.in \
+            | sed -e 's/set(_arches//' -e 's/)//' | tr -s ' \t' '\n' \
+            | grep -E '^(gfx|xe)' | sort -u > /tmp/cmake_arches
+          if ! diff -u /tmp/kath_arches /tmp/cmake_arches; then
+            echo
+            echo "The target list in cmake/BoothConfig.cmake.in has drifted from"
+            echo "the flags main.c accepts. Lines marked - are in the compiler but"
+            echo "not the package config; + is the other way round."
+            exit 1
+          fi
+          echo "target lists agree ($(wc -l < /tmp/kath_arches) targets)"
