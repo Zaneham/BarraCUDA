@@ -52,7 +52,7 @@ int th_exist(const char *path)
 
 static const char *cat_order[] = {
     "smoke", "compile", "encode", "tables",
-    "types", "errors", "phase", "sched", "abend", "regalloc", NULL
+    "types", "errors", "phase", "sched", "abend", "regalloc", "ra_ssa", NULL
 };
 
 static int cat_idx(const char *cat)

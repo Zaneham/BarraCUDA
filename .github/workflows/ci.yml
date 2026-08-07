@@ -16,6 +16,32 @@ jobs:
       - name: Test
         run: make test
 
+  # Reports only, no threshold. We don't know the baseline yet, and a gate set
+  # from a guess just gets ignored. Add --fail-under-line once the number settles.
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install gcovr
+        run: sudo apt-get update && sudo apt-get install -y gcovr
+      - name: Build instrumented and run suite
+        run: make coverage
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '## Coverage'
+            echo '```'
+            cat coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: coverage-html/
+
   windows:
     runs-on: windows-latest
     defaults:
