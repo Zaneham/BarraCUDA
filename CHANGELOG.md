@@ -40,6 +40,21 @@ Booth — Changelog
 - #137: support bare convergent warp and lane intrinsics
   (Maou, 2026-07-27)
 
+### Architecture
+
+- one target per run. Several backends at once all wrote to the same
+  `-o` path, so you got whichever came last in the registry under the
+  name you asked for, and a zero exit
+
+- backend contract (`be_desc_t`) with static registration; every
+  existing backend sits behind the same shape and the driver iterates
+  `be_list` instead of the copy-pasted if-chain. A backend also owns its
+  own command line now, so adding a target means one file and one line in
+  the list rather than editing a shared config struct and the driver's
+  argument loop. Skeleton in `src/backend/skeleton/` and
+  `docs/backends.md` for anyone adding a target
+  (Zane Hambly, 2026-08-02)
+
 ### Backends
 
 - seed atomic RMW as divergent in the AMD divergence analysis, so a GEP off
