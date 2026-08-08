@@ -43,6 +43,14 @@ build with `booth_add_kernel()`. There is a worked example under
 push, along with a check that the target list in the package config
 hasn't drifted from what the backends actually accept.
 
+Getting Booth no longer requires being able to build it. Every release
+now carries prebuilt binaries for Linux, macOS and Windows, statically
+linked so they have no runtime dependencies whatsoever, with checksums.
+Unpack and run. This mattered more than I realised: the Windows build
+had been quietly depending on MinGW's `libssp-0.dll`, so handing someone
+the binary would not have worked on a machine without a toolchain, which
+is exactly the machine they wanted it for.
+
 There are coverage numbers for the first time, 74.1% of lines and 58.4%
 of branches, reported by CI on every PR. That immediately turned up the
 SSA register allocator having never been executed by a test at all, and
@@ -197,6 +205,13 @@ that turned over considerably more than either of us expected.
   alongside it, so a downstream project can `find_package(Booth)` and build
   kernels with `booth_add_kernel()`
   (Zane Hambly, 2026-08-06)
+
+- prebuilt binaries on every release for Linux, macOS and Windows, statically
+  linked where the platform allows it so they carry no runtime dependencies,
+  with SHA256 checksums. The Windows build previously needed MinGW's
+  `libssp-0.dll` present, which made the binary useless to anyone without a
+  toolchain
+  (Zane Hambly, 2026-08-07)
 
 ### CI and tests
 

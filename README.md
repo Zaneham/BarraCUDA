@@ -18,7 +18,19 @@ That last one still surprises me a bit. You can write a Triton kernel, matmul an
 
 It also borrows a pile of operational discipline from the mainframe world: real crash dumps when a kernel faults, structured output routed by class, parameter snapshots on entry. See [docs/mainframe.md](docs/mainframe.md) if that sounds like your kind of thing.
 
+## Getting it
+
+If you're lazy like me and just want to run and go, then you can install it [here](https://github.com/Zaneham/Booth/releases/latest). It comes with no dependencies and you don't have to run `make` to use it. There's a build for Linux, macOS and Windows.
+
+```bash
+tar xzf booth-*-linux-x86_64.tar.gz
+cd booth-*-linux-x86_64
+./kath --version
+```
+
 ## Build
+
+If you'd rather build it, or you're on something I don't ship a binary for:
 
 ```bash
 make
