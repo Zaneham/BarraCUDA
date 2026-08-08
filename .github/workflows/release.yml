@@ -1,11 +1,17 @@
 # Prebuilt binaries, so getting Booth does not require a C toolchain and a
 # working `make`. Runs on a version tag, or by hand from the Actions tab if
 # you want to check the packaging without tagging anything.
+#
+# Steps are split per OS rather than picking a shell with an expression.
+# GitHub rejects the whole file for that, and a rejected workflow shows up as
+# a zero-second failed run with no jobs and no explanation, which is a
+# miserable thing to debug.
 name: Release binaries
 
 on:
   push:
-    tags: ['v*']
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -22,11 +28,20 @@ jobs:
           # -static on Linux and Windows gives a binary with no runtime
           # dependencies at all. Without it the Windows build wants MinGW's
           # libssp-0.dll, which nobody downloading a release will have.
-          - { os: ubuntu-latest,  name: linux-x86_64,   ld: '-static', ext: ''    }
-          - { os: windows-latest, name: windows-x86_64, ld: '-static', ext: '.exe' }
+          - os: ubuntu-latest
+            name: linux-x86_64
+            ld: '-static'
+            exe: ''
+          - os: windows-latest
+            name: windows-x86_64
+            ld: '-static'
+            exe: '.exe'
           # Apple ships no static libc, so this one links against libSystem.
           # That is fine, every macOS has it.
-          - { os: macos-latest,   name: macos-arm64,    ld: '',        ext: ''    }
+          - os: macos-latest
+            name: macos-arm64
+            ld: ''
+            exe: ''
 
     steps:
       - uses: actions/checkout@v4
@@ -38,36 +53,51 @@ jobs:
           msystem: MINGW64
           install: mingw-w64-x86_64-gcc make
 
-      - name: Build
-        shell: ${{ runner.os == 'Windows' && 'msys2 {0}' || 'bash' }}
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
         run: make LDFLAGS="${{ matrix.ld }}" -j4
 
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: make LDFLAGS="${{ matrix.ld }}" -j4
+
+      # bash exists on all three runners, so everything past the build is
+      # shared. On Windows this is Git Bash, which is fine for running the
+      # binary we just produced.
       - name: Smoke test
-        shell: ${{ runner.os == 'Windows' && 'msys2 {0}' || 'bash' }}
+        shell: bash
         run: |
-          ./kath${{ matrix.ext }} --version
+          ./kath${{ matrix.exe }} --version
           printf '__global__ void k(float *o){ o[0] = 1.0f; }\n' > smoke.cu
-          ./kath${{ matrix.ext }} --nvidia-ptx smoke.cu -o smoke.ptx
+          ./kath${{ matrix.exe }} --nvidia-ptx smoke.cu -o smoke.ptx
           test -s smoke.ptx
-          echo "compiled a kernel, binary works"
+          echo "compiled a kernel, so the binary works"
 
       # A release archive is the binary plus the message catalogues --lang
       # reads and the licence. Everything else is source.
-      - name: Package
-        shell: ${{ runner.os == 'Windows' && 'msys2 {0}' || 'bash' }}
+      - name: Stage the archive contents
+        shell: bash
         run: |
-          VER=$(awk '$2 == "BC_VERSION_STRING" {gsub(/"/, "", $3); print $3}' src/barracuda.h)
+          VER=$(awk '$2 == "BC_VERSION_STRING" { gsub(/"/, "", $3); print $3 }' src/barracuda.h)
           DIR="booth-$VER-${{ matrix.name }}"
+          echo "BOOTH_DIR=$DIR" >> "$GITHUB_ENV"
           mkdir -p "$DIR/lang"
-          cp kath${{ matrix.ext }} "$DIR/"
+          cp kath${{ matrix.exe }} "$DIR/"
           cp lang/en.txt lang/mi.txt "$DIR/lang/"
           cp LICENSE README.md "$DIR/"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            powershell -Command "Compress-Archive -Path '$DIR' -DestinationPath '$DIR.zip'"
-          else
-            tar czf "$DIR.tar.gz" "$DIR"
-          fi
-          ls -la booth-$VER-*
+          ls -R "$DIR"
+
+      - name: Archive (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: tar czf "$BOOTH_DIR.tar.gz" "$BOOTH_DIR"
+
+      - name: Archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "$env:BOOTH_DIR" -DestinationPath "$env:BOOTH_DIR.zip"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -89,6 +119,7 @@ jobs:
 
       # Checksums so anyone who cares can verify what they downloaded.
       - name: Checksums
+        shell: bash
         run: |
           ls -la
           sha256sum booth-* > SHA256SUMS
