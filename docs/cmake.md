@@ -19,12 +19,17 @@ That puts `kath` in `<prefix>/bin`, the `--lang` catalogues in
 ## Finding it
 
 ```cmake
-find_package(Booth 5.1 REQUIRED)
+find_package(Booth 0.5 REQUIRED)
 ```
 
 If the prefix is not one CMake already searches, point it there with
-`-DCMAKE_PREFIX_PATH=<prefix>`. Version matching is same-major: 5.1 is
-satisfied by any later 5.x, never by 6.x.
+`-DCMAKE_PREFIX_PATH=<prefix>`.
+
+While Booth is on 0.x the minor version has to match, so asking for 0.5 is
+satisfied by 0.5.2 but not by 0.6. That is deliberate: 0.x is where things
+are still allowed to move, and a package config that quietly accepted 0.6
+would be promising something Booth is not ready to promise. From 1.0 the
+usual same-major rule takes over.
 
 You get `Booth_VERSION`, `Booth_EXECUTABLE`, `Booth_LANG_DIR`, and a
 `Booth::kath` imported target.

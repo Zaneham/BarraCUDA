@@ -3,6 +3,59 @@ Booth — Changelog
 
 ## Unreleased
 
+## 2026-08-07
+
+Version 0.5.2.
+
+First, a correction. The last release went out tagged v5.01, which was
+meant to be 0.5.1 and wasn't, and it left Booth looking four major
+versions further along than it actually is. It isn't. This release puts
+the numbering back where it belongs, and sorry to anyone who pinned the
+old one or took the version at face value. The tag stays where it is so
+nothing breaks underneath you, but the compiler now reports what it is.
+
+The theme this cycle, without meaning to be, was the compiler telling
+the truth. Semantic errors used to be printed and then ignored by every
+mode except `--sema`, so the backend ran on source that had already been
+rejected, wrote an output file and exited zero. Asking for several
+backends at once wrote all of them over the same `-o` path and left you
+whichever finished last, under the name you chose, again exiting zero.
+Metal quietly narrowed a double-precision kernel to float and said
+nothing, which is a real problem if you were counting on the precision.
+`--amdgpu` ignored `-o` entirely and mixed a diagnostic into the
+assembly on stdout. All four are fixed, and all four had been sitting
+there being cheerfully wrong for a while.
+
+The structural change is the backend contract. Every target now sits
+behind a `be_desc_t` and registers itself in one list, and a backend
+owns its own command line rather than reaching into a shared config
+struct and the driver's argument loop. Adding a target used to mean
+reading 420 KB of AMD backend to work out what was expected; now it
+means reading one header and copying the skeleton. `main.c` lost about
+a third of its length in the process, and the frontend stopped needing
+to know what an AMD target enum is.
+
+Booth also installs now. `make install` puts `kath`, the message
+catalogues and a CMake package config into a prefix, so a downstream
+project can `find_package(Booth)` and compile kernels as part of its own
+build with `booth_add_kernel()`. There is a worked example under
+`examples/cmake/` and CI builds it against a staged install on every
+push, along with a check that the target list in the package config
+hasn't drifted from what the backends actually accept.
+
+There are coverage numbers for the first time, 74.1% of lines and 58.4%
+of branches, reported by CI on every PR. That immediately turned up the
+SSA register allocator having never been executed by a test at all, and
+the six fixtures now pinning its behaviour also pin a real bug in it,
+which is at least honest.
+
+Thanks to Jorge Galvez, whose do-concurrent ocean benchmarks found three
+genuine frontend bugs in an afternoon, and who let me test against his
+code. Thanks to @maou3434 for the bare HIP warp and lane intrinsics,
+which is their first contribution here and a very welcome one. And
+thanks to @FileDelta for asking a simple question about the runtimes
+that turned over considerably more than either of us expected.
+
 ### Frontend
 
 - double-precision `fmax`, `fmin` and `fmod`. The ocean kernels in
@@ -194,7 +247,8 @@ Booth — Changelog
 
 ## 2026-07-14
 
-Version 5.01. So long, and thanks for all the fish.
+Version 5.01, which should have read 0.5.1. See the 0.5.2 note above.
+So long, and thanks for all the fish.
 BarraCUDA was a good pun and a bad description, so it swam off: the
 compiler is Booth now, the binary is `kath`, and the version jumps
 to mark the line. First release under the new name; the rename note

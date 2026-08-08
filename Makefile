@@ -188,8 +188,10 @@ install: $(TARGET)
 	install -m 755 $(TARGET)$(EXE) $(BINDIR)/$(TARGET)$(EXE)
 	install -m 644 lang/en.txt lang/mi.txt $(SHAREDIR)/lang/
 	sed -e 's/@BOOTH_VERSION@/$(VERSION)/g' -e 's/@BOOTH_VERSION_MAJOR@/$(VER_MAJOR)/g' \
+	    -e 's/@BOOTH_VERSION_MINOR@/$(VER_MINOR)/g' \
 	    cmake/BoothConfig.cmake.in > $(CMAKEDIR)/BoothConfig.cmake
 	sed -e 's/@BOOTH_VERSION@/$(VERSION)/g' -e 's/@BOOTH_VERSION_MAJOR@/$(VER_MAJOR)/g' \
+	    -e 's/@BOOTH_VERSION_MINOR@/$(VER_MINOR)/g' \
 	    cmake/BoothConfigVersion.cmake.in > $(CMAKEDIR)/BoothConfigVersion.cmake
 
 uninstall:
