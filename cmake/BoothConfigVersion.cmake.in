@@ -1,18 +1,23 @@
-# Version check for find_package(Booth <version>). Same-major compatibility:
-# a consumer asking for 5.1 is satisfied by any later 5.x, never by 6.x.
+# Version check for find_package(Booth <version>).
+#
+# While the major version is 0 the minor has to match too, because 0.x is
+# where the shape is still allowed to change and 0.6 promises nothing to
+# someone who asked for 0.5. From 1.0 onward the usual same-major rule
+# applies and a consumer asking for 1.2 is happy with any later 1.x.
 
 set(PACKAGE_VERSION "@BOOTH_VERSION@")
 
 if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)
     set(PACKAGE_VERSION_COMPATIBLE FALSE)
+elseif(NOT PACKAGE_FIND_VERSION_MAJOR STREQUAL "@BOOTH_VERSION_MAJOR@")
+    set(PACKAGE_VERSION_COMPATIBLE FALSE)
+elseif("@BOOTH_VERSION_MAJOR@" STREQUAL "0" AND
+       NOT PACKAGE_FIND_VERSION_MINOR STREQUAL "@BOOTH_VERSION_MINOR@")
+    set(PACKAGE_VERSION_COMPATIBLE FALSE)
 else()
-    if(PACKAGE_FIND_VERSION_MAJOR STREQUAL "@BOOTH_VERSION_MAJOR@")
-        set(PACKAGE_VERSION_COMPATIBLE TRUE)
-    else()
-        set(PACKAGE_VERSION_COMPATIBLE FALSE)
-    endif()
+    set(PACKAGE_VERSION_COMPATIBLE TRUE)
+endif()
 
-    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)
-        set(PACKAGE_VERSION_EXACT TRUE)
-    endif()
+if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)
+    set(PACKAGE_VERSION_EXACT TRUE)
 endif()

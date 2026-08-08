@@ -1,0 +1,101 @@
+# Prebuilt binaries, so getting Booth does not require a C toolchain and a
+# working `make`. Runs on a version tag, or by hand from the Actions tab if
+# you want to check the packaging without tagging anything.
+name: Release binaries
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # -static on Linux and Windows gives a binary with no runtime
+          # dependencies at all. Without it the Windows build wants MinGW's
+          # libssp-0.dll, which nobody downloading a release will have.
+          - { os: ubuntu-latest,  name: linux-x86_64,   ld: '-static', ext: ''    }
+          - { os: windows-latest, name: windows-x86_64, ld: '-static', ext: '.exe' }
+          # Apple ships no static libc, so this one links against libSystem.
+          # That is fine, every macOS has it.
+          - { os: macos-latest,   name: macos-arm64,    ld: '',        ext: ''    }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSYS2
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc make
+
+      - name: Build
+        shell: ${{ runner.os == 'Windows' && 'msys2 {0}' || 'bash' }}
+        run: make LDFLAGS="${{ matrix.ld }}" -j4
+
+      - name: Smoke test
+        shell: ${{ runner.os == 'Windows' && 'msys2 {0}' || 'bash' }}
+        run: |
+          ./kath${{ matrix.ext }} --version
+          printf '__global__ void k(float *o){ o[0] = 1.0f; }\n' > smoke.cu
+          ./kath${{ matrix.ext }} --nvidia-ptx smoke.cu -o smoke.ptx
+          test -s smoke.ptx
+          echo "compiled a kernel, binary works"
+
+      # A release archive is the binary plus the message catalogues --lang
+      # reads and the licence. Everything else is source.
+      - name: Package
+        shell: ${{ runner.os == 'Windows' && 'msys2 {0}' || 'bash' }}
+        run: |
+          VER=$(awk '$2 == "BC_VERSION_STRING" {gsub(/"/, "", $3); print $3}' src/barracuda.h)
+          DIR="booth-$VER-${{ matrix.name }}"
+          mkdir -p "$DIR/lang"
+          cp kath${{ matrix.ext }} "$DIR/"
+          cp lang/en.txt lang/mi.txt "$DIR/lang/"
+          cp LICENSE README.md "$DIR/"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            powershell -Command "Compress-Archive -Path '$DIR' -DestinationPath '$DIR.zip'"
+          else
+            tar czf "$DIR.tar.gz" "$DIR"
+          fi
+          ls -la booth-$VER-*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            booth-*.tar.gz
+            booth-*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Attach to release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      # Checksums so anyone who cares can verify what they downloaded.
+      - name: Checksums
+        run: |
+          ls -la
+          sha256sum booth-* > SHA256SUMS
+          cat SHA256SUMS
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            booth-*
+            SHA256SUMS
