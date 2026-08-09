@@ -3,6 +3,26 @@ Booth — Changelog
 
 ## Unreleased
 
+### Architecture
+
+- #160: DCE and mem2reg move instructions without moving `inst_lines[]`
+  with them, so every line number past the first deleted instruction
+  pointed at the wrong source. Four sites fixed
+  (Zane Hambly, 2026-08-09)
+
+### Build
+
+- #160: vendor Kauri (MIT) as `src/kauri.h`, included from `barracuda.h`,
+  so `KA_GUARD`, `KA_CHK` and `KA_PNEW` are available tree-wide
+  (Zane Hambly, 2026-08-09)
+
+### CI and tests
+
+- #160: `make repro` compiles every test file twice under `--amdgpu`,
+  `--nvidia-ptx` and `--ir` and compares the bytes, so the deterministic
+  layout `bir.h` claims is checked rather than assumed
+  (Zane Hambly, 2026-08-09)
+
 ## 2026-08-07
 
 Version 0.5.2.
