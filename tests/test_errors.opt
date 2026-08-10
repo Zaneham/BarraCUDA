@@ -1,0 +1,2 @@
+# Options for test_errors.cu. See test_diag.opt for the format.
+xfail all  deliberately malformed source, rejection is the point

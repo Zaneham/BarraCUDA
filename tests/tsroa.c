@@ -13,7 +13,7 @@
 
 /* ---- sroa: a 2-field struct splits, accesses repoint ---- */
 
-static void sroa_splits(void)
+static void sro01(void)
 {
     bir_module_t *M = malloc(sizeof(*M));
     uint32_t i32, f32, st, pst, pi32, pf32, vt, c0, c1, flds[2];
@@ -95,11 +95,11 @@ static void sroa_splits(void)
     free(M);
     PASS();
 }
-TH_REG("sroa", sroa_splits)
+TH_REG("sro", 1, "a two-field struct splits and repoints", sro01)
 
 /* ---- sroa: an escaping struct pointer is left untouched ---- */
 
-static void sroa_escape_bails(void)
+static void sro02(void)
 {
     bir_module_t *M = malloc(sizeof(*M));
     uint32_t i32, f32, st, pst, pi32, vt, c0, flds[2];
@@ -150,4 +150,4 @@ static void sroa_escape_bails(void)
     free(M);
     PASS();
 }
-TH_REG("sroa", sroa_escape_bails)
+TH_REG("sro", 2, "an escaping struct pointer is untouched", sro02)

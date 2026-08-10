@@ -68,7 +68,7 @@ static int n_compute(const uint32_t *w, int n)
 
 /* One instruction per encoding format with operands zero, so each word is just
  * its opcode byte, and a pseudo-op in the middle that must be dropped. */
-static void ttmc_bin_opcodes(void)
+static void tmc01(void)
 {
     uint32_t k = 0;
     set_op(k++, TT_SFPNOP);      /* 0x02, FMT_C */
@@ -92,11 +92,11 @@ static void ttmc_bin_opcodes(void)
     CHECK(has_word(w, n, 0x8F000000u));  /* sfpwnop  */
     PASS();
 }
-TH_REG("ttmc", ttmc_bin_opcodes);
+TH_REG("tmc", 1, "bin opcodes", tmc01);
 
 /* The baby core pushes each Tensix word through a custom instruction encoded as
  * the word rol-2'd, so both emitters must agree word-for-word under rol2. */
-static void ttmc_ttinsn_is_rol2(void)
+static void tmc02(void)
 {
     uint32_t k = 0;
     set_op(k++, TT_SFPNOP);
@@ -120,11 +120,11 @@ static void ttmc_ttinsn_is_rol2(void)
         CHEQX(tti[i], rol2(bin[i]));
     PASS();
 }
-TH_REG("ttmc", ttmc_ttinsn_is_rol2);
+TH_REG("tmc", 2, "ttinsn is rol2", tmc02);
 
 /* rol-2 only round-trips because every real opcode is below 0xC0000000, leaving
  * the top two bits free. Check the ceiling holds and ror-2 restores each word. */
-static void ttmc_ttinsn_reversible(void)
+static void tmc03(void)
 {
     uint32_t k = 0;
     set_op(k++, TT_SFPLOAD);
@@ -150,12 +150,12 @@ static void ttmc_ttinsn_reversible(void)
     }
     PASS();
 }
-TH_REG("ttmc", ttmc_ttinsn_reversible);
+TH_REG("tmc", 3, "ttinsn reversible", tmc03);
 
 /* Pin the Sync Unit field packing, not just the opcode byte, using values
  * distinct from the bracket's own sync words so each match is unambiguous. The
  * bit layouts these goldens encode are the field definitions in emit.c. */
-static void ttmc_sync_fields(void)
+static void tmc04(void)
 {
     set_op(0, TT_SEMINIT);                          /* sem_sel 3, init 1, max 2 */
     set_imm(0, 0, 3); set_imm(0, 1, 1); set_imm(0, 2, 2);
@@ -179,4 +179,4 @@ static void ttmc_sync_fields(void)
     CHECK(has_word(w, n, 0xA4000000u | (5u << 2)));
     PASS();
 }
-TH_REG("ttmc", ttmc_sync_fields);
+TH_REG("tmc", 4, "sync fields", tmc04);

@@ -50,7 +50,7 @@ static void build_kernel(void)
 
 /* ---- magic bytes are present ---- */
 
-static void rv_elf_magic(void)
+static void rvl01(void)
 {
     build_kernel();
     CHEQ(rv_elf_write(&B, ELF_OUT), BC_OK);
@@ -62,11 +62,11 @@ static void rv_elf_magic(void)
     CHEQ(rd[3], (uint8_t)'F');
     PASS();
 }
-TH_REG("rv_enc", rv_elf_magic);
+TH_REG("rvl", 1, "magic", rvl01);
 
 /* ---- e_ident says 32-bit LE, EV_CURRENT, no OSABI ---- */
 
-static void rv_elf_ident(void)
+static void rvl02(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -77,11 +77,11 @@ static void rv_elf_ident(void)
     CHEQ(rd[7], 0u);   /* ELFOSABI_NONE */
     PASS();
 }
-TH_REG("rv_enc", rv_elf_ident);
+TH_REG("rvl", 2, "ident", rvl02);
 
 /* ---- e_type, e_machine, e_version ---- */
 
-static void rv_elf_type_machine(void)
+static void rvl03(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -91,11 +91,11 @@ static void rv_elf_type_machine(void)
     CHEQ(rd32(20), 1u);     /* e_version */
     PASS();
 }
-TH_REG("rv_enc", rv_elf_type_machine);
+TH_REG("rvl", 3, "type machine", rvl03);
 
 /* ---- e_flags is zero (soft-float ABI, no compressed) ---- */
 
-static void rv_elf_flags_soft(void)
+static void rvl04(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -103,11 +103,11 @@ static void rv_elf_flags_soft(void)
     CHEQ(rd32(36), 0u);
     PASS();
 }
-TH_REG("rv_enc", rv_elf_flags_soft);
+TH_REG("rvl", 4, "flags soft", rvl04);
 
 /* ---- e_entry matches the documented load address ---- */
 
-static void rv_elf_entry_addr(void)
+static void rvl05(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -115,11 +115,11 @@ static void rv_elf_entry_addr(void)
     CHEQ(rd32(24), RV_ELF_LOAD_ADDR);
     PASS();
 }
-TH_REG("rv_enc", rv_elf_entry_addr);
+TH_REG("rvl", 5, "entry addr", rvl05);
 
 /* ---- PT_LOAD program header points at the code bytes ---- */
 
-static void rv_elf_pt_load(void)
+static void rvl06(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -141,11 +141,11 @@ static void rv_elf_pt_load(void)
     CHEQ(rd32(e_phoff + 24), 5u);
     PASS();
 }
-TH_REG("rv_enc", rv_elf_pt_load);
+TH_REG("rvl", 6, "pt load", rvl06);
 
 /* ---- code bytes appear at the offset the program header claims ---- */
 
-static void rv_elf_code_bytes(void)
+static void rvl07(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -159,11 +159,11 @@ static void rv_elf_code_bytes(void)
     CHEQ(w2, rv_add (RV_A0, RV_A0, RV_A1));
     PASS();
 }
-TH_REG("rv_enc", rv_elf_code_bytes);
+TH_REG("rvl", 7, "code bytes", rvl07);
 
 /* ---- section header string table contains the section names ---- */
 
-static void rv_elf_shstrtab(void)
+static void rvl08(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -181,17 +181,17 @@ static void rv_elf_shstrtab(void)
     CHECK(found_shstr);
     PASS();
 }
-TH_REG("rv_enc", rv_elf_shstrtab);
+TH_REG("rvl", 8, "shstrtab", rvl08);
 
 /* ---- empty buffer refused ---- */
 
-static void rv_elf_empty(void)
+static void rvl09(void)
 {
     rv_buf_init(&B);
     CHEQ(rv_elf_write(&B, ELF_OUT), BC_ERR_IO);
     PASS();
 }
-TH_REG("rv_enc", rv_elf_empty);
+TH_REG("rvl", 9, "empty", rvl09);
 
 /*
  * The tests below encode tt-metal's loader contract from
@@ -219,7 +219,7 @@ static uint32_t sfind(const char *n)
 }
 
 /* ReadImage:498 -- "first loadable segment is not text". */
-static void rv_elf_entry_is_first_seg(void)
+static void rvl10(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -227,10 +227,10 @@ static void rv_elf_entry_is_first_seg(void)
     CHEQ(rd32(24), rd32(rd32(28) + 8));
     PASS();
 }
-TH_REG("rv_enc", rv_elf_entry_is_first_seg);
+TH_REG("rvl", 10, "entry is first segment", rvl10);
 
 /* ReadImage:472 -- p_offset, p_vaddr and p_paddr share 4-byte alignment. */
-static void rv_elf_phdr_aligned(void)
+static void rvl11(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -239,10 +239,10 @@ static void rv_elf_phdr_aligned(void)
     CHEQ((rd32(ph + 4) | rd32(ph + 8) | rd32(ph + 12)) & 3u, 0u);
     PASS();
 }
-TH_REG("rv_enc", rv_elf_phdr_aligned);
+TH_REG("rvl", 11, "phdr aligned", rvl11);
 
 /* ReadImage:435 -- sections and a valid nonzero shstrndx are mandatory. */
-static void rv_elf_has_sections(void)
+static void rvl12(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -253,12 +253,12 @@ static void rv_elf_has_sections(void)
     CHECK(rd16(50) < rd16(48));
     PASS();
 }
-TH_REG("rv_enc", rv_elf_has_sections);
+TH_REG("rvl", 12, "has sections", rvl12);
 
 /* XIPify:1039 -- "there are no relocation sections". The section must be
  * SHT_RELA, and sh_info must name an alloc section that lies inside a
  * segment, else the loader skips it and the count stays zero. */
-static void rv_elf_rela_present(void)
+static void rvl13(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -272,11 +272,11 @@ static void rv_elf_rela_present(void)
     CHEQ(rd32(shdr(r) + 24), sfind(".symtab")); /* sh_link */
     PASS();
 }
-TH_REG("rv_enc", rv_elf_rela_present);
+TH_REG("rvl", 13, "rela present", rvl13);
 
 /* TrimSegments:545 -- matched by name, SHT_PROGBITS and NOT SHF_ALLOC,
  * holding one (vma, trim_bound, size_limit) triple per segment. */
-static void rv_elf_segments_meta(void)
+static void rvl14(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -292,11 +292,11 @@ static void rv_elf_segments_meta(void)
     CHEQ(rd32(off + 8), td_txtmax(td_chip()));
     PASS();
 }
-TH_REG("rv_enc", rv_elf_segments_meta);
+TH_REG("rvl", 14, "segments meta", rvl14);
 
 /* XIPify:779 resolves relocation symbols through the symtab, so it must
  * exist and be non-alloc (WeakenDataSymbols skips alloc symtabs). */
-static void rv_elf_symtab(void)
+static void rvl15(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -319,10 +319,10 @@ static void rv_elf_symtab(void)
     CHEQ(rd16(off + 16 + 14), sfind(".text"));
     PASS();
 }
-TH_REG("rv_enc", rv_elf_symtab);
+TH_REG("rvl", 15, "symtab", rvl15);
 
 /* ReadImage:520 -- every SHF_ALLOC section must fall inside a segment. */
-static void rv_elf_alloc_in_seg(void)
+static void rvl16(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -338,7 +338,7 @@ static void rv_elf_alloc_in_seg(void)
     }
     PASS();
 }
-TH_REG("rv_enc", rv_elf_alloc_in_seg);
+TH_REG("rvl", 16, "alloc in segment", rvl16);
 
 /*
  * Structural invariants. The field-by-field tests above check that each
@@ -348,7 +348,7 @@ TH_REG("rv_enc", rv_elf_alloc_in_seg);
 
 /* Every section body lies inside the file. SHT_NULL and SHT_NOBITS occupy
  * no file space and are exempt. */
-static void rv_elf_sections_in_file(void)
+static void rvl17(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -362,10 +362,10 @@ static void rv_elf_sections_in_file(void)
     }
     PASS();
 }
-TH_REG("rv_enc", rv_elf_sections_in_file);
+TH_REG("rvl", 17, "sections in file", rvl17);
 
 /* The section header table itself lies inside the file. */
-static void rv_elf_shdrs_in_file(void)
+static void rvl18(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -373,11 +373,11 @@ static void rv_elf_shdrs_in_file(void)
     CHECK((long)(rd32(32) + rd16(48) * 40u) <= n);
     PASS();
 }
-TH_REG("rv_enc", rv_elf_shdrs_in_file);
+TH_REG("rvl", 18, "section headers in file", rvl18);
 
 /* No two non-empty section bodies overlap on disk. A planner that
  * miscomputes one offset usually shows up here first. */
-static void rv_elf_no_overlap(void)
+static void rvl19(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -394,11 +394,11 @@ static void rv_elf_no_overlap(void)
     }
     PASS();
 }
-TH_REG("rv_enc", rv_elf_no_overlap);
+TH_REG("rvl", 19, "no overlap", rvl19);
 
 /* ReadImage:509 -- alloc, rela and symtab sections need sh_offset and
  * sh_addr 4-byte aligned. */
-static void rv_elf_section_align(void)
+static void rvl20(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -412,10 +412,10 @@ static void rv_elf_section_align(void)
     }
     PASS();
 }
-TH_REG("rv_enc", rv_elf_section_align);
+TH_REG("rvl", 20, "section align", rvl20);
 
 /* Every section name resolves inside .shstrtab and is NUL-terminated. */
-static void rv_elf_names_resolve(void)
+static void rvl21(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -429,11 +429,11 @@ static void rv_elf_names_resolve(void)
     }
     PASS();
 }
-TH_REG("rv_enc", rv_elf_names_resolve);
+TH_REG("rvl", 21, "names resolve", rvl21);
 
 /* .text's section header and its program header must describe the same
  * bytes, since the loader validates coverage across the two. */
-static void rv_elf_text_matches_phdr(void)
+static void rvl22(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -444,13 +444,13 @@ static void rv_elf_text_matches_phdr(void)
     CHEQ(rd32(shdr(t) + 20), rd32(ph + 16));     /* sh_size  == p_filesz */
     PASS();
 }
-TH_REG("rv_enc", rv_elf_text_matches_phdr);
+TH_REG("rvl", 22, "text matches phdr", rvl22);
 
 /* The load address is named in three places and the loader checks each
  * against a different thing, so they have to agree. TrimSegments runs
  * during ReadImage and matches the link-time address, before XIPify
  * rezeros it. */
-static void rv_elf_load_addr_agrees(void)
+static void rvl23(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -460,11 +460,11 @@ static void rv_elf_load_addr_agrees(void)
     CHEQ(rd32(24), rd32(segs));                  /* e_entry == segments vma */
     PASS();
 }
-TH_REG("rv_enc", rv_elf_load_addr_agrees);
+TH_REG("rvl", 23, "load addr agrees", rvl23);
 
 /* .symtab size must be a whole number of entries, and sh_info must name a
  * real one. */
-static void rv_elf_symtab_wellformed(void)
+static void rvl24(void)
 {
     build_kernel();
     rv_elf_write(&B, ELF_OUT);
@@ -476,11 +476,11 @@ static void rv_elf_symtab_wellformed(void)
     CHECK(rd32(shdr(y) + 28) <= sz / es);
     PASS();
 }
-TH_REG("rv_enc", rv_elf_symtab_wellformed);
+TH_REG("rvl", 24, "symtab well formed", rvl24);
 
 /* A one-instruction kernel still has to satisfy every alignment rule; the
  * smallest input is where padding bugs hide. */
-static void rv_elf_minimal_kernel(void)
+static void rvl25(void)
 {
     rv_buf_init(&B);
     rv_buf_emit(&B, rv_nop());
@@ -492,10 +492,10 @@ static void rv_elf_minimal_kernel(void)
     CHECK((long)(rd32(32) + rd16(48) * 40u) <= n);
     PASS();
 }
-TH_REG("rv_enc", rv_elf_minimal_kernel);
+TH_REG("rvl", 25, "minimal kernel", rvl25);
 
 /* Text size tracks the buffer rather than a fixed guess. */
-static void rv_elf_size_tracks_code(void)
+static void rvl26(void)
 {
     rv_buf_init(&B);
     for (int i = 0; i < 64; i++) rv_buf_emit(&B, rv_nop());
@@ -505,7 +505,7 @@ static void rv_elf_size_tracks_code(void)
     CHEQ(rd32(shdr(sfind(".text")) + 20), 256u);
     PASS();
 }
-TH_REG("rv_enc", rv_elf_size_tracks_code);
+TH_REG("rvl", 26, "size tracks code", rvl26);
 
 /*
  * End-to-end: drive the real compiler binary over a real .cu and validate
@@ -545,7 +545,7 @@ static void text_span(uint32_t *off, uint32_t *nwords)
 
 /* A kernel with __device__ helpers compiles, and the result satisfies the
  * same loader contract the synthetic tests check. */
-static void e2e_rv_device_calls(void)
+static void rvl27(void)
 {
     CHEQ(compile_cu("device_calls.cu"), 0);
     long n = slurp(E2E_OUT);
@@ -558,12 +558,12 @@ static void e2e_rv_device_calls(void)
     CHEQ(rd32(24), rd32(rd32(28) + 8));          /* e_entry == p_vaddr */
     PASS();
 }
-TH_REG("rv_enc", e2e_rv_device_calls);
+TH_REG("rvl", 27, "device calls", rvl27);
 
 /* An unpatched call placeholder is a zero word, which is an illegal RV32
  * instruction. main.c used to call rv_isel_func, which records call
  * patches but never resolves them. */
-static void e2e_rv_calls_patched(void)
+static void rvl28(void)
 {
     CHEQ(compile_cu("device_calls.cu"), 0);
     slurp(E2E_OUT);
@@ -579,7 +579,7 @@ static void e2e_rv_calls_patched(void)
     CHECK(jal > 0);
     PASS();
 }
-TH_REG("rv_enc", e2e_rv_calls_patched);
+TH_REG("rvl", 28, "calls patched", rvl28);
 
 /*
  * The entry point must be the __global__ kernel. Source order puts the
@@ -590,7 +590,7 @@ TH_REG("rv_enc", e2e_rv_calls_patched);
  * device_calls.cu's kernel calls helpers and every helper is a leaf, so
  * "the first function contains a JAL" distinguishes them.
  */
-static void e2e_rv_kernel_is_entry(void)
+static void rvl29(void)
 {
     CHEQ(compile_cu("device_calls.cu"), 0);
     slurp(E2E_OUT);
@@ -607,10 +607,10 @@ static void e2e_rv_kernel_is_entry(void)
     CHECK(jal > 0);                              /* and it is not a leaf */
     PASS();
 }
-TH_REG("rv_enc", e2e_rv_kernel_is_entry);
+TH_REG("rvl", 29, "kernel is entry", rvl29);
 
 /* Text is a whole number of 4-byte instructions and fits a baby core. */
-static void e2e_rv_text_sane(void)
+static void rvl30(void)
 {
     CHEQ(compile_cu("device_calls.cu"), 0);
     slurp(E2E_OUT);
@@ -620,11 +620,11 @@ static void e2e_rv_text_sane(void)
     CHECK(sz > 0u && sz <= td_txtmax(td_chip()));
     PASS();
 }
-TH_REG("rv_enc", e2e_rv_text_sane);
+TH_REG("rvl", 30, "text sane", rvl30);
 
 /* Switch lowers to a compare chain, one BEQ per case, falling through to an
  * unconditional jump to the default block. */
-static void e2e_rv_switch_chain(void)
+static void rvl31(void)
 {
     CHEQ(compile_cu("rv_switch.cu"), 0);
     slurp(E2E_OUT);
@@ -641,11 +641,11 @@ static void e2e_rv_switch_chain(void)
     CHECK(jal > 0);
     PASS();
 }
-TH_REG("rv_enc", e2e_rv_switch_chain);
+TH_REG("rvl", 31, "switch chain", rvl31);
 
 /* __shared__ resolves to an absolute address in the L1 slab at the top of
  * memory, materialised with a LUI whose upper immediate is the slab base. */
-static void e2e_rv_shared_addr(void)
+static void rvl32(void)
 {
     CHEQ(compile_cu("rv_shared.cu"), 0);
     slurp(E2E_OUT);
@@ -660,14 +660,14 @@ static void e2e_rv_shared_addr(void)
     CHECK(found);
     PASS();
 }
-TH_REG("rv_enc", e2e_rv_shared_addr);
+TH_REG("rvl", 32, "shared addr", rvl32);
 
 /* The shared slab and the circular buffers must not overlap, which is only
  * true while the placer's ceiling is the slab base. */
-static void rv_l1_shared_below_end(void)
+static void rvl33(void)
 {
     CHECK(td_shbase(td_chip()) + TD_L1_SHARED_SIZE == td_l1end(td_chip()));
     CHECK(TD_L1_CB_BASE < td_shbase(td_chip()));
     PASS();
 }
-TH_REG("rv_enc", rv_l1_shared_below_end);
+TH_REG("rvl", 33, "L1 shared below end", rvl33);

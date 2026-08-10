@@ -7,7 +7,7 @@
  * declares. A kernel that reads past its declared count reads whatever the
  * previous wave left there.
  *
- * Six fixtures still leak vregs (see ssa_ra_rejects_cleanly). They are pinned
+ * Six fixtures still leak vregs (see rss05). They are pinned
  * here rather than skipped, so fixing the allocator fails this file and makes
  * whoever fixes it move the fixture into the clean list. */
 
@@ -129,7 +129,7 @@ static const char *sr_leaky[] = {
 
 /* Every vreg must be gone by the time RA is done. verify.c says so too, but
  * asserting it here names the actual failure instead of an exit code. */
-static void ssa_ra_no_vreg_leak(void)
+static void rss01(void)
 {
     int i;
     for (i = 0; sr_clean[i]; i++) {
@@ -145,11 +145,11 @@ static void ssa_ra_no_vreg_leak(void)
     }
     PASS();
 }
-TH_REG("ra_ssa", ssa_ra_no_vreg_leak)
+TH_REG("rss", 1, "no vreg leaks into the output", rss01)
 
 /* ---- Declared registers bound the ones actually used ---- */
 
-static void ssa_ra_within_declared(void)
+static void rss02(void)
 {
     int i;
     for (i = 0; sr_clean[i]; i++) {
@@ -161,10 +161,10 @@ static void ssa_ra_within_declared(void)
     }
     PASS();
 }
-TH_REG("ra_ssa", ssa_ra_within_declared)
+TH_REG("rss", 2, "within declared", rss02)
 
 /* Same check with the budget squeezed enough to force spilling. */
-static void ssa_ra_within_declared_spilling(void)
+static void rss03(void)
 {
     int i;
     for (i = 0; sr_clean[i]; i++) {
@@ -181,12 +181,12 @@ static void ssa_ra_within_declared_spilling(void)
     }
     PASS();
 }
-TH_REG("ra_ssa", ssa_ra_within_declared_spilling)
+TH_REG("rss", 3, "within declared spilling", rss03)
 
 /* Squeeze harder and the spill path leaks vregs too, on kernels the default
  * allocator handles down to --max-vgprs 2. Same deal as sr_leaky: pinned so a
  * fix trips this and gets folded into the test above. */
-static void ssa_ra_tight_cap_rejects_cleanly(void)
+static void rss04(void)
 {
     const char *caps[] = { "--max-vgprs 4", "--max-vgprs 2", NULL };
     int c;
@@ -204,14 +204,14 @@ static void ssa_ra_tight_cap_rejects_cleanly(void)
     }
     PASS();
 }
-TH_REG("ra_ssa", ssa_ra_tight_cap_rejects_cleanly)
+TH_REG("rss", 4, "tight cap rejects cleanly", rss04)
 
 /* ---- Known-broken fixtures fail loudly ---- */
 
 /* These leak vregs. What matters until that is fixed is that verify catches
  * it and we exit non-zero, rather than quietly emitting a broken kernel.
  * Fix the allocator and this test fails: move the fixture to sr_clean. */
-static void ssa_ra_rejects_cleanly(void)
+static void rss05(void)
 {
     int i;
     for (i = 0; sr_leaky[i]; i++) {
@@ -227,13 +227,13 @@ static void ssa_ra_rejects_cleanly(void)
     }
     PASS();
 }
-TH_REG("ra_ssa", ssa_ra_rejects_cleanly)
+TH_REG("rss", 5, "rejects cleanly", rss05)
 
 /* ---- The allocator doesn't take the compiler down ---- */
 
 /* Bad output is one thing, a crash is another. Everything above runs through
  * here with the budget squeezed hard, and a clean rejection is fine. */
-static void ssa_ra_survives_pressure(void)
+static void rss06(void)
 {
     const char *caps[] = { "", "--max-vgprs 4", "--max-vgprs 2", NULL };
     int c, i;
@@ -258,13 +258,13 @@ static void ssa_ra_survives_pressure(void)
     }
     PASS();
 }
-TH_REG("ra_ssa", ssa_ra_survives_pressure)
+TH_REG("rss", 6, "survives pressure", rss06)
 
 /* ---- Both allocators agree on the shape of what they emit ---- */
 
 /* Not a text diff: the whole point is that they allocate differently. But a
  * kernel is still a kernel, so the entry label and terminator must survive. */
-static void ssa_ra_emits_a_kernel(void)
+static void rss07(void)
 {
     char cmd[TH_BUFSZ];
     int i;
@@ -280,4 +280,4 @@ static void ssa_ra_emits_a_kernel(void)
     }
     PASS();
 }
-TH_REG("ra_ssa", ssa_ra_emits_a_kernel)
+TH_REG("rss", 7, "the allocator emits a kernel", rss07)

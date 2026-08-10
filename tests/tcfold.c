@@ -19,7 +19,7 @@ static const char *strnstr_range(const char *start, const char *end,
 
 /* ---- cf: integer arithmetic folded ---- */
 
-static void cf_int_arith(void)
+static void cfd01(void)
 {
     int rc = th_run(BC_BIN " --ir tests/test_cf.cu", obuf, TH_BUFSZ);
     CHEQ(rc, 0);
@@ -35,11 +35,11 @@ static void cf_int_arith(void)
     CHECK(strnstr_range(body, fn_end, " 7") != NULL);
     PASS();
 }
-TH_REG("cf", cf_int_arith)
+TH_REG("cfd", 1, "integer arithmetic folds", cfd01)
 
 /* ---- cf: chained constants fold ---- */
 
-static void cf_chain(void)
+static void cfd02(void)
 {
     int rc = th_run(BC_BIN " --ir tests/test_cf.cu", obuf, TH_BUFSZ);
     CHEQ(rc, 0);
@@ -55,11 +55,11 @@ static void cf_chain(void)
     CHECK(strnstr_range(body, fn_end, " 20") != NULL);
     PASS();
 }
-TH_REG("cf", cf_chain)
+TH_REG("cfd", 2, "folding follows a chain", cfd02)
 
 /* ---- cf: icmp + select with constant condition ---- */
 
-static void cf_icmp_select(void)
+static void cfd03(void)
 {
     int rc = th_run(BC_BIN " --ir tests/test_cf.cu", obuf, TH_BUFSZ);
     CHEQ(rc, 0);
@@ -74,11 +74,11 @@ static void cf_icmp_select(void)
     CHECK(strnstr_range(body, fn_end, "= select") == NULL);
     PASS();
 }
-TH_REG("cf", cf_icmp_select)
+TH_REG("cfd", 3, "icmp feeding select folds", cfd03)
 
 /* ---- cf: integer division by zero not folded ---- */
 
-static void cf_divzero(void)
+static void cfd04(void)
 {
     int rc = th_run(BC_BIN " --ir tests/test_cf.cu", obuf, TH_BUFSZ);
     CHEQ(rc, 0);
@@ -92,11 +92,11 @@ static void cf_divzero(void)
     CHECK(strnstr_range(body, fn_end, "= sdiv") != NULL);
     PASS();
 }
-TH_REG("cf", cf_divzero)
+TH_REG("cfd", 4, "sdiv by zero survives, folding it is UB", cfd04)
 
 /* ---- cf: integer/float conversions folded ---- */
 
-static void cf_conv(void)
+static void cfd05(void)
 {
     int rc = th_run(BC_BIN " --ir tests/test_cf.cu", obuf, TH_BUFSZ);
     CHEQ(rc, 0);
@@ -111,11 +111,11 @@ static void cf_conv(void)
     CHECK(strnstr_range(body, fn_end, "= fptosi") == NULL);
     PASS();
 }
-TH_REG("cf", cf_conv)
+TH_REG("cfd", 5, "conversions fold", cfd05)
 
 /* ---- cf: float arithmetic folded ---- */
 
-static void cf_float(void)
+static void cfd06(void)
 {
     int rc = th_run(BC_BIN " --ir tests/test_cf.cu", obuf, TH_BUFSZ);
     CHEQ(rc, 0);
@@ -131,4 +131,4 @@ static void cf_float(void)
     CHECK(strnstr_range(body, fn_end, "f32 4") != NULL);
     PASS();
 }
-TH_REG("cf", cf_float)
+TH_REG("cfd", 6, "float arithmetic folds", cfd06)

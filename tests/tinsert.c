@@ -14,7 +14,7 @@
 
 /* ---- insert: value refs slide, BR block ref stays ---- */
 
-static void insert_basic(void)
+static void ins01(void)
 {
     bir_module_t *M = malloc(sizeof(*M));
     uint32_t i32, vt, at;
@@ -88,11 +88,11 @@ static void insert_basic(void)
     free(M);
     PASS();
 }
-TH_REG("insert", insert_basic)
+TH_REG("ins", 1, "value refs slide, a BR block ref stays", ins01)
 
 /* ---- insert: PHI + BR_COND block halves survive, value halves slide ---- */
 
-static void insert_phi_blockrefs(void)
+static void ins02(void)
 {
     bir_module_t *M = malloc(sizeof(*M));
     uint32_t i32, vt, at;
@@ -170,4 +170,4 @@ static void insert_phi_blockrefs(void)
     free(M);
     PASS();
 }
-TH_REG("insert", insert_phi_blockrefs)
+TH_REG("ins", 2, "PHI block halves survive, values slide", ins02)

@@ -38,7 +38,7 @@ static int emit_struct_msl(char *out, int cap)
 }
 
 /* The headline: not one goto, not one block label, in the whole file. */
-static void struct_no_gotos(void)
+static void str01(void)
 {
     int n = emit_struct_msl(msl, sizeof(msl));
     CHECK(n > 0);
@@ -47,11 +47,11 @@ static void struct_no_gotos(void)
     CHECK(strstr(msl, ": ;") == NULL);
     PASS();
 }
-TH_REG("struct", struct_no_gotos)
+TH_REG("str", 1, "structurises without gotos", str01)
 
 /* The if and the if/else both turn into real ifs, and the else turns up
  * exactly where an else is wanted. */
-static void struct_conditionals(void)
+static void str02(void)
 {
     int n = emit_struct_msl(msl, sizeof(msl));
     CHECK(n > 0);
@@ -63,12 +63,12 @@ static void struct_conditionals(void)
     CHECK(strstr(k, "} else {") != NULL && strstr(k, "} else {") < end);
     PASS();
 }
-TH_REG("struct", struct_conditionals)
+TH_REG("str", 2, "conditionals structurise", str02)
 
 /* The counted for becomes a while(true), and both loop-carried values, the
  * counter and the accumulator, get settled by copies before the lap ends.
  * If either copy were missing the loop would compute rubbish. */
-static void struct_for_loop(void)
+static void str03(void)
 {
     int n = emit_struct_msl(msl, sizeof(msl));
     CHECK(n > 0);
@@ -80,12 +80,12 @@ static void struct_for_loop(void)
     CHECK(strstr(k, "continue;") != NULL && strstr(k, "continue;") < end);
     PASS();
 }
-TH_REG("struct", struct_for_loop)
+TH_REG("str", 3, "for loops structurise", str03)
 
 /* The while with the break and the continue keeps both: the break leaves
  * the loop, the continue takes another lap, and neither is a goto in a
  * trench coat. */
-static void struct_while_break(void)
+static void str04(void)
 {
     int n = emit_struct_msl(msl, sizeof(msl));
     CHECK(n > 0);
@@ -98,4 +98,4 @@ static void struct_while_break(void)
     CHECK(strstr(k, "continue;") != NULL && strstr(k, "continue;") < end);
     PASS();
 }
-TH_REG("struct", struct_while_break)
+TH_REG("str", 4, "while with break structurises", str04)

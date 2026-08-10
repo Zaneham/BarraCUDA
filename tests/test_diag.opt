@@ -1,0 +1,7 @@
+# Options for test_diag.cu, read by reprocheck.sh.
+#
+# "xfail MODE reason" declares a mode this fixture is known not to survive.
+# "xfail all reason" covers every mode. Anything not declared here has to
+# compile, twice, to identical bytes. An xfail that starts passing is also
+# reported, because a stale exception is how a fixed bug goes unnoticed.
+xfail all  a diagnostics fixture, it is meant to be rejected

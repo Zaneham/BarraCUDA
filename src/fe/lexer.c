@@ -115,6 +115,15 @@ static int lookup_keyword(const char *src, uint32_t len)
     return TOK_IDENT;
 }
 
+/* The table stays static; the suite only needs to read the order. */
+int lexer_kw_count(void) { return NUM_KEYWORDS; }
+
+const char *lexer_kw_at(int i)
+{
+    if (i < 0 || i >= NUM_KEYWORDS) return NULL;
+    return keywords[i].name;
+}
+
 static const char *tok_names[] = {
     [TOK_INT_LIT]       = "INT_LIT",
     [TOK_FLOAT_LIT]     = "FLOAT_LIT",

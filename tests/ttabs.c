@@ -4,10 +4,11 @@
 
 #include "tharns.h"
 #include "amdgpu.h"
+#include "lexer.h"
 
 /* ---- tables: GFX11 completeness ---- */
 
-static void tab_gx11(void)
+static void tab01(void)
 {
     int miss = 0;
     for (int i = 0; i < AMD_OP_COUNT; i++) {
@@ -27,11 +28,11 @@ static void tab_gx11(void)
     CHEQ(miss, 0);
     PASS();
 }
-TH_REG("tables", tab_gx11)
+TH_REG("tab", 1, "GFX11 table has no gaps", tab01)
 
 /* ---- tables: GFX10 completeness ---- */
 
-static void tab_gx10(void)
+static void tab02(void)
 {
     int miss = 0;
     for (int i = 0; i < AMD_OP_COUNT; i++) {
@@ -47,11 +48,11 @@ static void tab_gx10(void)
     CHEQ(miss, 0);
     PASS();
 }
-TH_REG("tables", tab_gx10)
+TH_REG("tab", 2, "GFX10 table has no gaps", tab02)
 
 /* ---- tables: GFX10 DS mnemonic is ds_read, not ds_load ---- */
 
-static void tab_mnem(void)
+static void tab03(void)
 {
     CHECK(amd_enc_table_gfx10[AMD_DS_READ_B32].mnemonic != NULL);
     CHSTR(amd_enc_table_gfx10[AMD_DS_READ_B32].mnemonic, "ds_read_b32");
@@ -59,11 +60,11 @@ static void tab_mnem(void)
     CHSTR(amd_enc_table_gfx10[AMD_DS_WRITE_B32].mnemonic, "ds_write_b32");
     PASS();
 }
-TH_REG("tables", tab_mnem)
+TH_REG("tab", 3, "GFX10 DS ops are read and write", tab03)
 
 /* ---- tables: known opcode differences ---- */
 
-static void tab_diff(void)
+static void tab04(void)
 {
     /* s_and_b32: GFX10=0x0E, GFX11=0x16 */
     CHEQ(amd_enc_table[AMD_S_AND_B32].hw_opcode,         0x16);
@@ -79,4 +80,50 @@ static void tab_diff(void)
 
     PASS();
 }
-TH_REG("tables", tab_diff)
+TH_REG("tab", 4, "GFX10 and GFX11 opcodes differ where known", tab04)
+
+/* ---- tables: keyword table order ---- */
+
+/* Nothing checked this until now, which was optimistic of us. A misfiled entry
+ * lexes its keyword as an identifier and the mess turns up as a parse error
+ * somewhere downstream, a long way from the typo that caused it. */
+
+static void tab05(void)
+{
+    int n = lexer_kw_count();
+    CHECK(n > 0);
+    for (int i = 1; i < n; i++) {
+        const char *prev = lexer_kw_at(i - 1), *cur = lexer_kw_at(i);
+        CHECK(prev != NULL && cur != NULL);
+        if (strcmp(prev, cur) >= 0) {
+            printf("  keyword %d (%s) is not after %d (%s)\n",
+                   i, cur, i - 1, prev);
+            nfail++;
+            return;
+        }
+    }
+    PASS();
+}
+TH_REG("tab", 5, "keyword table is strictly ascending", tab05)
+
+/* The order matters because of what the search does with it, so check the
+ * search too rather than only the invariant it relies on. */
+static void tab06(void)
+{
+    token_t toks[8];
+    int n = lexer_kw_count();
+
+    for (int i = 0; i < n; i++) {
+        const char *kw = lexer_kw_at(i);
+        lexer_t L;
+        lexer_init(&L, kw, (uint32_t)strlen(kw), toks, 8);
+        lexer_tokenize(&L);
+        if (L.num_tokens == 0 || toks[0].type == TOK_IDENT) {
+            printf("  keyword %s (%d) lexes as an identifier\n", kw, i);
+            nfail++;
+            return;
+        }
+    }
+    PASS();
+}
+TH_REG("tab", 6, "every keyword still lexes as a keyword", tab06)

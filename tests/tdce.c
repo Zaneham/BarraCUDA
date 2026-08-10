@@ -28,7 +28,7 @@ static int count_lines(const char *start, const char *end)
 
 /* ---- dce: dead chain eliminated ---- */
 
-static void dce_chain(void)
+static void dce01(void)
 {
     int rc = th_run(BC_BIN " --ir tests/test_dce.cu", obuf, TH_BUFSZ);
     CHEQ(rc, 0);
@@ -45,11 +45,11 @@ static void dce_chain(void)
     CHECK(strnstr_range(fn, fn_end, "store ") != NULL);
     PASS();
 }
-TH_REG("dce", dce_chain)
+TH_REG("dce", 1, "a dead chain goes", dce01)
 
 /* ---- dce: unused non-volatile load eliminated ---- */
 
-static void dce_load(void)
+static void dce02(void)
 {
     int rc = th_run(BC_BIN " --ir tests/test_dce.cu", obuf, TH_BUFSZ);
     CHEQ(rc, 0);
@@ -65,11 +65,11 @@ static void dce_load(void)
     CHECK(strnstr_range(body, fn_end, "= gep") == NULL);
     PASS();
 }
-TH_REG("dce", dce_load)
+TH_REG("dce", 2, "an unused non-volatile load goes", dce02)
 
 /* ---- dce: params survive even if unused ---- */
 
-static void dce_param(void)
+static void dce03(void)
 {
     int rc1 = th_run(BC_BIN " --ir tests/test_dce.cu", obuf, TH_BUFSZ);
     CHEQ(rc1, 0);
@@ -94,11 +94,11 @@ static void dce_param(void)
     CHECK(strstr(fn1, "i32 %3") != NULL);
     PASS();
 }
-TH_REG("dce", dce_param)
+TH_REG("dce", 3, "params survive even when unused", dce03)
 
 /* ---- dce: side effects survive ---- */
 
-static void dce_side(void)
+static void dce04(void)
 {
     int rc = th_run(BC_BIN " --ir tests/test_dce.cu", obuf, TH_BUFSZ);
     CHEQ(rc, 0);
@@ -110,11 +110,11 @@ static void dce_side(void)
     CHECK(strnstr_range(fn, fn_end, "barrier") != NULL);  /* unique opcode */
     PASS();
 }
-TH_REG("dce", dce_side)
+TH_REG("dce", 4, "side effects survive", dce04)
 
 /* ---- dce: empty function unchanged ---- */
 
-static void dce_empty(void)
+static void dce05(void)
 {
     int rc = th_run(BC_BIN " --ir tests/test_dce.cu", obuf, TH_BUFSZ);
     CHEQ(rc, 0);
@@ -125,11 +125,11 @@ static void dce_empty(void)
     CHECK(strnstr_range(fn, fn_end, "ret") != NULL);
     PASS();
 }
-TH_REG("dce", dce_empty)
+TH_REG("dce", 5, "an empty function is unchanged", dce05)
 
 /* ---- dce: no dead code — output identical with and without DCE ---- */
 
-static void dce_nop(void)
+static void dce06(void)
 {
     int rc1 = th_run(BC_BIN " --ir tests/test_dce.cu", obuf, TH_BUFSZ);
     CHEQ(rc1, 0);
@@ -156,11 +156,11 @@ static void dce_nop(void)
     CHECK(strnstr_range(fn1, end1, "store ") != NULL);
     PASS();
 }
-TH_REG("dce", dce_nop)
+TH_REG("dce", 6, "no dead code means identical output", dce06)
 
 /* ---- dce: instruction count drops ---- */
 
-static void dce_count(void)
+static void dce07(void)
 {
     int rc1 = th_run(BC_BIN " --ir tests/test_dce.cu", obuf, TH_BUFSZ);
     CHEQ(rc1, 0);
@@ -180,4 +180,4 @@ static void dce_count(void)
     CHECK(n_noopt > n_opt);
     PASS();
 }
-TH_REG("dce", dce_count)
+TH_REG("dce", 7, "instruction count actually drops", dce07)

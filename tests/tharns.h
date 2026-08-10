@@ -9,27 +9,47 @@
 
 typedef void (*tfunc_t)(void);
 
+/* Names are family plus number, PDS member style, so an alphabetical listing
+ * groups and orders itself. I got this from living in z390 and mainframes for
+ * a while, so it is a bit cargo-culty, but the listing really does sort itself
+ * and nothing drifts. The name says nothing, so tdesc says it instead. */
 typedef struct {
     const char *tname;
-    const char *tcats;
+    const char *tfam;
+    int         tnum;
+    const char *tdesc;
     tfunc_t     func;
 } tcase_t;
 
 #define TH_MAXTS 512
 #define TH_BUFSZ 4096
 
+/* Column widths for the result line. TH_DESCW is a budget, not a hint. A
+ * description that overruns it is a description trying to become a comment. */
+#define TH_NAMEW 8
+#define TH_DESCW 46
+
 extern tcase_t th_list[];
 extern int th_cnt;
+extern int th_over;
 extern int npass, nfail, nskip;
 
 /* ---- Self-Registration ---- */
 
 /* Works on gcc and clang, which is everyone who matters
  * and several who don't. MSVC users: you know what you did. */
-#define TH_REG(cat, fn) \
+
+/* fam has to be in fam_order over in tmain.c and fn has to be spelled fam then
+ * num, padded. th_check enforces both, which is VERY IMPORTANT, because a test
+ * filed under a family nobody lists is a test that quietly stops running and
+ * still reports green. Overflow gets counted rather than swallowed for the
+ * same reason. */
+#define TH_REG(fam, num, desc, fn) \
     __attribute__((constructor)) static void reg_##fn(void) { \
         if (th_cnt < TH_MAXTS) \
-            th_list[th_cnt++] = (tcase_t){#fn, cat, fn}; \
+            th_list[th_cnt++] = (tcase_t){#fn, fam, num, desc, fn}; \
+        else \
+            th_over++; \
     }
 
 /* ---- Assertions ---- */

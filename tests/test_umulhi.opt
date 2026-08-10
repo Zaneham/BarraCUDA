@@ -1,0 +1,2 @@
+# Options for test_umulhi.cu. See test_diag.opt for the format.
+xfail --amdgpu  __umul64hi is not implemented on the AMD backend
