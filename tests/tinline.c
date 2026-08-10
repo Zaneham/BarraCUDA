@@ -9,7 +9,7 @@ static char obuf[TH_BUFSZ];
 
 /* On a GPU target every device call is inlined, so no call survives in the IR
  * (the standalone device bodies are inlined into their callers too). */
-static void inl_gpu_no_calls(void)
+static void inl01(void)
 {
     int rc = th_run(BC_BIN " --amdgpu --ir tests/device_calls.cu",
                     obuf, TH_BUFSZ);
@@ -19,7 +19,7 @@ static void inl_gpu_no_calls(void)
 }
 
 /* And the kernel compiles the whole way to a .hsaco with the calls gone. */
-static void inl_gpu_binary(void)
+static void inl02(void)
 {
     const char *out = "test_inline.hsaco";
     int rc = th_run(BC_BIN " --amdgpu-bin tests/device_calls.cu "
@@ -31,7 +31,7 @@ static void inl_gpu_binary(void)
 }
 
 /* NVIDIA and Tensix isel cannot emit a call either, so they inline too. */
-static void inl_other_gpu_no_calls(void)
+static void inl03(void)
 {
     int rc = th_run(BC_BIN " --nvidia-ptx --ir tests/device_calls.cu",
                     obuf, TH_BUFSZ);
@@ -47,7 +47,7 @@ static void inl_other_gpu_no_calls(void)
 
 /* The CPU backend has a real SysV call ABI, so the inliner must not touch it:
  * the device calls stay as calls. */
-static void inl_cpu_keeps_calls(void)
+static void inl04(void)
 {
     int rc = th_run(BC_BIN " --cpu --ir tests/device_calls.cu",
                     obuf, TH_BUFSZ);
@@ -56,7 +56,7 @@ static void inl_cpu_keeps_calls(void)
     PASS();
 }
 
-TH_REG("inline", inl_gpu_no_calls);
-TH_REG("inline", inl_gpu_binary);
-TH_REG("inline", inl_other_gpu_no_calls);
-TH_REG("inline", inl_cpu_keeps_calls);
+TH_REG("inl", 1, "a GPU kernel ends up with no calls", inl01);
+TH_REG("inl", 2, "a GPU binary inlines", inl02);
+TH_REG("inl", 3, "other GPU targets inline too", inl03);
+TH_REG("inl", 4, "CPU keeps its calls", inl04);

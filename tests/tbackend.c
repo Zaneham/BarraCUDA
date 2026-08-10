@@ -5,7 +5,7 @@
 #include "backend.h"
 #include <string.h>
 
-static void be_list_ok(void)
+static void bkd01(void)
 {
     uint32_t n = 0;
     for (uint32_t i = 0; be_list[i] != NULL && i < 64; i++) {
@@ -19,9 +19,9 @@ static void be_list_ok(void)
     CHECK(n >= 8);
     PASS();
 }
-TH_REG("backend", be_list_ok)
+TH_REG("bkd", 1, "list ok", bkd01)
 
-static void be_find_hits(void)
+static void bkd02(void)
 {
     static const char * const known[] = {
         "amdgpu", "nvptx", "tensix", "tensix-rv32",
@@ -34,18 +34,18 @@ static void be_find_hits(void)
     }
     PASS();
 }
-TH_REG("backend", be_find_hits)
+TH_REG("bkd", 2, "find hits", bkd02)
 
-static void be_find_miss(void)
+static void bkd03(void)
 {
     CHECK(be_find(NULL) == NULL);
     CHECK(be_find("") == NULL);
     CHECK(be_find("this-is-not-a-real-backend") == NULL);
     PASS();
 }
-TH_REG("backend", be_find_miss)
+TH_REG("bkd", 3, "find missing", bkd03)
 
-static void be_feats_sane(void)
+static void bkd04(void)
 {
     const uint32_t all =
         BE_F_SIMT | BE_F_SCALAR | BE_F_ATOMIC | BE_F_SHARED |
@@ -57,7 +57,7 @@ static void be_feats_sane(void)
     }
     PASS();
 }
-TH_REG("backend", be_feats_sane)
+TH_REG("bkd", 4, "feats sane", bkd04)
 
 /* ---- one target per run ----
  * Every backend emits to cfg->output_file, so several at once used to
@@ -65,7 +65,7 @@ TH_REG("backend", be_feats_sane)
 
 static char be_obuf[TH_BUFSZ];
 
-static void be_one_target(void)
+static void bkd05(void)
 {
     int rc = th_run(BC_BIN " --amdgpu-bin --nvidia-ptx --metal "
                     "tests/vector_add.cu -o be_multi.out",
@@ -79,9 +79,9 @@ static void be_one_target(void)
     remove("be_multi.out");
     PASS();
 }
-TH_REG("backend", be_one_target)
+TH_REG("bkd", 5, "one target", bkd05)
 
-static void be_one_target_ok(void)
+static void bkd06(void)
 {
     int rc = th_run(BC_BIN " --nvidia-ptx tests/vector_add.cu -o be_single.ptx",
                     be_obuf, TH_BUFSZ);
@@ -89,14 +89,14 @@ static void be_one_target_ok(void)
     remove("be_single.ptx");
     PASS();
 }
-TH_REG("backend", be_one_target_ok)
+TH_REG("bkd", 6, "one target ok", bkd06)
 
 /* ---- no two backends claim the same flag ----
  * Flags are declared in the descriptor rather than discovered, so a
  * collision is a static error we can catch here instead of a
  * first-past-the-post race decided by be_list order. */
 
-static void be_flags_unique(void)
+static void bkd07(void)
 {
     for (uint32_t i = 0; be_list[i] != NULL && i < 64; i++) {
         if (be_list[i]->flags == NULL) continue;
@@ -112,14 +112,14 @@ static void be_flags_unique(void)
     }
     PASS();
 }
-TH_REG("backend", be_flags_unique)
+TH_REG("bkd", 7, "flags unique", bkd07)
 
 /* ---- a declared flag is a parsed flag ----
  * The list and parse() could drift apart, which would leave a flag
  * routed to a backend that then ignores it. Offering each one back
  * through the registry proves the pairing still holds. */
 
-static void be_flags_parse(void)
+static void bkd08(void)
 {
     for (uint32_t i = 0; be_list[i] != NULL && i < 64; i++) {
         if (be_list[i]->flags == NULL) continue;
@@ -133,7 +133,7 @@ static void be_flags_parse(void)
     }
     PASS();
 }
-TH_REG("backend", be_flags_parse)
+TH_REG("bkd", 8, "flags parse", bkd08)
 
 /* ---- every backend flag is documented ----
  * Backends own their flags now, so --help can fall behind without
@@ -141,7 +141,7 @@ TH_REG("backend", be_flags_parse)
 
 static char be_hbuf[TH_BUFSZ];
 
-static void be_flags_documented(void)
+static void bkd09(void)
 {
     th_run(BC_BIN " --help", be_hbuf, TH_BUFSZ);
     for (uint32_t i = 0; be_list[i] != NULL && i < 64; i++) {
@@ -155,4 +155,4 @@ static void be_flags_documented(void)
     }
     PASS();
 }
-TH_REG("backend", be_flags_documented)
+TH_REG("bkd", 9, "flags documented", bkd09)

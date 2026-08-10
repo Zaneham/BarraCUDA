@@ -110,7 +110,9 @@ TSRC    = tests/tmain.c tests/tsmoke.c tests/tcomp.c tests/tenc.c \
           tests/tcbsync.c \
           tests/tsoft_fp.c \
           tests/tsysprint.c \
-          tests/tbackend.c
+          tests/tbackend.c \
+          tests/tordr.c \
+          tests/trpi.c
 
 TOBJS   = $(TSRC:%.c=$(OBJDIR)/%.o)
 COBJS   = $(OBJDIR)/src/kauri_impl.o $(OBJDIR)/src/ir/bir.o $(OBJDIR)/src/ir/bir_print.o $(OBJDIR)/src/ir/bir_lower.o $(OBJDIR)/src/ir/bir_mem2reg.o $(OBJDIR)/src/ir/bir_cfold.o $(OBJDIR)/src/ir/bir_dce.o $(OBJDIR)/src/ir/bir_struct.o $(OBJDIR)/src/ir/bir_insert.o $(OBJDIR)/src/ir/bir_sroa.o $(OBJDIR)/src/ir/bir_inline.o \

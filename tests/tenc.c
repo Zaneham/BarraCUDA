@@ -69,7 +69,7 @@ static moperand_t imm(int32_t val)
  * [31:23]=0xBE8 prefix [22:16]=SDST(7) [15:8]=OP(0x00) [7:0]=SSRC0(2)
  * Expected: 0xBE870002 */
 
-static void enc_sop1(void)
+static void enc01(void)
 {
     enc_setup(AMD_TARGET_GFX1100);
     minst_t *mi     = &A->minsts[0];
@@ -83,14 +83,14 @@ static void enc_sop1(void)
     CHEQX(dw(0), 0xBE870002u);
     PASS();
 }
-TH_REG("encode", enc_sop1)
+TH_REG("enc", 1, "SOP1 encodes s_mov_b32", enc01)
 
 /* ---- encode: SOP2 ---- */
 /* s_add_u32 s7, s2, s3 -- GFX11
  * [31:30]=10 [29:23]=OP(0x00) [22:16]=SDST(7) [15:8]=SSRC1(3) [7:0]=SSRC0(2)
  * Expected: 0x80070302 */
 
-static void enc_sop2(void)
+static void enc02(void)
 {
     enc_setup(AMD_TARGET_GFX1100);
     minst_t *mi     = &A->minsts[0];
@@ -105,14 +105,14 @@ static void enc_sop2(void)
     CHEQX(dw(0), 0x80070302u);
     PASS();
 }
-TH_REG("encode", enc_sop2)
+TH_REG("enc", 2, "SOP2 encodes s_add_u32", enc02)
 
 /* ---- encode: VOP2 ---- */
 /* v_add_f32 v1, v2, v3 -- GFX11
  * [31]=0 [30:25]=OP(0x03) [24:17]=VDST(1) [16:9]=VSRC1(3) [8:0]=SRC0(v2=258)
  * Expected: 0x06020702 */
 
-static void enc_vop2(void)
+static void enc03(void)
 {
     enc_setup(AMD_TARGET_GFX1100);
     minst_t *mi     = &A->minsts[0];
@@ -127,14 +127,14 @@ static void enc_vop2(void)
     CHEQX(dw(0), 0x06020702u);
     PASS();
 }
-TH_REG("encode", enc_vop2)
+TH_REG("enc", 3, "VOP2 encodes v_add_f32", enc03)
 
 /* ---- encode: VOP1 + literal ---- */
 /* v_mov_b32 v5, 0xDEAD -- GFX11
  * [31:25]=0x3F [24:17]=VDST(5) [16:9]=OP(0x01) [8:0]=SRC0(255=literal)
  * DW0: 0x7E0A02FF  DW1: 0x0000DEAD */
 
-static void enc_vop1(void)
+static void enc04(void)
 {
     enc_setup(AMD_TARGET_GFX1100);
     minst_t *mi     = &A->minsts[0];
@@ -149,7 +149,7 @@ static void enc_vop1(void)
     CHEQX(dw(1), 0x0000DEADu);
     PASS();
 }
-TH_REG("encode", enc_vop1)
+TH_REG("enc", 4, "VOP1 takes a literal operand", enc04)
 
 /* ---- encode: SMEM GFX11 vs GFX10 ---- */
 /* s_load_dword s7, s[2:3], 0
@@ -157,7 +157,7 @@ TH_REG("encode", enc_vop1)
  * GFX11: DW1 SOFFSET null=0x7C -> 0xF8000000
  * GFX10: DW1 SOFFSET null=0x7D -> 0xFA000000 */
 
-static void enc_smem(void)
+static void enc05(void)
 {
     /* GFX11 */
     enc_setup(AMD_TARGET_GFX1100);
@@ -188,7 +188,7 @@ static void enc_smem(void)
     CHEQX(dw(1), 0xFA000000u);
     PASS();
 }
-TH_REG("encode", enc_smem)
+TH_REG("enc", 5, "SMEM differs between GFX11 and GFX10", enc05)
 
 /* ---- encode: global_load_dword ---- */
 /* global_load_dword v5, v2 -- GFX11
@@ -197,7 +197,7 @@ TH_REG("encode", enc_smem)
  * DW1: [31:24]=VDST(5) [23:16]=SADDR(0x7C=null) [15:8]=DATA(0) [7:0]=ADDR(2)
  *      = 0x057C0002 */
 
-static void enc_glob(void)
+static void enc06(void)
 {
     enc_setup(AMD_TARGET_GFX1100);
     minst_t *mi     = &A->minsts[0];
@@ -212,7 +212,7 @@ static void enc_glob(void)
     CHEQX(dw(1), 0x057C0002u);
     PASS();
 }
-TH_REG("encode", enc_glob)
+TH_REG("enc", 6, "global_load_dword encodes", enc06)
 
 /* ---- encode: DS ---- */
 /* ds_load_b32 v5, v2 -- GFX11
@@ -221,7 +221,7 @@ TH_REG("encode", enc_glob)
  * DW1: [31:24]=VDST(5) [15:8]=DATA0(0) [7:0]=ADDR(2)
  *      = 0x05000002 */
 
-static void enc_ds(void)
+static void enc07(void)
 {
     enc_setup(AMD_TARGET_GFX1100);
     minst_t *mi     = &A->minsts[0];
@@ -236,13 +236,13 @@ static void enc_ds(void)
     CHEQX(dw(1), 0x05000002u);
     PASS();
 }
-TH_REG("encode", enc_ds)
+TH_REG("enc", 7, "DS encodes ds_read_b32", enc07)
 
 /* ---- encode: s_endpgm ---- */
 /* GFX10: SOPP hw_op=0x01, SIMM16=0
  * Expected: 0xBF810000 */
 
-static void enc_endp(void)
+static void enc08(void)
 {
     enc_setup(AMD_TARGET_GFX1030);
     minst_t *mi  = &A->minsts[0];
@@ -254,7 +254,7 @@ static void enc_endp(void)
     CHEQX(dw(0), 0xBF810000u);
     PASS();
 }
-TH_REG("encode", enc_endp)
+TH_REG("enc", 8, "s_endpgm encodes", enc08)
 
 /* ---- encode: s_waitcnt vmcnt(0) ---- */
 /* GFX10: hw_op=0x0C, vmcnt=0, lgkmcnt=63, expcnt=7
@@ -262,7 +262,7 @@ TH_REG("encode", enc_endp)
  *         = 0x3F70
  * DW = 0xBF8C3F70 */
 
-static void enc_wait(void)
+static void enc09(void)
 {
     enc_setup(AMD_TARGET_GFX1030);
     minst_t *mi  = &A->minsts[0];
@@ -275,4 +275,4 @@ static void enc_wait(void)
     CHEQX(dw(0), 0xBF8C3F70u);
     PASS();
 }
-TH_REG("encode", enc_wait)
+TH_REG("enc", 9, "s_waitcnt vmcnt(0) encodes", enc09)

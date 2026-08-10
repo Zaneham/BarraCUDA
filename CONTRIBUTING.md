@@ -159,13 +159,51 @@ Tenstorrent additionally sits above BIR through TDF (Tile DataFlow), a small IR 
 # Build
 make
 
-# Run the test suite (currently 274 tests across the frontends,
+# Run the test suite (currently 390 tests across the frontends,
 # IR, backends, runtime, and SYSPRINT)
 make test
+
+# List the families, or run just one of them
+./trunner --families
+./trunner --fam rvi
+./trunner --list
 
 # Run the emulator test suite (RDNA3, requires tinygrad mockgpu in WSL)
 python tests/emu/run_emu.py
 ```
+
+### Test naming
+
+Tests are named for their family and their position in it, `rvi01`, `tdf39`,
+`smk04`, which is lifted straight off z390's `rt\test` directory where the
+members run `TESTDCB1` through `TESTDCB9`. It is a bit cargo-culted from the
+mainframe world and the eight character member limit it comes from stopped
+mattering decades ago, but an alphabetical listing groups and orders itself,
+grep agrees with the runner about what comes first, and nothing drifts.
+
+The family is the file stem and there is one family per file. `trv_isel.c`
+carries `rvi`, `ttdf.c` carries `tdf`. Add a test with:
+
+```c
+static void rvi66(void) { ...; PASS(); }
+TH_REG("rvi", 66, "what it checks, in a phrase", rvi66)
+```
+
+The name says nothing on its own, so the description carries it and shows up in
+`--list` and in the run. Keep it inside `TH_DESCW`. Every family has to appear
+in `fam_order` in `tests/tmain.c`, which is also where the running order lives,
+and `th_check` refuses to run if a name, number or family does not line up.
+That check exists because 278 of the tests used to register under families the
+runner had never heard of, where `--list` could not see them and `--cat` could
+not reach them.
+
+Regression tests for bugs that actually shipped go in `tests/trpi.c` with the
+issue number leading the description, z390's `RPI1540` habit with our numbering.
+
+`.cu` fixtures may carry a sidecar `tests/NAME.opt` declaring modes they are
+known not to survive, one `xfail MODE reason` per line. `make repro` requires
+every other mode to compile twice to identical bytes, and it reports an `xfail`
+that starts passing as well, so a stale exception does not hide a fix.
 
 Verify your changes don't introduce encoding regressions:
 ```bash

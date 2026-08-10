@@ -33,7 +33,7 @@ static int ab_snap(const ab_ctx_t *A, char *buf, int bsz)
 
 /* ---- ABEND Context Tests ---- */
 
-static void ab_init_def(void)
+static void abd01(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -46,12 +46,12 @@ static void ab_init_def(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_init_def)
+TH_REG("abd", 1, "init def", abd01)
 
 /* Arms and confirms the flag; can't actually raise a fault in-process
  * without terminating the test. Real behaviour is exercised by the
  * --cpu launcher when a kernel goes sideways. */
-static void ab_arm_cpu_ok(void)
+static void abd02(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -64,9 +64,9 @@ static void ab_arm_cpu_ok(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_arm_cpu_ok)
+TH_REG("abd", 2, "arm CPU ok", abd02)
 
-static void ab_trak_one(void)
+static void abd03(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -81,9 +81,9 @@ static void ab_trak_one(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_trak_one)
+TH_REG("abd", 3, "trak one", abd03)
 
-static void ab_trak_full(void)
+static void abd04(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -99,9 +99,9 @@ static void ab_trak_full(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_trak_full)
+TH_REG("abd", 4, "trak full", abd04)
 
-static void ab_snag_snap(void)
+static void abd05(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -132,9 +132,9 @@ static void ab_snag_snap(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_snag_snap)
+TH_REG("abd", 5, "snag snapshot", abd05)
 
-static void ab_mstr_all(void)
+static void abd06(void)
 {
     /* Every defined code should return a non-empty string */
     uint16_t codes[] = { AB_G0C1, AB_G0C4, AB_G0C5, AB_G0C7,
@@ -149,11 +149,11 @@ static void ab_mstr_all(void)
     CHECK(u != NULL);
     PASS();
 }
-TH_REG("abend", ab_mstr_all)
+TH_REG("abd", 6, "mstr all", abd06)
 
 /* ---- Fault Correlation Tests ---- */
 
-static void ab_near_inside(void)
+static void abd07(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -170,9 +170,9 @@ static void ab_near_inside(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_near_inside)
+TH_REG("abd", 7, "near inside", abd07)
 
-static void ab_near_past(void)
+static void abd08(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -190,9 +190,9 @@ static void ab_near_past(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_near_past)
+TH_REG("abd", 8, "near past", abd08)
 
-static void ab_near_before(void)
+static void abd09(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -209,9 +209,9 @@ static void ab_near_before(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_near_before)
+TH_REG("abd", 9, "near before", abd09)
 
-static void ab_near_gap(void)
+static void abd10(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -230,9 +230,9 @@ static void ab_near_gap(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_near_gap)
+TH_REG("abd", 10, "near gap", abd10)
 
-static void ab_near_empty(void)
+static void abd11(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -249,11 +249,11 @@ static void ab_near_empty(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_near_empty)
+TH_REG("abd", 11, "near empty", abd11)
 
 /* ---- Dump Formatting Tests ---- */
 
-static void ab_dump_hdr(void)
+static void abd12(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -275,9 +275,9 @@ static void ab_dump_hdr(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_dump_hdr)
+TH_REG("abd", 12, "dump header", abd12)
 
-static void ab_dump_mem(void)
+static void abd13(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -298,9 +298,9 @@ static void ab_dump_mem(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_dump_mem)
+TH_REG("abd", 13, "dump memory", abd13)
 
-static void ab_dump_disp(void)
+static void abd14(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -325,9 +325,9 @@ static void ab_dump_disp(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_dump_disp)
+TH_REG("abd", 14, "dump displacement", abd14)
 
-static void ab_dump_snap(void)
+static void abd15(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -360,9 +360,9 @@ static void ab_dump_snap(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_dump_snap)
+TH_REG("abd", 15, "dump snapshot", abd15)
 
-static void ab_dump_smap(void)
+static void abd16(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -385,9 +385,9 @@ static void ab_dump_smap(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_dump_smap)
+TH_REG("abd", 16, "dump source map", abd16)
 
-static void ab_dump_null(void)
+static void abd17(void)
 {
     /* Null context should return error, not crash */
     int rc = ab_dump(NULL, stderr);
@@ -401,7 +401,7 @@ static void ab_dump_null(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_dump_null)
+TH_REG("abd", 17, "dump null", abd17)
 
 /* ---- Source Map Tests ---- */
 
@@ -485,7 +485,7 @@ static int build_test_elf(uint8_t *buf, int bsz, int n_entries)
     return (int)total;
 }
 
-static void ab_slod_ok(void)
+static void abd18(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -509,9 +509,9 @@ static void ab_slod_ok(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_slod_ok)
+TH_REG("abd", 18, "slod ok", abd18)
 
-static void ab_slod_nosc(void)
+static void abd19(void)
 {
     /* ELF with no .debug_bc section */
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
@@ -530,9 +530,9 @@ static void ab_slod_nosc(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_slod_nosc)
+TH_REG("abd", 19, "slod no scratch", abd19)
 
-static void ab_slod_bad(void)
+static void abd20(void)
 {
     ab_ctx_t *A = calloc(1, sizeof(ab_ctx_t));
     CHECK(A != NULL);
@@ -554,11 +554,11 @@ static void ab_slod_bad(void)
     free(A);
     PASS();
 }
-TH_REG("abend", ab_slod_bad)
+TH_REG("abd", 20, "slod bad", abd20)
 
 /* ---- Lang Integration Tests ---- */
 
-static void ab_lang_en(void)
+static void abd21(void)
 {
     /* Compiled-in defaults should be present */
     const char *s = ab_afmt(AB_G0C4);
@@ -574,9 +574,9 @@ static void ab_lang_en(void)
     CHECK(s != NULL);
     PASS();
 }
-TH_REG("abend", ab_lang_en)
+TH_REG("abd", 21, "lang en", abd21)
 
-static void ab_lang_mi(void)
+static void abd22(void)
 {
     /* Load Maori translations and check ABEND messages */
     int rc = bc_eload("lang/mi.txt");
@@ -592,4 +592,4 @@ static void ab_lang_mi(void)
     bc_eload("lang/en.txt");
     PASS();
 }
-TH_REG("abend", ab_lang_mi)
+TH_REG("abd", 22, "lang mi", abd22)

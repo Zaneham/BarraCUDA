@@ -63,7 +63,7 @@ static void trace_sink(uint32_t cid, const char *cname,
 
 /* ---- Tests ---- */
 
-static void sp_intern_returns_same_id(void)
+static void spr01(void)
 {
     bc_sp_reset_globals();
     uint32_t a = bc_sp_intern("STEP1.TRACE");
@@ -74,9 +74,9 @@ static void sp_intern_returns_same_id(void)
     CHNE(a, c);
     PASS();
 }
-TH_REG("sysprint", sp_intern_returns_same_id)
+TH_REG("spr", 1, "intern returns same id", spr01)
 
-static void sp_class_name_roundtrip(void)
+static void spr02(void)
 {
     bc_sp_reset_globals();
     uint32_t id = bc_sp_intern("STEP2.ERROR");
@@ -85,9 +85,9 @@ static void sp_class_name_roundtrip(void)
     CHSTR(name, "STEP2.ERROR");
     PASS();
 }
-TH_REG("sysprint", sp_class_name_roundtrip)
+TH_REG("spr", 2, "class name roundtrip", spr02)
 
-static void sp_intern_rejects_empty_or_long(void)
+static void spr03(void)
 {
     bc_sp_reset_globals();
     CHEQ(bc_sp_intern(""), BC_SP_CLASS_NONE);
@@ -97,9 +97,9 @@ static void sp_intern_rejects_empty_or_long(void)
     CHEQ(bc_sp_intern(too_long), BC_SP_CLASS_NONE);
     PASS();
 }
-TH_REG("sysprint", sp_intern_rejects_empty_or_long)
+TH_REG("spr", 3, "intern rejects empty or long", spr03)
 
-static void sp_emit_drain_roundtrip(void)
+static void spr04(void)
 {
     bc_sp_reset_globals();
     cap_reset();
@@ -117,9 +117,9 @@ static void sp_emit_drain_roundtrip(void)
     CHSTR(cap_payload, "hello from the kernel");
     PASS();
 }
-TH_REG("sysprint", sp_emit_drain_roundtrip)
+TH_REG("spr", 4, "emit drain roundtrip", spr04)
 
-static void sp_emitf_formats(void)
+static void spr05(void)
 {
     bc_sp_reset_globals();
     cap_reset();
@@ -135,9 +135,9 @@ static void sp_emitf_formats(void)
     CHSTR(cap_payload, "tid=7 val=3.14");
     PASS();
 }
-TH_REG("sysprint", sp_emitf_formats)
+TH_REG("spr", 5, "emitf formats", spr05)
 
-static void sp_prefix_pattern_routes(void)
+static void spr06(void)
 {
     /* The Sysprint People's Front and the People's Front of
      * Sysprint shall both match STEP1.*, which is to say neither
@@ -167,9 +167,9 @@ static void sp_prefix_pattern_routes(void)
     CHSTR(trace_last, "t");
     PASS();
 }
-TH_REG("sysprint", sp_prefix_pattern_routes)
+TH_REG("spr", 6, "prefix pattern routes", spr06)
 
-static void sp_star_matches_everything(void)
+static void spr07(void)
 {
     bc_sp_reset_globals();
     cap_reset();
@@ -186,9 +186,9 @@ static void sp_star_matches_everything(void)
     CHEQ(cap_count, 2);
     PASS();
 }
-TH_REG("sysprint", sp_star_matches_everything)
+TH_REG("spr", 7, "star matches everything", spr07)
 
-static void sp_overflow_drops(void)
+static void spr08(void)
 {
     /* Telemetry that exceeds the buffer is silently lost. We do
      * not allocate more storage on the kernel's behalf. The
@@ -210,9 +210,9 @@ static void sp_overflow_drops(void)
     CHEQ(buf.dropped, 1);
     PASS();
 }
-TH_REG("sysprint", sp_overflow_drops)
+TH_REG("spr", 8, "overflow drops", spr08)
 
-static void sp_unmatched_class_silently_dropped(void)
+static void spr09(void)
 {
     bc_sp_reset_globals();
     err_count = 0; trace_count = 0;
@@ -228,4 +228,4 @@ static void sp_unmatched_class_silently_dropped(void)
     CHEQ(trace_count, 0);
     PASS();
 }
-TH_REG("sysprint", sp_unmatched_class_silently_dropped)
+TH_REG("spr", 9, "unmatched class silently dropped", spr09)

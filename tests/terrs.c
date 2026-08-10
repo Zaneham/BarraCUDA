@@ -7,7 +7,7 @@ static char obuf[TH_BUFSZ];
 
 /* ---- errors: syntax ---- */
 
-static void err_synt(void)
+static void err01(void)
 {
     int rc = th_run(BC_BIN " --amdgpu-bin tests/test_errors.cu -o err_test.hsaco",
                     obuf, TH_BUFSZ);
@@ -16,11 +16,11 @@ static void err_synt(void)
     remove("err_test.hsaco");
     PASS();
 }
-TH_REG("errors", err_synt)
+TH_REG("err", 1, "a syntax error is reported", err01)
 
 /* ---- errors: missing file ---- */
 
-static void err_miss(void)
+static void err02(void)
 {
     int rc = th_run(BC_BIN " --amdgpu-bin nonexistent_file_42.cu -o err_test.hsaco",
                     obuf, TH_BUFSZ);
@@ -28,13 +28,13 @@ static void err_miss(void)
     remove("err_test.hsaco");
     PASS();
 }
-TH_REG("errors", err_miss)
+TH_REG("err", 2, "a missing file is reported", err02)
 
 /* ---- errors: bad output directory ---- */
 /* /dev/null is a file, not a directory. You can't mkdir inside it.
  * Works on every Unix. On Windows we use NUL, same idea. */
 
-static void err_odir(void)
+static void err03(void)
 {
     char cmd[TH_BUFSZ];
 #ifdef _WIN32
@@ -52,13 +52,13 @@ static void err_odir(void)
           strstr(obuf, "error") != NULL);
     PASS();
 }
-TH_REG("errors", err_odir)
+TH_REG("err", 3, "a bad output directory is reported", err03)
 
 /* ---- errors: diagnostic rendering + real token text ----
  * A missing semicolon should render Clang-style (id in brackets, location
  * line, caret) and name the actual token it choked on, not the kind. */
 
-static void err_diag_render(void)
+static void err04(void)
 {
     int rc = th_run(BC_BIN " --parse tests/test_diag.cu", obuf, TH_BUFSZ);
     (void)rc;
@@ -69,13 +69,13 @@ static void err_diag_render(void)
     CHECK(strstr(obuf, "got 'IDENT'") == NULL);   /* not the kind name */
     PASS();
 }
-TH_REG("errors", err_diag_render)
+TH_REG("err", 4, "diagnostic renders real token text", err04)
 
 /* ---- calls: past sixteen arguments ----
  * Jorge Galvez's ocean kernels pass 23. Sema stopped counting at 16 and then
  * reported an arity mismatch against a count it had made up. */
 
-static void arg_many(void)
+static void err05(void)
 {
     int rc = th_run(BC_BIN " --nvidia-ptx tests/many_args.cu -o many_args.ptx",
                     obuf, TH_BUFSZ);
@@ -84,13 +84,13 @@ static void arg_many(void)
     remove("many_args.ptx");
     PASS();
 }
-TH_REG("errors", arg_many)
+TH_REG("err", 5, "calls past sixteen arguments", err05)
 
 /* ---- calls: past the cap ----
  * Overflowing has to say so. Silently dropping the tail would emit a call
  * with the wrong operands and nothing to show for it. */
 
-static void arg_cap(void)
+static void err06(void)
 {
     FILE *f = fopen("argcap_test.cu", "w");
     CHECK(f != NULL);
@@ -108,14 +108,14 @@ static void arg_cap(void)
     remove("argcap_test.ptx");
     PASS();
 }
-TH_REG("errors", arg_cap)
+TH_REG("err", 6, "calls past the cap", err06)
 
 /* ---- errors: sema errors are fatal ----
  * They used to be printed and then ignored by every mode but --sema, so the
  * backend ran on source we had already rejected and the exit status said the
  * compile went fine. */
 
-static void err_sema_fatal(void)
+static void err07(void)
 {
     FILE *f = fopen("semafail_test.cu", "w");
     CHECK(f != NULL);
@@ -134,4 +134,4 @@ static void err_sema_fatal(void)
     remove("semafail_test.ptx");
     PASS();
 }
-TH_REG("errors", err_sema_fatal)
+TH_REG("err", 7, "sema errors are fatal", err07)

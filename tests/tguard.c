@@ -6,7 +6,7 @@
 
 static char buf[1 << 16];
 
-static void guard_masks_not_ends(void)
+static void grd01(void)
 {
     char cmd[TH_BUFSZ];
     int rc;
@@ -23,4 +23,4 @@ static void guard_masks_not_ends(void)
 
     PASS();
 }
-TH_REG("guard", guard_masks_not_ends)
+TH_REG("grd", 1, "guarded lanes are masked, not ended", grd01)

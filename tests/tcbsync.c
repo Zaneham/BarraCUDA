@@ -27,7 +27,7 @@ static int find_word(uint32_t w)
 
 /* ---- the signal programs the NIU for a full-width atomic increment ---- */
 
-static void cb_sem_inc_encodes_atomic(void)
+static void cbs01(void)
 {
     rv_buf_init(&B);
     /* increment counter at remote 0x00009000, coords 0x00001234, by 1. */
@@ -54,11 +54,11 @@ static void cb_sem_inc_encodes_atomic(void)
     CHEQ(d[n - 1], rv_sw  (RV_T1, RV_T0, 0x28));
     PASS();
 }
-TH_REG("tensix", cb_sem_inc_encodes_atomic);
+TH_REG("cbs", 1, "semaphore inc encodes atomic", cbs01);
 
 /* ---- the wait is a two-instruction spin that branches back on itself ---- */
 
-static void cb_wait_is_spin_loop(void)
+static void cbs02(void)
 {
     rv_buf_init(&B);
     CHEQ(tt_sem_wait_ge(&B, 0x00009000u, 4u), BC_OK);
@@ -72,11 +72,11 @@ static void cb_wait_is_spin_loop(void)
     CHEQ(d[n - 1], rv_bltu(RV_T1, RV_T2, -4));
     PASS();
 }
-TH_REG("tensix", cb_wait_is_spin_loop);
+TH_REG("cbs", 2, "wait is spin loop", cbs02);
 
 /* ---- the CB ops are the wait/signal pair under pipeline names ---- */
 
-static void cb_push_is_sem_inc(void)
+static void cbs03(void)
 {
     static rv_buf_t A;
     rv_buf_init(&A);
@@ -88,9 +88,9 @@ static void cb_push_is_sem_inc(void)
     CHECK(memcmp(rv_buf_data(&A), rv_buf_data(&B), n * 4u) == 0);
     PASS();
 }
-TH_REG("tensix", cb_push_is_sem_inc);
+TH_REG("cbs", 3, "push is semaphore inc", cbs03);
 
-static void cb_wait_front_is_acquire(void)
+static void cbs04(void)
 {
     static rv_buf_t A;
     rv_buf_init(&A);
@@ -103,11 +103,11 @@ static void cb_wait_front_is_acquire(void)
     CHECK(memcmp(rv_buf_data(&A), rv_buf_data(&B), n * 4u) == 0);
     PASS();
 }
-TH_REG("tensix", cb_wait_front_is_acquire);
+TH_REG("cbs", 4, "wait front is acquire", cbs04);
 
 /* ---- acquire = wait_ge followed by an atomic decrement ---- */
 
-static void acquire_waits_then_decrements(void)
+static void cbs05(void)
 {
     static rv_buf_t A;
     rv_buf_init(&A);
@@ -120,11 +120,11 @@ static void acquire_waits_then_decrements(void)
     CHECK(memcmp(rv_buf_data(&A), rv_buf_data(&B), n * 4u) == 0);
     PASS();
 }
-TH_REG("tensix", acquire_waits_then_decrements);
+TH_REG("cbs", 5, "acquire waits then decrements", cbs05);
 
 /* ---- compute weave brackets the issue stream with the CB handshake ---- */
 
-static void compute_weave_brackets_issue(void)
+static void cbs06(void)
 {
     tt_module_t *m = (tt_module_t *)malloc(sizeof *m);
     tt_compute_sync_t s;
@@ -175,4 +175,4 @@ static void compute_weave_brackets_issue(void)
     free(m);
     PASS();
 }
-TH_REG("tensix", compute_weave_brackets_issue);
+TH_REG("cbs", 6, "compute weave brackets issue", cbs06);

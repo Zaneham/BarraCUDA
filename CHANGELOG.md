@@ -23,6 +23,35 @@ Booth — Changelog
   layout `bir.h` claims is checked rather than assumed
   (Zane Hambly, 2026-08-09)
 
+- tests are named for their family and position, `rvi01` and `tdf39` rather
+  than `rv_isel_max_frame_slots_in_range`, after z390's `TESTDCB1`. The family
+  is the file stem, the old descriptive name became a description the runner
+  prints, and `fam_order` in `tests/tmain.c` is the one place a family is
+  declared (Zane Hambly, 2026-08-10)
+
+- the runner refuses to start if a test registers an unknown family, a name
+  that disagrees with its number, or a number already taken. 278 of the 380
+  tests were registering under families `cat_order` did not list, so they ran
+  unheaded in link order, `--list` showed 102 of them and `--cat rv_enc` ran
+  none of them while exiting 0 (Zane Hambly, 2026-08-10)
+
+- `--fam` replaces `--cat`, which still works, and `--families` lists the
+  families with their files and counts (Zane Hambly, 2026-08-10)
+
+- the keyword table `lookup_keyword` binary searches is checked for ordering,
+  and every keyword is checked to still lex as a keyword. A misfiled entry lexed
+  as an identifier and surfaced as a parse error somewhere else entirely
+  (Zane Hambly, 2026-08-10)
+
+- `make repro` reads a sidecar `tests/NAME.opt` per fixture instead of counting
+  every refusal as a silent skip. Eight refusals were being hidden, one of them
+  a live `v_mfma` verifier failure, and an `xfail` that starts passing is now
+  reported too (Zane Hambly, 2026-08-10)
+
+- `tests/trpi.c` collects regressions for bugs that shipped, seeded with #160's
+  line-number corruption, which had four sites fixed and no test
+  (Zane Hambly, 2026-08-10)
+
 ## 2026-08-07
 
 Version 0.5.2.

@@ -7,7 +7,7 @@ static char obuf[TH_BUFSZ];
 
 /* ---- sched: loads grouped (no wait between two global_load_dword) ---- */
 
-static void sch_loadpair(void)
+static void sch01(void)
 {
     int rc = th_run(BC_BIN " --amdgpu tests/test_sched.cu", obuf, TH_BUFSZ);
     CHEQ(rc, 0);
@@ -31,11 +31,11 @@ static void sch_loadpair(void)
 
     PASS();
 }
-TH_REG("sched", sch_loadpair)
+TH_REG("sch", 1, "loads group with no wait between them", sch01)
 
 /* ---- sched: --no-sched still produces correct output ---- */
 
-static void sch_nosched(void)
+static void sch02(void)
 {
     int rc = th_run(BC_BIN " --amdgpu --no-sched tests/test_sched.cu",
                     obuf, TH_BUFSZ);
@@ -45,11 +45,11 @@ static void sch_nosched(void)
     CHECK(strstr(obuf, "global_load_") != NULL);
     PASS();
 }
-TH_REG("sched", sch_nosched)
+TH_REG("sch", 2, "--no-sched is still correct", sch02)
 
 /* ---- sched: compiles to ELF with scheduling ---- */
 
-static void sch_elf(void)
+static void sch03(void)
 {
     const char *out = "test_sched_out.hsaco";
     char cmd[TH_BUFSZ];
@@ -61,11 +61,11 @@ static void sch_elf(void)
     remove(out);
     PASS();
 }
-TH_REG("sched", sch_elf)
+TH_REG("sch", 3, "compiles to ELF with scheduling", sch03)
 
 /* ---- sched: all targets compile with scheduling ---- */
 
-static void sch_targets(void)
+static void sch04(void)
 {
     static const char *targets[] = { "--gfx1030", "", "--gfx1200" };
     static const char *tnames[]  = { "gfx1030", "gfx1100", "gfx1200" };
@@ -86,4 +86,4 @@ static void sch_targets(void)
     }
     PASS();
 }
-TH_REG("sched", sch_targets)
+TH_REG("sch", 4, "every target compiles with scheduling", sch04)

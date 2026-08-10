@@ -107,21 +107,24 @@ static int cmp_ra(const char *cu, const char *extra)
 
 /* ---- regalloc: representative .cu files ---- */
 
-#define RA_TEST(name, cu, extra) \
-    static void name(void) { \
+/* fn and num are both spelled out rather than pasted together, because ## on a
+ * padded number hands TH_REG an octal constant and 09 does not even compile.
+ * th_check confirms the two agree at startup. */
+#define RA_TEST(fn, num, desc, cu, extra) \
+    static void fn(void) { \
         CHECK(cmp_ra(cu, extra) == 0); \
         PASS(); \
     } \
-    TH_REG("regalloc", name)
+    TH_REG("ral", num, desc, fn)
 
-RA_TEST(ra_vecadd,  "tests/vector_add.cu",  "")
-RA_TEST(ra_canon,   "tests/canonical.cu",   "")
-RA_TEST(ra_notgpt,  "tests/notgpt.cu",      "")
-RA_TEST(ra_stress,  "tests/stress.cu",      "")
+RA_TEST(ral01, 1, "colouring beats scan: vector add", "tests/vector_add.cu", "")
+RA_TEST(ral02, 2, "colouring beats scan: canonical",  "tests/canonical.cu",  "")
+RA_TEST(ral03, 3, "colouring beats scan: notgpt",     "tests/notgpt.cu",     "")
+RA_TEST(ral04, 4, "colouring beats scan: stress",     "tests/stress.cu",     "")
 
 /* ---- Spill path: force low VGPR cap to exercise spill code ---- */
 
-static void ra_spill(void)
+static void ral05(void)
 {
     char cmd[TH_BUFSZ];
     int rc;
@@ -144,4 +147,4 @@ static void ra_spill(void)
 
     PASS();
 }
-TH_REG("regalloc", ra_spill)
+TH_REG("ral", 5, "spills cleanly under a low VGPR cap", ral05)

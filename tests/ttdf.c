@@ -69,7 +69,7 @@ static int dump_to_buf(const td_mod_t *M, char *buf, int bufsz)
 
 /* ---- init: zero state, target set ---- */
 
-static void tdf_init_zero(void)
+static void tdf01(void)
 {
     /* M is the shared static above */
     /* dirty the struct first so we can tell init really wiped it */
@@ -81,11 +81,11 @@ static void tdf_init_zero(void)
     CHEQ(M.target, TD_TGT_AMD);
     PASS();
 }
-TH_REG("tdf", tdf_init_zero);
+TH_REG("tdf", 1, "init zero", tdf01);
 
 /* ---- solo region: the AMD/NVIDIA degenerate shape ---- */
 
-static void tdf_solo_rgn(void)
+static void tdf02(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_NVIDIA);
@@ -98,11 +98,11 @@ static void tdf_solo_rgn(void)
     CHEQ(M.narc, 0);
     PASS();
 }
-TH_REG("tdf", tdf_solo_rgn);
+TH_REG("tdf", 2, "solo region", tdf02);
 
 /* ---- three-region fission: reader/compute/writer ---- */
 
-static void tdf_three_rgns(void)
+static void tdf03(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_TENSIX);
@@ -119,11 +119,11 @@ static void tdf_three_rgns(void)
     CHEQ(M.rgns[2].role, TD_RG_WRT);
     PASS();
 }
-TH_REG("tdf", tdf_three_rgns);
+TH_REG("tdf", 3, "three regions", tdf03);
 
 /* ---- channels link two regions with tile shape and depth ---- */
 
-static void tdf_channel_link(void)
+static void tdf04(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_TENSIX);
@@ -143,11 +143,11 @@ static void tdf_channel_link(void)
     CHEQ(M.chans[0].tag.layout, TD_LAY_INTRL);
     PASS();
 }
-TH_REG("tdf", tdf_channel_link);
+TH_REG("tdf", 4, "channel link", tdf04);
 
 /* ---- link with bogus producer rejected ---- */
 
-static void tdf_link_bad_rgn(void)
+static void tdf05(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_TENSIX);
@@ -158,11 +158,11 @@ static void tdf_link_bad_rgn(void)
     CHEQ(M.ncha, 0);
     PASS();
 }
-TH_REG("tdf", tdf_link_bad_rgn);
+TH_REG("tdf", 5, "link bad region", tdf05);
 
 /* ---- arcs: full CB pipeline (push, wait, pop) plus a NoC read ---- */
 
-static void tdf_arcs_pipeline(void)
+static void tdf06(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_TENSIX);
@@ -190,11 +190,11 @@ static void tdf_arcs_pipeline(void)
     CHEQ(M.arcs[3].kind, TD_AR_POP);
     PASS();
 }
-TH_REG("tdf", tdf_arcs_pipeline);
+TH_REG("tdf", 6, "arcs pipeline", tdf06);
 
 /* ---- CB arc with unknown channel rejected ---- */
 
-static void tdf_arc_bad_chan(void)
+static void tdf07(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_TENSIX);
@@ -204,11 +204,11 @@ static void tdf_arc_bad_chan(void)
     CHEQ(M.narc, 0);
     PASS();
 }
-TH_REG("tdf", tdf_arc_bad_chan);
+TH_REG("tdf", 7, "arc bad channel", tdf07);
 
 /* ---- lookups return NULL for out-of-range ids ---- */
 
-static void tdf_lookup_oor(void)
+static void tdf08(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_AMD);
@@ -219,11 +219,11 @@ static void tdf_lookup_oor(void)
     CHECK(td_arc(&M, 0) == NULL);
     PASS();
 }
-TH_REG("tdf", tdf_lookup_oor);
+TH_REG("tdf", 8, "lookup out of range", tdf08);
 
 /* ---- dump emits something readable for both shapes ---- */
 
-static void tdf_dump_solo(void)
+static void tdf09(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_AMD);
@@ -236,9 +236,9 @@ static void tdf_dump_solo(void)
     CHECK(strstr(obuf, "region 0: SOLO") != NULL);
     PASS();
 }
-TH_REG("tdf", tdf_dump_solo);
+TH_REG("tdf", 9, "dump solo", tdf09);
 
-static void tdf_dump_pipeline(void)
+static void tdf10(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_TENSIX);
@@ -260,11 +260,11 @@ static void tdf_dump_pipeline(void)
     CHECK(strstr(obuf, "rgn1 WAIT") != NULL);
     PASS();
 }
-TH_REG("tdf", tdf_dump_pipeline);
+TH_REG("tdf", 10, "dump pipeline", tdf10);
 
 /* ---- lower: AMD/NVIDIA solo passthrough ---- */
 
-static void tdf_lower_solo_amd(void)
+static void tdf11(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_AMD);
@@ -280,9 +280,9 @@ static void tdf_lower_solo_amd(void)
     CHEQ(out.owns[0], 0);
     PASS();
 }
-TH_REG("tdf", tdf_lower_solo_amd);
+TH_REG("tdf", 11, "lower solo AMD", tdf11);
 
-static void tdf_lower_solo_nv(void)
+static void tdf12(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_NVIDIA);
@@ -295,11 +295,11 @@ static void tdf_lower_solo_nv(void)
     CHECK(out.mods[0] == &fake_mod_a);
     PASS();
 }
-TH_REG("tdf", tdf_lower_solo_nv);
+TH_REG("tdf", 12, "lower solo NVIDIA", tdf12);
 
 /* ---- lower: SOLO without a body is rejected ---- */
 
-static void tdf_lower_solo_no_body(void)
+static void tdf13(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_AMD);
@@ -308,11 +308,11 @@ static void tdf_lower_solo_no_body(void)
     CHEQ(td_lower(&M, &out), BC_ERR_TDF);
     PASS();
 }
-TH_REG("tdf", tdf_lower_solo_no_body);
+TH_REG("tdf", 13, "lower solo no body", tdf13);
 
 /* ---- lower: AMD with the wrong region role is rejected ---- */
 
-static void tdf_lower_wrong_role(void)
+static void tdf14(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_AMD);
@@ -322,11 +322,11 @@ static void tdf_lower_wrong_role(void)
     CHEQ(td_lower(&M, &out), BC_ERR_TDF);
     PASS();
 }
-TH_REG("tdf", tdf_lower_wrong_role);
+TH_REG("tdf", 14, "lower wrong role", tdf14);
 
 /* ---- lower: AMD with channels present is rejected ---- */
 
-static void tdf_lower_solo_with_chan(void)
+static void tdf15(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_AMD);
@@ -341,11 +341,11 @@ static void tdf_lower_solo_with_chan(void)
     CHEQ(td_lower(&M, &out), BC_ERR_TDF);
     PASS();
 }
-TH_REG("tdf", tdf_lower_solo_with_chan);
+TH_REG("tdf", 15, "lower solo with channel", tdf15);
 
 /* ---- lower: Tensix passes SOLO through for now (stub) ---- */
 
-static void tdf_lower_tensix_solo(void)
+static void tdf16(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_TENSIX);
@@ -357,11 +357,11 @@ static void tdf_lower_tensix_solo(void)
     CHECK(out.mods[0] == &fake_mod_a);
     PASS();
 }
-TH_REG("tdf", tdf_lower_tensix_solo);
+TH_REG("tdf", 16, "lower tensix solo", tdf16);
 
 /* ---- lower: Tensix fission not yet implemented, must say so ---- */
 
-static void tdf_lower_tensix_fission_stub(void)
+static void tdf17(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_TENSIX);
@@ -373,11 +373,11 @@ static void tdf_lower_tensix_fission_stub(void)
     CHEQ(td_lower(&M, &out), BC_ERR_TDF);
     PASS();
 }
-TH_REG("tdf", tdf_lower_tensix_fission_stub);
+TH_REG("tdf", 17, "lower tensix fission stub", tdf17);
 
 /* ---- build_solo_from_bir: happy path ---- */
 
-static void tdf_build_solo_ok(void)
+static void tdf18(void)
 {
     /* M is the shared static above */
     CHEQ(td_build_solo_from_bir(&M, TD_TGT_AMD, &fake_mod_a), BC_OK);
@@ -387,22 +387,22 @@ static void tdf_build_solo_ok(void)
     CHECK(M.rgns[0].body == &fake_mod_a);
     PASS();
 }
-TH_REG("tdf", tdf_build_solo_ok);
+TH_REG("tdf", 18, "build solo ok", tdf18);
 
 /* ---- build_solo_from_bir: NULL body refused ---- */
 
-static void tdf_build_solo_null(void)
+static void tdf19(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_AMD);
     CHEQ(td_build_solo_from_bir(&M, TD_TGT_AMD, NULL), BC_ERR_TDF);
     PASS();
 }
-TH_REG("tdf", tdf_build_solo_null);
+TH_REG("tdf", 19, "build solo null", tdf19);
 
 /* ---- build_solo + lower round-trips back to the same BIR pointer ---- */
 
-static void tdf_build_then_lower(void)
+static void tdf20(void)
 {
     /* M is the shared static above */
     CHEQ(td_build_solo_from_bir(&M, TD_TGT_NVIDIA, &fake_mod_a), BC_OK);
@@ -412,22 +412,22 @@ static void tdf_build_then_lower(void)
     CHECK(out.mods[0] == &fake_mod_a);
     PASS();
 }
-TH_REG("tdf", tdf_build_then_lower);
+TH_REG("tdf", 20, "build then lower", tdf20);
 
 /* ---- td_tile_bytes returns the right size per dtype ---- */
 /* Wormhole tiles are 32x32, so 4096 bytes at fp32 and 2048 at fp16/bf16.
  * Those numbers feed NoC alignment, CB depth and runtime args, so a
  * regression here ripples everywhere. */
 
-static void tdf_tile_bytes_fp32(void)
+static void tdf21(void)
 {
     td_tag_t t = tile_f32(32, 32, TD_LAY_INTRL);
     CHEQ(td_tile_bytes(t), 32u * 32u * 4u);
     PASS();
 }
-TH_REG("tdf", tdf_tile_bytes_fp32);
+TH_REG("tdf", 21, "tile bytes fp32", tdf21);
 
-static void tdf_tile_bytes_bf16(void)
+static void tdf22(void)
 {
     td_tag_t t;
     t.rows = 32; t.cols = 32;
@@ -435,7 +435,7 @@ static void tdf_tile_bytes_bf16(void)
     CHEQ(td_tile_bytes(t), 32u * 32u * 2u);
     PASS();
 }
-TH_REG("tdf", tdf_tile_bytes_bf16);
+TH_REG("tdf", 22, "tile bytes bf16", tdf22);
 
 /* ---- placement assigns increasing offsets to every channel ---- */
 /*
@@ -443,7 +443,7 @@ TH_REG("tdf", tdf_tile_bytes_bf16);
  * at TD_L1_CB_BASE, second sits one (tile-data + FIFO) block above
  * it, rounded to 16-byte alignment. */
 
-static void tdf_place_two_chans(void)
+static void tdf23(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_TENSIX);
@@ -461,7 +461,7 @@ static void tdf_place_two_chans(void)
     CHEQ(M.chans[c1].l1_off, TD_L1_CB_BASE + 0x2010u);
     PASS();
 }
-TH_REG("tdf", tdf_place_two_chans);
+TH_REG("tdf", 23, "place two channels", tdf23);
 
 /* ---- placement refuses when the budget is exceeded ---- */
 /*
@@ -469,7 +469,7 @@ TH_REG("tdf", tdf_place_two_chans);
  * entire CB region. Placement should refuse cleanly rather than
  * silently wrap or scribble outside L1. */
 
-static void tdf_place_budget(void)
+static void tdf24(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_TENSIX);
@@ -483,7 +483,7 @@ static void tdf_place_budget(void)
     CHEQ(td_place_l1(&M), BC_ERR_TDF);
     PASS();
 }
-TH_REG("tdf", tdf_place_budget);
+TH_REG("tdf", 24, "place budget", tdf24);
 
 /* ---- NoC address encoder: spec bit layout ---- */
 /*
@@ -491,16 +491,16 @@ TH_REG("tdf", tdf_place_budget);
  * Pick values that exercise each field's high bit so a bad shift
  * shows up immediately. */
 
-static void tdf_noc_addr_basic(void)
+static void tdf25(void)
 {
     /* (x=1, y=2, local=0x1000) packs to 0x1000 | (1<<36) | (2<<42),
      * which is 0x0000081000001000. */
     CHEQ(td_noc_addr(1, 2, 0x1000ull), 0x0000081000001000ull);
     PASS();
 }
-TH_REG("tdf", tdf_noc_addr_basic);
+TH_REG("tdf", 25, "NoC addr basic", tdf25);
 
-static void tdf_noc_addr_coord_masking(void)
+static void tdf26(void)
 {
     /* X and Y are 6-bit fields. Anything above bit 5 must be
      * masked off rather than spilling into the reserved zone. */
@@ -508,9 +508,9 @@ static void tdf_noc_addr_coord_masking(void)
          (0x3Full << 36) | (0x3Full << 42));
     PASS();
 }
-TH_REG("tdf", tdf_noc_addr_coord_masking);
+TH_REG("tdf", 26, "NoC addr coord masking", tdf26);
 
-static void tdf_noc_addr_local_36bits(void)
+static void tdf27(void)
 {
     /* Local address is 36 bits, anything above must be masked off
      * since the high 28 bits of the 64-bit word are reserved. */
@@ -518,7 +518,7 @@ static void tdf_noc_addr_local_36bits(void)
          TD_NOC_LOCAL_MASK);
     PASS();
 }
-TH_REG("tdf", tdf_noc_addr_local_36bits);
+TH_REG("tdf", 27, "NoC addr local 36bits", tdf27);
 
 /* ---- orchestrator: RD goes on NoC 0, WR on NoC 1 ---- */
 /*
@@ -526,7 +526,7 @@ TH_REG("tdf", tdf_noc_addr_local_36bits);
  * write arc, run the orchestrator, check the noc_id and length
  * fields come out per the spec. */
 
-static void tdf_noc_orchestrate_dirs(void)
+static void tdf28(void)
 {
     td_init(&M, TD_TGT_TENSIX);
     uint16_t rdr = td_mkrgn(&M, TD_RG_RDR);
@@ -547,7 +547,7 @@ static void tdf_noc_orchestrate_dirs(void)
     CHEQ(M.arcs[wr].length, 32u * 32u * 4u);
     PASS();
 }
-TH_REG("tdf", tdf_noc_orchestrate_dirs);
+TH_REG("tdf", 28, "NoC orchestrate dirs", tdf28);
 
 /* ---- orchestrator: refuses transfers above 8 KiB ---- */
 /*
@@ -555,7 +555,7 @@ TH_REG("tdf", tdf_noc_orchestrate_dirs);
  * The orchestrator must refuse rather than truncate; the splitting
  * pass that handles oversize transfers is not implemented yet. */
 
-static void tdf_noc_orchestrate_oversize(void)
+static void tdf29(void)
 {
     td_init(&M, TD_TGT_TENSIX);
     uint16_t rdr = td_mkrgn(&M, TD_RG_RDR);
@@ -568,14 +568,14 @@ static void tdf_noc_orchestrate_oversize(void)
     CHEQ(td_noc_orchestrate(&M), BC_ERR_TDF);
     PASS();
 }
-TH_REG("tdf", tdf_noc_orchestrate_oversize);
+TH_REG("tdf", 29, "NoC orchestrate oversize", tdf29);
 
 /* ---- orchestrator leaves CB arcs untouched ---- */
 /*
  * PUSH/WAIT/RSV/POP do not cross the NoC; their noc_id and length
  * fields should be left at zero, not silently mutated. */
 
-static void tdf_noc_skips_cb_arcs(void)
+static void tdf30(void)
 {
     td_init(&M, TD_TGT_TENSIX);
     uint16_t rdr = td_mkrgn(&M, TD_RG_RDR);
@@ -592,7 +592,7 @@ static void tdf_noc_skips_cb_arcs(void)
     CHEQ(M.arcs[wait].length, 0u);
     PASS();
 }
-TH_REG("tdf", tdf_noc_skips_cb_arcs);
+TH_REG("tdf", 30, "NoC skips circular buffer arcs", tdf30);
 
 /* ---- integration: fission on test_dce.cu (one stored ptr) ---- */
 /*
@@ -602,7 +602,7 @@ TH_REG("tdf", tdf_noc_skips_cb_arcs);
  * AMDGPU backend purely so the C99 pipeline runs all the way to
  * BIR; --tdf-fission then bails before any AMDGPU work happens. */
 
-static void tdf_fission_store_only(void)
+static void tdf31(void)
 {
     int rc = th_run(BC_BIN " --tdf-fission --amdgpu-bin -o "
                     "/tmp/_tdf_fission_test.hsaco tests/test_dce.cu",
@@ -628,7 +628,7 @@ static void tdf_fission_store_only(void)
     CHECK(strstr(obuf, "RD chan") == NULL);
     PASS();
 }
-TH_REG("tdf", tdf_fission_store_only);
+TH_REG("tdf", 31, "fission store only", tdf31);
 
 /* ---- integration: fission on matmul (1 store + 2 loads) ---- */
 /*
@@ -638,7 +638,7 @@ TH_REG("tdf", tdf_fission_store_only);
  * (for C) plus two RDR -> CMP channels (for A and B), six arcs
  * total. */
 
-static void tdf_fission_matmul_shape(void)
+static void tdf32(void)
 {
     int rc = th_run(BC_BIN " --tdf-fission --amdgpu-bin -o "
                     "/tmp/_tdf_fission_matmul.hsaco tests/canonical.cu",
@@ -663,11 +663,11 @@ static void tdf_fission_matmul_shape(void)
     CHECK(strstr(obuf, "noc1 len=4096") != NULL);
     PASS();
 }
-TH_REG("tdf", tdf_fission_matmul_shape);
+TH_REG("tdf", 32, "fission matmul shape", tdf32);
 
 /* ---- region overflow returns TD_BAD_ID after the table fills ---- */
 
-static void tdf_region_overflow(void)
+static void tdf33(void)
 {
     /* M is the shared static above */
     td_init(&M, TD_TGT_TENSIX);
@@ -680,11 +680,11 @@ static void tdf_region_overflow(void)
     CHEQ(M.nrgn, TD_MAX_RGNS);
     PASS();
 }
-TH_REG("tdf", tdf_region_overflow);
+TH_REG("tdf", 33, "region overflow", tdf33);
 
 /* ---- CB-arc emit lowers each kind to the right primitive at placed addrs ---- */
 
-static void tdf_emit_cb_arcs(void)
+static void tdf34(void)
 {
     td_init(&M, TD_TGT_TENSIX);
     uint16_t rdr = td_mkrgn(&M, TD_RG_RDR);
@@ -729,11 +729,11 @@ static void tdf_emit_cb_arcs(void)
     CHECK(bufs_eq(&EA, &EB));
     PASS();
 }
-TH_REG("tdf", tdf_emit_cb_arcs);
+TH_REG("tdf", 34, "emit circular buffer arcs", tdf34);
 
 /* ---- the CB emitter refuses NoC arcs (those are emitted elsewhere) ---- */
 
-static void tdf_emit_cb_rejects_noc(void)
+static void tdf35(void)
 {
     td_init(&M, TD_TGT_TENSIX);
     uint16_t rdr = td_mkrgn(&M, TD_RG_RDR);
@@ -746,11 +746,11 @@ static void tdf_emit_cb_rejects_noc(void)
     CHEQ(td_emit_cb_arc(&M, &M.arcs[a_rd], &EA), BC_ERR_TDF);
     PASS();
 }
-TH_REG("tdf", tdf_emit_cb_rejects_noc);
+TH_REG("tdf", 35, "emit circular buffer rejects NoC", tdf35);
 
 /* ---- reader loop: DRAM -> L1, read barrier, back-jump ---- */
 
-static void tdf_reader_loop_shape(void)
+static void tdf36(void)
 {
     rv_buf_init(&EA);
     CHEQ(td_emit_dma_loop(&EA, /*is_write=*/0,
@@ -773,11 +773,11 @@ static void tdf_reader_loop_shape(void)
     CHEQ((last >> 7) & 0x1fu, 0u);      /* rd == zero      */
     PASS();
 }
-TH_REG("tdf", tdf_reader_loop_shape);
+TH_REG("tdf", 36, "reader loop shape", tdf36);
 
 /* ---- writer loop: L1 -> DRAM, write-ack barrier ---- */
 
-static void tdf_writer_loop_shape(void)
+static void tdf37(void)
 {
     rv_buf_init(&EA);
     CHEQ(td_emit_dma_loop(&EA, /*is_write=*/1,
@@ -790,7 +790,7 @@ static void tdf_writer_loop_shape(void)
     CHECK(has_word(&EA, rv_lw(RV_T2, RV_T0, 0x04)));
     PASS();
 }
-TH_REG("tdf", tdf_writer_loop_shape);
+TH_REG("tdf", 37, "writer loop shape", tdf37);
 
 /*
  * The --tdf and --tdf-fission flags have to appear in every one of main.c's
@@ -823,16 +823,16 @@ static const char *run_flag(const char *flag)
     return buf;
 }
 
-static void tdf_flag_reaches_pass(void)
+static void tdf38(void)
 {
     const char *o = run_flag("--tdf");
     CHECK(strstr(o, "TDF module") != NULL);
     CHECK(strstr(o, "translation_unit") == NULL);
     PASS();
 }
-TH_REG("tdf", tdf_flag_reaches_pass);
+TH_REG("tdf", 38, "flag reaches pass", tdf38);
 
-static void tdf_fission_flag_reaches_pass(void)
+static void tdf39(void)
 {
     const char *o = run_flag("--tdf-fission");
     CHECK(strstr(o, "TDF module") != NULL);
@@ -843,4 +843,4 @@ static void tdf_fission_flag_reaches_pass(void)
     CHECK(strstr(o, "WRT") != NULL);
     PASS();
 }
-TH_REG("tdf", tdf_fission_flag_reaches_pass);
+TH_REG("tdf", 39, "fission flag reaches pass", tdf39);

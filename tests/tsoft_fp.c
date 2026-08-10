@@ -45,49 +45,49 @@ static uint32_t bbits(float f)
 
 /* ---- Negation ---- */
 
-static void sfp_neg_one(void)
+static void sfp01(void)
 {
     CHEQ(bbits(__negsf2(fbits(F_POS_ONE))), F_NEG_ONE);
     CHEQ(bbits(__negsf2(fbits(F_NEG_ONE))), F_POS_ONE);
     PASS();
 }
-TH_REG("soft_fp", sfp_neg_one);
+TH_REG("sfp", 1, "neg one", sfp01);
 
-static void sfp_neg_zero(void)
+static void sfp02(void)
 {
     CHEQ(bbits(__negsf2(fbits(F_POS_ZERO))), F_NEG_ZERO);
     CHEQ(bbits(__negsf2(fbits(F_NEG_ZERO))), F_POS_ZERO);
     PASS();
 }
-TH_REG("soft_fp", sfp_neg_zero);
+TH_REG("sfp", 2, "neg zero", sfp02);
 
-static void sfp_neg_inf(void)
+static void sfp03(void)
 {
     CHEQ(bbits(__negsf2(fbits(F_POS_INF))), F_NEG_INF);
     CHEQ(bbits(__negsf2(fbits(F_NEG_INF))), F_POS_INF);
     PASS();
 }
-TH_REG("soft_fp", sfp_neg_inf);
+TH_REG("sfp", 3, "neg inf", sfp03);
 
 /* ---- Addition: canonical values ---- */
 
-static void sfp_add_one_plus_one(void)
+static void sfp04(void)
 {
     /* 1.0 + 1.0 = 2.0 */
     CHEQ(bbits(__addsf3(fbits(F_POS_ONE), fbits(F_POS_ONE))), F_POS_TWO);
     PASS();
 }
-TH_REG("soft_fp", sfp_add_one_plus_one);
+TH_REG("sfp", 4, "add one plus one", sfp04);
 
-static void sfp_add_one_minus_one(void)
+static void sfp05(void)
 {
     /* 1.0 + (-1.0) = +0.0 per round-to-nearest. */
     CHEQ(bbits(__addsf3(fbits(F_POS_ONE), fbits(F_NEG_ONE))), F_POS_ZERO);
     PASS();
 }
-TH_REG("soft_fp", sfp_add_one_minus_one);
+TH_REG("sfp", 5, "add one minus one", sfp05);
 
-static void sfp_add_zero_zero(void)
+static void sfp06(void)
 {
     /* +0 + +0 = +0; -0 + -0 = -0; +0 + -0 = +0. */
     CHEQ(bbits(__addsf3(fbits(F_POS_ZERO), fbits(F_POS_ZERO))), F_POS_ZERO);
@@ -95,9 +95,9 @@ static void sfp_add_zero_zero(void)
     CHEQ(bbits(__addsf3(fbits(F_POS_ZERO), fbits(F_NEG_ZERO))), F_POS_ZERO);
     PASS();
 }
-TH_REG("soft_fp", sfp_add_zero_zero);
+TH_REG("sfp", 6, "add zero zero", sfp06);
 
-static void sfp_add_inf(void)
+static void sfp07(void)
 {
     /* Inf + Inf = Inf; Inf - Inf = NaN. */
     CHEQ(bbits(__addsf3(fbits(F_POS_INF), fbits(F_POS_INF))), F_POS_INF);
@@ -105,16 +105,16 @@ static void sfp_add_inf(void)
     CHEQ(bbits(__addsf3(fbits(F_POS_INF), fbits(F_POS_ONE))), F_POS_INF);
     PASS();
 }
-TH_REG("soft_fp", sfp_add_inf);
+TH_REG("sfp", 7, "add inf", sfp07);
 
-static void sfp_add_nan(void)
+static void sfp08(void)
 {
     /* NaN + anything = NaN. */
     CHEQ(bbits(__addsf3(fbits(F_QNAN), fbits(F_POS_ONE))), F_QNAN);
     CHEQ(bbits(__addsf3(fbits(F_POS_ONE), fbits(F_QNAN))), F_QNAN);
     PASS();
 }
-TH_REG("soft_fp", sfp_add_nan);
+TH_REG("sfp", 8, "add NaN", sfp08);
 
 /* ---- Addition vs host FPU on random normal values ---- */
 
@@ -139,7 +139,7 @@ static float random_normal_float(void)
     return fbits(bits);
 }
 
-static void sfp_add_vs_host(void)
+static void sfp09(void)
 {
     prng_state = 0xC0FFEEu;
     for (int i = 0; i < 1000; i++) {
@@ -162,53 +162,53 @@ static void sfp_add_vs_host(void)
     }
     PASS();
 }
-TH_REG("soft_fp", sfp_add_vs_host);
+TH_REG("sfp", 9, "add vs host", sfp09);
 
 /* ---- Multiplication ---- */
 
-static void sfp_mul_one_times_two(void)
+static void sfp10(void)
 {
     CHEQ(bbits(__mulsf3(fbits(F_POS_ONE), fbits(F_POS_TWO))), F_POS_TWO);
     PASS();
 }
-TH_REG("soft_fp", sfp_mul_one_times_two);
+TH_REG("sfp", 10, "MUL one times two", sfp10);
 
-static void sfp_mul_sign(void)
+static void sfp11(void)
 {
     CHEQ(bbits(__mulsf3(fbits(F_NEG_ONE), fbits(F_POS_TWO))), F_NEG_TWO);
     CHEQ(bbits(__mulsf3(fbits(F_NEG_ONE), fbits(F_NEG_ONE))), F_POS_ONE);
     PASS();
 }
-TH_REG("soft_fp", sfp_mul_sign);
+TH_REG("sfp", 11, "MUL sign", sfp11);
 
-static void sfp_mul_inf_zero(void)
+static void sfp12(void)
 {
     /* Inf * 0 is NaN per IEEE. */
     CHEQ(bbits(__mulsf3(fbits(F_POS_INF), fbits(F_POS_ZERO))), F_QNAN);
     CHEQ(bbits(__mulsf3(fbits(F_POS_ZERO), fbits(F_POS_INF))), F_QNAN);
     PASS();
 }
-TH_REG("soft_fp", sfp_mul_inf_zero);
+TH_REG("sfp", 12, "MUL inf zero", sfp12);
 
-static void sfp_mul_inf_finite(void)
+static void sfp13(void)
 {
     /* Inf * finite_positive = Inf; Inf * finite_negative = -Inf. */
     CHEQ(bbits(__mulsf3(fbits(F_POS_INF), fbits(F_POS_ONE))), F_POS_INF);
     CHEQ(bbits(__mulsf3(fbits(F_POS_INF), fbits(F_NEG_ONE))), F_NEG_INF);
     PASS();
 }
-TH_REG("soft_fp", sfp_mul_inf_finite);
+TH_REG("sfp", 13, "MUL inf finite", sfp13);
 
-static void sfp_mul_zero_sign(void)
+static void sfp14(void)
 {
     /* Sign-of-zero rule: +0 * -1 = -0. */
     CHEQ(bbits(__mulsf3(fbits(F_POS_ZERO), fbits(F_NEG_ONE))), F_NEG_ZERO);
     CHEQ(bbits(__mulsf3(fbits(F_NEG_ZERO), fbits(F_NEG_ONE))), F_POS_ZERO);
     PASS();
 }
-TH_REG("soft_fp", sfp_mul_zero_sign);
+TH_REG("sfp", 14, "MUL zero sign", sfp14);
 
-static void sfp_mul_vs_host(void)
+static void sfp15(void)
 {
     prng_state = 0xBADBEEFu;
     for (int i = 0; i < 1000; i++) {
@@ -227,19 +227,19 @@ static void sfp_mul_vs_host(void)
     }
     PASS();
 }
-TH_REG("soft_fp", sfp_mul_vs_host);
+TH_REG("sfp", 15, "MUL vs host", sfp15);
 
 /* ---- Division ---- */
 
-static void sfp_div_one_by_two(void)
+static void sfp16(void)
 {
     /* 1.0 / 2.0 = 0.5 */
     CHEQ(bbits(__divsf3(fbits(F_POS_ONE), fbits(F_POS_TWO))), 0x3F000000u);
     PASS();
 }
-TH_REG("soft_fp", sfp_div_one_by_two);
+TH_REG("sfp", 16, "DIV one by two", sfp16);
 
-static void sfp_div_by_zero(void)
+static void sfp17(void)
 {
     /* x / 0 = signed Inf for finite x; 0/0 = NaN. */
     CHEQ(bbits(__divsf3(fbits(F_POS_ONE), fbits(F_POS_ZERO))), F_POS_INF);
@@ -247,17 +247,17 @@ static void sfp_div_by_zero(void)
     CHEQ(bbits(__divsf3(fbits(F_POS_ZERO), fbits(F_POS_ZERO))), F_QNAN);
     PASS();
 }
-TH_REG("soft_fp", sfp_div_by_zero);
+TH_REG("sfp", 17, "DIV by zero", sfp17);
 
-static void sfp_div_inf_inf(void)
+static void sfp18(void)
 {
     /* Inf / Inf = NaN. */
     CHEQ(bbits(__divsf3(fbits(F_POS_INF), fbits(F_POS_INF))), F_QNAN);
     PASS();
 }
-TH_REG("soft_fp", sfp_div_inf_inf);
+TH_REG("sfp", 18, "DIV inf inf", sfp18);
 
-static void sfp_div_vs_host(void)
+static void sfp19(void)
 {
     prng_state = 0xDEADBABEu;
     for (int i = 0; i < 1000; i++) {
@@ -276,11 +276,11 @@ static void sfp_div_vs_host(void)
     }
     PASS();
 }
-TH_REG("soft_fp", sfp_div_vs_host);
+TH_REG("sfp", 19, "DIV vs host", sfp19);
 
 /* ---- Comparisons ---- */
 
-static void sfp_cmp_equal(void)
+static void sfp20(void)
 {
     CHEQ(__eqsf2(fbits(F_POS_ONE), fbits(F_POS_ONE)), 0);
     CHEQ(__eqsf2(fbits(F_POS_ONE), fbits(F_POS_TWO)), 1);
@@ -288,18 +288,18 @@ static void sfp_cmp_equal(void)
     CHEQ(__eqsf2(fbits(F_POS_ZERO), fbits(F_NEG_ZERO)), 0);
     PASS();
 }
-TH_REG("soft_fp", sfp_cmp_equal);
+TH_REG("sfp", 20, "compare equal", sfp20);
 
-static void sfp_cmp_less(void)
+static void sfp21(void)
 {
     CHECK(__ltsf2(fbits(F_NEG_ONE), fbits(F_POS_ONE)) < 0);
     CHECK(__ltsf2(fbits(F_POS_ONE), fbits(F_NEG_ONE)) > 0);
     CHEQ(__ltsf2(fbits(F_POS_ONE), fbits(F_POS_ONE)), 0);
     PASS();
 }
-TH_REG("soft_fp", sfp_cmp_less);
+TH_REG("sfp", 21, "compare less", sfp21);
 
-static void sfp_cmp_nan(void)
+static void sfp22(void)
 {
     /* NaN comparisons are unordered; the magnitude comparisons
      * return a positive value per libgcc convention. */
@@ -308,11 +308,11 @@ static void sfp_cmp_nan(void)
     CHECK(__lesf2  (fbits(F_QNAN), fbits(F_POS_ONE)) > 0);
     PASS();
 }
-TH_REG("soft_fp", sfp_cmp_nan);
+TH_REG("sfp", 22, "compare NaN", sfp22);
 
 /* ---- Integer to float ---- */
 
-static void sfp_int_to_float(void)
+static void sfp23(void)
 {
     CHEQ(bbits(__floatsisf(0)),  F_POS_ZERO);
     CHEQ(bbits(__floatsisf(1)),  F_POS_ONE);
@@ -320,20 +320,20 @@ static void sfp_int_to_float(void)
     CHEQ(bbits(__floatsisf(2)),  F_POS_TWO);
     PASS();
 }
-TH_REG("soft_fp", sfp_int_to_float);
+TH_REG("sfp", 23, "int to float", sfp23);
 
-static void sfp_int_to_float_large(void)
+static void sfp24(void)
 {
     /* 16777216 = 2^24 is exactly representable. */
     CHEQ(bbits(__floatsisf(16777216)),  0x4B800000u);
     CHEQ(bbits(__floatsisf(-16777216)), 0xCB800000u);
     PASS();
 }
-TH_REG("soft_fp", sfp_int_to_float_large);
+TH_REG("sfp", 24, "int to float large", sfp24);
 
 /* ---- Float to integer ---- */
 
-static void sfp_float_to_int(void)
+static void sfp25(void)
 {
     CHEQ(__fixsfsi(fbits(F_POS_ZERO)),  0);
     CHEQ(__fixsfsi(fbits(F_POS_ONE)),   1);
@@ -341,9 +341,9 @@ static void sfp_float_to_int(void)
     CHEQ(__fixsfsi(fbits(F_POS_TWO)),   2);
     PASS();
 }
-TH_REG("soft_fp", sfp_float_to_int);
+TH_REG("sfp", 25, "float to int", sfp25);
 
-static void sfp_float_to_int_truncates(void)
+static void sfp26(void)
 {
     /* 1.5 = 0x3FC00000 should truncate to 1. */
     CHEQ(__fixsfsi(fbits(0x3FC00000u)),  1);
@@ -351,9 +351,9 @@ static void sfp_float_to_int_truncates(void)
     CHEQ(__fixsfsi(fbits(0xBFC00000u)), -1);
     PASS();
 }
-TH_REG("soft_fp", sfp_float_to_int_truncates);
+TH_REG("sfp", 26, "float to int truncates", sfp26);
 
-static void sfp_float_to_int_overflow(void)
+static void sfp27(void)
 {
     /* Inf clamps to INT_MAX / INT_MIN. */
     CHEQ(__fixsfsi(fbits(F_POS_INF)), (int32_t)0x7FFFFFFF);
@@ -362,7 +362,7 @@ static void sfp_float_to_int_overflow(void)
     CHEQ(__fixsfsi(fbits(F_QNAN)), 0);
     PASS();
 }
-TH_REG("soft_fp", sfp_float_to_int_overflow);
+TH_REG("sfp", 27, "float to int overflow", sfp27);
 
 /* ---- Subnormal handling (strict-only; SKIP by default) ----
  *
@@ -372,7 +372,7 @@ TH_REG("soft_fp", sfp_float_to_int_overflow);
  * we keep them visible so the strict-mode work has a known test
  * surface to revive. */
 
-static void sfp_subnormal_unpacks_to_zero(void)
+static void sfp28(void)
 {
 #if SFP_STRICT_IEEE
     SKIP("strict-mode subnormal handling not yet implemented");
@@ -385,4 +385,4 @@ static void sfp_subnormal_unpacks_to_zero(void)
     PASS();
 #endif
 }
-TH_REG("soft_fp", sfp_subnormal_unpacks_to_zero);
+TH_REG("sfp", 28, "subnormal unpacks to zero", sfp28);

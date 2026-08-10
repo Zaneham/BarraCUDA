@@ -26,4 +26,12 @@ int  lexer_tokenize(lexer_t *L);
 int  lexer_token_text(const lexer_t *L, const token_t *tok,
                       char *buf, int bufsize);
 
+/* lookup_keyword binary searches the keyword table, so keeping that table in
+ * order is VERY IMPORTANT. Put an entry in the wrong place and the keyword
+ * quietly lexes as an identifier, then blows up as a parse error somewhere
+ * else entirely. Handed out so the suite can check the order instead of
+ * trusting the joke above the table. */
+int         lexer_kw_count(void);
+const char *lexer_kw_at(int i);
+
 #endif /* BARRACUDA_LEXER_H */

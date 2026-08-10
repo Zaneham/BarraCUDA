@@ -17,7 +17,7 @@ static void typ_setup(void)
 
 /* ---- types: interning ---- */
 
-static void typ_intrn(void)
+static void typ01(void)
 {
     typ_setup();
 
@@ -73,11 +73,11 @@ static void typ_intrn(void)
 
     PASS();
 }
-TH_REG("types", typ_intrn)
+TH_REG("typ", 1, "interning returns one id per type", typ01)
 
 /* ---- types: constants ---- */
 
-static void typ_const(void)
+static void typ02(void)
 {
     typ_setup();
 
@@ -111,11 +111,11 @@ static void typ_const(void)
 
     PASS();
 }
-TH_REG("types", typ_const)
+TH_REG("typ", 2, "constant types", typ02)
 
 /* ---- types: strings ---- */
 
-static void typ_strs(void)
+static void typ03(void)
 {
     typ_setup();
 
@@ -129,11 +129,11 @@ static void typ_strs(void)
 
     PASS();
 }
-TH_REG("types", typ_strs)
+TH_REG("typ", 3, "string table interning", typ03)
 
 /* ---- types: name tables ---- */
 
-static void typ_names(void)
+static void typ04(void)
 {
     CHSTR(bir_op_name(BIR_ADD), "add");
     CHSTR(bir_op_name(BIR_BARRIER), "barrier");
@@ -153,11 +153,11 @@ static void typ_names(void)
 
     PASS();
 }
-TH_REG("types", typ_names)
+TH_REG("typ", 4, "name tables", typ04)
 
 /* ---- types: printer doesn't segfault ---- */
 
-static void typ_print(void)
+static void typ05(void)
 {
     typ_setup();
 
@@ -208,4 +208,4 @@ static void typ_print(void)
 
     PASS();
 }
-TH_REG("types", typ_print)
+TH_REG("typ", 5, "the printer does not segfault", typ05)

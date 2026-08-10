@@ -27,7 +27,7 @@ static int tt_run(const char *args)
  * Lexer
  * ============================================================ */
 
-static void tt_lex_simple(void)
+static void tri01(void)
 {
     int rc = tt_run("--triton --lex tests/tri_simple.py");
     CHEQ(rc, 0);
@@ -42,9 +42,9 @@ static void tt_lex_simple(void)
     CHECK(strstr(obuf, "def") != NULL);
     PASS();
 }
-TH_REG("triton", tt_lex_simple)
+TH_REG("tri", 1, "lexer simple", tri01)
 
-static void tt_lex_slop_docstring(void)
+static void tri02(void)
 {
     /* The AI slop file is enormous and the lex dump is enormous; the
      * 4 KB capture buffer truncates the trailing summary. We confirm
@@ -59,13 +59,13 @@ static void tt_lex_slop_docstring(void)
     CHECK(strstr(obuf, "import") != NULL);
     PASS();
 }
-TH_REG("triton", tt_lex_slop_docstring)
+TH_REG("tri", 2, "lexer slop docstring", tri02)
 
 /* ============================================================
  * Parser
  * ============================================================ */
 
-static void tt_parse_funcdef(void)
+static void tri03(void)
 {
     int rc = tt_run("--triton --parse tests/tri_vadd.py");
     CHEQ(rc, 0);
@@ -75,9 +75,9 @@ static void tt_parse_funcdef(void)
     CHECK(strstr(obuf, "Block") != NULL);
     PASS();
 }
-TH_REG("triton", tt_parse_funcdef)
+TH_REG("tri", 3, "parse funcdef", tri03)
 
-static void tt_parse_expressions(void)
+static void tri04(void)
 {
     int rc = tt_run("--triton --parse tests/tri_vadd.py");
     CHEQ(rc, 0);
@@ -90,9 +90,9 @@ static void tt_parse_expressions(void)
     CHECK(strstr(obuf, "Keyword") != NULL);
     PASS();
 }
-TH_REG("triton", tt_parse_expressions)
+TH_REG("tri", 4, "parse expressions", tri04)
 
-static void tt_parse_goblin(void)
+static void tri05(void)
 {
     /* The goblin kernel is identical in shape to vector_add but with
      * names the Triton tutorial people would never choose. We are
@@ -105,13 +105,13 @@ static void tt_parse_goblin(void)
     CHECK(strstr(obuf, "Param 'hoard_ptr'") != NULL);
     PASS();
 }
-TH_REG("triton", tt_parse_goblin)
+TH_REG("tri", 5, "parse goblin", tri05)
 
 /* ============================================================
  * Sema
  * ============================================================ */
 
-static void tt_sema_resolves(void)
+static void tri06(void)
 {
     int rc = tt_run("--triton --sema tests/tri_vadd.py");
     CHEQ(rc, 0);
@@ -125,9 +125,9 @@ static void tt_sema_resolves(void)
     CHECK(strstr(obuf, "type(constexpr)") != NULL);
     PASS();
 }
-TH_REG("triton", tt_sema_resolves)
+TH_REG("tri", 6, "sema resolves", tri06)
 
-static void tt_sema_locals_and_params(void)
+static void tri07(void)
 {
     int rc = tt_run("--triton --sema tests/tri_vadd.py");
     CHEQ(rc, 0);
@@ -136,9 +136,9 @@ static void tt_sema_locals_and_params(void)
     CHECK(strstr(obuf, "Name 'BLOCK_SIZE' -> param") != NULL);
     PASS();
 }
-TH_REG("triton", tt_sema_locals_and_params)
+TH_REG("tri", 7, "sema locals and params", tri07)
 
-static void tt_sema_ai_slop_still_resolves(void)
+static void tri08(void)
 {
     /* The AI slop kernel uses comically long names but every one of
      * them should still bind correctly. The point of this test is to
@@ -154,9 +154,9 @@ static void tt_sema_ai_slop_still_resolves(void)
     CHECK(strstr(obuf, "0 error(s)") != NULL);
     PASS();
 }
-TH_REG("triton", tt_sema_ai_slop_still_resolves)
+TH_REG("tri", 8, "sema ai slop still resolves", tri08)
 
-static void tt_sema_shapes_vector_add(void)
+static void tri09(void)
 {
     /* Sitting one of tile shape inference. The vector add kernel uses
      * arange to build a rank-1 tile, broadcasts a scalar against it,
@@ -171,9 +171,9 @@ static void tt_sema_shapes_vector_add(void)
     CHECK(strstr(obuf, "vec[?]:int1") != NULL);
     PASS();
 }
-TH_REG("triton", tt_sema_shapes_vector_add)
+TH_REG("tri", 9, "sema shapes vector add", tri09)
 
-static void tt_sema_shapes_2d_broadcast(void)
+static void tri10(void)
 {
     /* Rank-2 broadcasting. The matmul-shape kernel exercises both
      * sides of the canonical [:, None] / [None, :] reshape pattern,
@@ -193,9 +193,9 @@ static void tt_sema_shapes_2d_broadcast(void)
     CHECK(strstr(obuf, "mat[?, ?]:float32") != NULL);
     PASS();
 }
-TH_REG("triton", tt_sema_shapes_2d_broadcast)
+TH_REG("tri", 10, "sema shapes 2d broadcast", tri10)
 
-static void tt_sema_shapes_scalar_kernel(void)
+static void tri11(void)
 {
     /* The simple all-scalar kernel should have no tile shapes at all;
      * every expression is rank 0 with dtype int32. We check both that
@@ -208,9 +208,9 @@ static void tt_sema_shapes_scalar_kernel(void)
     CHECK(strstr(obuf, "mat[") == NULL);
     PASS();
 }
-TH_REG("triton", tt_sema_shapes_scalar_kernel)
+TH_REG("tri", 11, "sema shapes scalar kernel", tri11)
 
-static void tt_sema_constexpr_resolves_dim(void)
+static void tri12(void)
 {
     /* BLOCK: tl.constexpr = 256 should propagate so arange and the
      * downstream broadcast get vec[256] rather than vec[?]. */
@@ -220,9 +220,9 @@ static void tt_sema_constexpr_resolves_dim(void)
     CHECK(strstr(obuf, "vec[?]") == NULL);
     PASS();
 }
-TH_REG("triton", tt_sema_constexpr_resolves_dim)
+TH_REG("tri", 12, "sema constexpr resolves dim", tri12)
 
-static void tt_lower_matmul(void)
+static void tri13(void)
 {
     /* Rank-2 tiles with tl.dot now lower for the CPU path: the tile is
      * materialized and fully unrolled (block sizes are constexpr), so a
@@ -234,9 +234,9 @@ static void tt_lower_matmul(void)
     CHECK(strstr(obuf, "E138") == NULL);
     PASS();
 }
-TH_REG("triton", tt_lower_matmul)
+TH_REG("tri", 13, "lower matmul", tri13)
 
-static void tt_lower_matmul_kloop(void)
+static void tri14(void)
 {
     /* Matmul with a runtime K-loop lowers to a counted loop: the
      * accumulator is scratch-backed and the loop counter is a phi, so
@@ -248,13 +248,13 @@ static void tt_lower_matmul_kloop(void)
     CHECK(strstr(obuf, "E138") == NULL);
     PASS();
 }
-TH_REG("triton", tt_lower_matmul_kloop)
+TH_REG("tri", 14, "lower matmul kloop", tri14)
 
 /* ============================================================
  * BIR Lowering
  * ============================================================ */
 
-static void tt_lower_thread_model(void)
+static void tri15(void)
 {
     int rc = tt_run("--triton --ir tests/tri_vadd.py");
     CHEQ(rc, 0);
@@ -262,9 +262,9 @@ static void tt_lower_thread_model(void)
     CHECK(strstr(obuf, "thread_id") != NULL);
     PASS();
 }
-TH_REG("triton", tt_lower_thread_model)
+TH_REG("tri", 15, "lower thread model", tri15)
 
-static void tt_lower_simple_arith(void)
+static void tri16(void)
 {
     /* tri_simple chains a handful of integer operations and ends in
      * a store, so every arithmetic instruction is reachable from a
@@ -282,9 +282,9 @@ static void tt_lower_simple_arith(void)
     CHECK(strstr(obuf, "store ") != NULL);
     PASS();
 }
-TH_REG("triton", tt_lower_simple_arith)
+TH_REG("tri", 16, "lower simple arith", tri16)
 
-static void tt_lower_arithmetic(void)
+static void tri17(void)
 {
     /* The lowerer emits the icmp for the mask, but DCE removes it
      * downstream because mask= is currently warned-and-ignored on
@@ -304,9 +304,9 @@ static void tt_lower_arithmetic(void)
     CHECK(strstr(obuf, "store f32") != NULL);
     PASS();
 }
-TH_REG("triton", tt_lower_arithmetic)
+TH_REG("tri", 17, "lower arithmetic", tri17)
 
-static void tt_lower_math_intrinsics(void)
+static void tri18(void)
 {
     int rc = tt_run("--triton --ir tests/tri_math.py");
     CHEQ(rc, 0);
@@ -325,9 +325,9 @@ static void tt_lower_math_intrinsics(void)
     CHECK(strstr(obuf, "E134") == NULL);
     PASS();
 }
-TH_REG("triton", tt_lower_math_intrinsics)
+TH_REG("tri", 18, "lower math intrinsics", tri18)
 
-static void tt_lower_where_select(void)
+static void tri19(void)
 {
     int rc = tt_run("--triton --ir tests/tri_where.py");
     CHEQ(rc, 0);
@@ -336,9 +336,9 @@ static void tt_lower_where_select(void)
     CHECK(strstr(obuf, "E134") == NULL);
     PASS();
 }
-TH_REG("triton", tt_lower_where_select)
+TH_REG("tri", 19, "lower where select", tri19)
 
-static void tt_lower_where_mixed_promotes(void)
+static void tri20(void)
 {
     int rc = tt_run("--triton --ir --no-cfold tests/tri_where_mixed.py");
     CHEQ(rc, 0);
@@ -347,9 +347,9 @@ static void tt_lower_where_mixed_promotes(void)
     CHECK(strstr(obuf, "E134") == NULL);
     PASS();
 }
-TH_REG("triton", tt_lower_where_mixed_promotes)
+TH_REG("tri", 20, "lower where mixed promotes", tri20)
 
-static void tt_lower_where_i32_select(void)
+static void tri21(void)
 {
     int rc = tt_run("--triton --ir --no-dce tests/tri_where_int.py");
     CHEQ(rc, 0);
@@ -358,9 +358,9 @@ static void tt_lower_where_i32_select(void)
     CHECK(strstr(obuf, "E134") == NULL);
     PASS();
 }
-TH_REG("triton", tt_lower_where_i32_select)
+TH_REG("tri", 21, "lower where i32 select", tri21)
 
-static void tt_lower_where_bad_cond(void)
+static void tri22(void)
 {
     int rc = tt_run("--triton --ir tests/tri_where_bad_cond.py");
     CHNE(rc, 0);
@@ -368,13 +368,13 @@ static void tt_lower_where_bad_cond(void)
     CHECK(strstr(obuf, "condition must lower") != NULL);
     PASS();
 }
-TH_REG("triton", tt_lower_where_bad_cond)
+TH_REG("tri", 22, "lower where bad cond", tri22)
 
 /* ============================================================
  * Backend: AMD GFX11
  * ============================================================ */
 
-static void tt_amd_hsaco(void)
+static void tri23(void)
 {
     int rc = tt_run("--triton --amdgpu-bin tests/tri_vadd.py "
                     "-o tri_vadd.hsaco");
@@ -386,9 +386,9 @@ static void tt_amd_hsaco(void)
     CHECK(strstr(obuf, "1 kernels") != NULL);
     PASS();
 }
-TH_REG("triton", tt_amd_hsaco)
+TH_REG("tri", 23, "AMD hsaco", tri23)
 
-static void tt_amd_goblin_hsaco(void)
+static void tri24(void)
 {
     /* The goblin variant should produce the same shape of output as
      * vector_add. The point is to confirm the backend is name-agnostic. */
@@ -398,13 +398,13 @@ static void tt_amd_goblin_hsaco(void)
     CHECK(th_exist("tri_goblin.hsaco"));
     PASS();
 }
-TH_REG("triton", tt_amd_goblin_hsaco)
+TH_REG("tri", 24, "AMD goblin hsaco", tri24)
 
 /* ============================================================
  * Backend: NVIDIA PTX
  * ============================================================ */
 
-static void tt_nvidia_ptx(void)
+static void tri25(void)
 {
     int rc = tt_run("--triton --nvidia-ptx tests/tri_vadd.py "
                     "-o tri_vadd.ptx");
@@ -426,13 +426,13 @@ static void tt_nvidia_ptx(void)
     CHECK(strstr(buf, ".version") != NULL);
     PASS();
 }
-TH_REG("triton", tt_nvidia_ptx)
+TH_REG("tri", 25, "nvidia PTX", tri25)
 
 /* ============================================================
  * Backend: Tensix Metalium
  * ============================================================ */
 
-static void tt_tensix_metalium(void)
+static void tri26(void)
 {
     int rc = tt_run("--triton --tensix tests/tri_vadd.py "
                     "-o tri_vadd_compute.cpp");
@@ -455,7 +455,7 @@ static void tt_tensix_metalium(void)
     CHECK(strstr(buf, "cb_wait_front") != NULL);
     PASS();
 }
-TH_REG("triton", tt_tensix_metalium)
+TH_REG("tri", 26, "tensix metalium", tri26)
 
 /* ============================================================
  * The AI Slop End-to-End Test
@@ -466,7 +466,7 @@ TH_REG("triton", tt_tensix_metalium)
  * robust to whatever the LLM industry serves up as Triton next year.
  * That feels worth a regression test of its very own. */
 
-static void tt_amd_ai_slop_still_compiles(void)
+static void tri27(void)
 {
     int rc = tt_run("--triton --amdgpu-bin tests/tri_slop.py "
                     "-o tri_slop.hsaco");
@@ -479,4 +479,4 @@ static void tt_amd_ai_slop_still_compiles(void)
      * fine and any wildly different value means something is off. */
     PASS();
 }
-TH_REG("triton", tt_amd_ai_slop_still_compiles)
+TH_REG("tri", 27, "AMD ai slop still compiles", tri27)

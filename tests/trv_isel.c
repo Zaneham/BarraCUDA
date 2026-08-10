@@ -94,7 +94,7 @@ static void build_bir_add(void)
 
 /* ---- isel produces some code without erroring ---- */
 
-static void rv_isel_smoke(void)
+static void rvi01(void)
 {
     build_bir_add();
     rv_buf_init(&code);
@@ -102,11 +102,11 @@ static void rv_isel_smoke(void)
     CHECK(rv_buf_n_words(&code) > 0u);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_smoke);
+TH_REG("rvi", 1, "smoke", rvi01);
 
 /* ---- prologue is the documented one: drop sp, save ra ---- */
 
-static void rv_isel_prologue(void)
+static void rvi02(void)
 {
     build_bir_add();
     rv_buf_init(&code);
@@ -122,11 +122,11 @@ static void rv_isel_prologue(void)
     CHEQ(w1, rv_sw(RV_RA, RV_SP, 0));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_prologue);
+TH_REG("rvi", 2, "prologue", rvi02);
 
 /* ---- ADD instruction shows up in the body ---- */
 
-static void rv_isel_has_add(void)
+static void rvi03(void)
 {
     build_bir_add();
     rv_buf_init(&code);
@@ -140,11 +140,11 @@ static void rv_isel_has_add(void)
     CHECK(found);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_has_add);
+TH_REG("rvi", 3, "has add", rvi03);
 
 /* ---- final SW writes through the pointer parameter ---- */
 
-static void rv_isel_has_store(void)
+static void rvi04(void)
 {
     build_bir_add();
     rv_buf_init(&code);
@@ -158,11 +158,11 @@ static void rv_isel_has_store(void)
     CHECK(found);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_has_store);
+TH_REG("rvi", 4, "has store", rvi04);
 
 /* ---- epilogue restores ra, jalr to return ---- */
 
-static void rv_isel_epilogue(void)
+static void rvi05(void)
 {
     build_bir_add();
     rv_buf_init(&code);
@@ -180,11 +180,11 @@ static void rv_isel_epilogue(void)
     CHEQ(rv_buf_data(&code)[n - 3], rv_lw(RV_RA, RV_SP, 0));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_epilogue);
+TH_REG("rvi", 5, "epilogue", rvi05);
 
 /* ---- end-to-end: isel + ELF write produces a valid file ---- */
 
-static void rv_isel_to_elf(void)
+static void rvi06(void)
 {
     build_bir_add();
     rv_buf_init(&code);
@@ -203,11 +203,11 @@ static void rv_isel_to_elf(void)
     CHEQ(hdr[3], (uint8_t)'F');
     PASS();
 }
-TH_REG("rv_enc", rv_isel_to_elf);
+TH_REG("rvi", 6, "to ELF", rvi06);
 
 /* ---- unsupported op produces a clean refusal ---- */
 
-static void rv_isel_unsupported(void)
+static void rvi07(void)
 {
     /* Replace inst 4 with a SHARED_ALLOC, which still has no
      * lowering (the L1 region management for __shared__ memory
@@ -220,7 +220,7 @@ static void rv_isel_unsupported(void)
     CHEQ(rv_isel_func(&fake_bir, 0, &code), BC_ERR_TDF);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_unsupported);
+TH_REG("rvi", 7, "unsupported", rvi07);
 
 /* ---- THREAD_ID etc. lower to LW from L1 runtime args ---- */
 /* Each coordinate intrinsic emits two instructions: a LUI to materialise
@@ -229,7 +229,7 @@ TH_REG("rv_enc", rv_isel_unsupported);
  * surrounding code shifts as other lowerings change. No stub here: the
  * kernel really reads from L1, and what's in that slot is the launcher's
  * job, not the compiler's. */
-static void rv_isel_thread_id_x_via_l1(void)
+static void rvi08(void)
 {
     build_bir_add();
     fake_bir.insts[3].op = BIR_THREAD_ID;
@@ -243,9 +243,9 @@ static void rv_isel_thread_id_x_via_l1(void)
                               (int16_t)RT_ARG_OFF_TID_X)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_thread_id_x_via_l1);
+TH_REG("rvi", 8, "thread id x via L1", rvi08);
 
-static void rv_isel_block_id_z_via_l1(void)
+static void rvi09(void)
 {
     build_bir_add();
     fake_bir.insts[3].op = BIR_BLOCK_ID;
@@ -258,9 +258,9 @@ static void rv_isel_block_id_z_via_l1(void)
                               (int16_t)RT_ARG_OFF_BID_Z)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_block_id_z_via_l1);
+TH_REG("rvi", 9, "block id z via L1", rvi09);
 
-static void rv_isel_block_dim_y_via_l1(void)
+static void rvi10(void)
 {
     build_bir_add();
     fake_bir.insts[3].op = BIR_BLOCK_DIM;
@@ -272,9 +272,9 @@ static void rv_isel_block_dim_y_via_l1(void)
                              (int16_t)RT_ARG_OFF_BDIM_Y)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_block_dim_y_via_l1);
+TH_REG("rvi", 10, "block dim y via L1", rvi10);
 
-static void rv_isel_grid_dim_x_via_l1(void)
+static void rvi11(void)
 {
     build_bir_add();
     fake_bir.insts[3].op = BIR_GRID_DIM;
@@ -286,10 +286,10 @@ static void rv_isel_grid_dim_x_via_l1(void)
                              (int16_t)RT_ARG_OFF_GDIM_X)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_grid_dim_x_via_l1);
+TH_REG("rvi", 11, "grid dim x via L1", rvi11);
 
 /* Bad dimension still refuses cleanly. */
-static void rv_isel_intrinsic_bad_dim(void)
+static void rvi12(void)
 {
     build_bir_add();
     fake_bir.insts[3].op = BIR_THREAD_ID;
@@ -299,10 +299,10 @@ static void rv_isel_intrinsic_bad_dim(void)
     CHEQ(rv_isel_func(&fake_bir, 0, &code), BC_ERR_TDF);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_intrinsic_bad_dim);
+TH_REG("rvi", 12, "intrinsic bad dim", rvi12);
 
 /* PARAM now also reads from L1 runtime args, not from a0..a7. */
-static void rv_isel_param_via_l1(void)
+static void rvi13(void)
 {
     build_bir_add();
     rv_buf_init(&code);
@@ -318,13 +318,13 @@ static void rv_isel_param_via_l1(void)
                              (int16_t)RT_ARG_OFF_KARG(2))));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_param_via_l1);
+TH_REG("rvi", 13, "param via L1", rvi13);
 
 /* A baby core is a single hardware thread with no SIMT, so __syncthreads()
  * has nothing to wait on and lowers to nothing. FENCE would be wrong to
  * emit: it is a documented no-op on this core and cannot order anything,
  * so it would only suggest a guarantee we are not making. */
-static void rv_isel_barrier_is_noop(void)
+static void rvi14(void)
 {
     build_bir_add();
     rv_buf_init(&code);
@@ -342,7 +342,7 @@ static void rv_isel_barrier_is_noop(void)
     CHECK(!buf_contains(rv_fence(0xFu, 0xFu)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_barrier_is_noop);
+TH_REG("rvi", 14, "barrier is noop", rvi14);
 
 /* ---- Helper: build a minimal "binop kernel" template ----
  *
@@ -363,7 +363,7 @@ static void build_bir_binop(uint16_t op)
  * so the only post-prologue change is the single arithmetic word
  * between the operand loads and the result spill. */
 
-static void rv_isel_binop_and(void)
+static void rvi15(void)
 {
     build_bir_binop(BIR_AND);
     rv_buf_init(&code);
@@ -371,9 +371,9 @@ static void rv_isel_binop_and(void)
     CHECK(buf_contains(rv_and(RV_T0, RV_T0, RV_T1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_binop_and);
+TH_REG("rvi", 15, "binop and", rvi15);
 
-static void rv_isel_binop_or(void)
+static void rvi16(void)
 {
     build_bir_binop(BIR_OR);
     rv_buf_init(&code);
@@ -381,9 +381,9 @@ static void rv_isel_binop_or(void)
     CHECK(buf_contains(rv_or(RV_T0, RV_T0, RV_T1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_binop_or);
+TH_REG("rvi", 16, "binop or", rvi16);
 
-static void rv_isel_binop_xor(void)
+static void rvi17(void)
 {
     build_bir_binop(BIR_XOR);
     rv_buf_init(&code);
@@ -391,9 +391,9 @@ static void rv_isel_binop_xor(void)
     CHECK(buf_contains(rv_xor(RV_T0, RV_T0, RV_T1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_binop_xor);
+TH_REG("rvi", 17, "binop xor", rvi17);
 
-static void rv_isel_binop_shl(void)
+static void rvi18(void)
 {
     build_bir_binop(BIR_SHL);
     rv_buf_init(&code);
@@ -401,9 +401,9 @@ static void rv_isel_binop_shl(void)
     CHECK(buf_contains(rv_sll(RV_T0, RV_T0, RV_T1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_binop_shl);
+TH_REG("rvi", 18, "binop shl", rvi18);
 
-static void rv_isel_binop_lshr(void)
+static void rvi19(void)
 {
     build_bir_binop(BIR_LSHR);
     rv_buf_init(&code);
@@ -411,9 +411,9 @@ static void rv_isel_binop_lshr(void)
     CHECK(buf_contains(rv_srl(RV_T0, RV_T0, RV_T1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_binop_lshr);
+TH_REG("rvi", 19, "binop lshr", rvi19);
 
-static void rv_isel_binop_ashr(void)
+static void rvi20(void)
 {
     build_bir_binop(BIR_ASHR);
     rv_buf_init(&code);
@@ -421,9 +421,9 @@ static void rv_isel_binop_ashr(void)
     CHECK(buf_contains(rv_sra(RV_T0, RV_T0, RV_T1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_binop_ashr);
+TH_REG("rvi", 20, "binop ashr", rvi20);
 
-static void rv_isel_binop_sdiv(void)
+static void rvi21(void)
 {
     build_bir_binop(BIR_SDIV);
     rv_buf_init(&code);
@@ -431,9 +431,9 @@ static void rv_isel_binop_sdiv(void)
     CHECK(buf_contains(rv_div(RV_T0, RV_T0, RV_T1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_binop_sdiv);
+TH_REG("rvi", 21, "binop sdiv", rvi21);
 
-static void rv_isel_binop_udiv(void)
+static void rvi22(void)
 {
     build_bir_binop(BIR_UDIV);
     rv_buf_init(&code);
@@ -441,9 +441,9 @@ static void rv_isel_binop_udiv(void)
     CHECK(buf_contains(rv_divu(RV_T0, RV_T0, RV_T1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_binop_udiv);
+TH_REG("rvi", 22, "binop udiv", rvi22);
 
-static void rv_isel_binop_srem(void)
+static void rvi23(void)
 {
     build_bir_binop(BIR_SREM);
     rv_buf_init(&code);
@@ -451,9 +451,9 @@ static void rv_isel_binop_srem(void)
     CHECK(buf_contains(rv_rem(RV_T0, RV_T0, RV_T1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_binop_srem);
+TH_REG("rvi", 23, "binop srem", rvi23);
 
-static void rv_isel_binop_urem(void)
+static void rvi24(void)
 {
     build_bir_binop(BIR_UREM);
     rv_buf_init(&code);
@@ -461,7 +461,7 @@ static void rv_isel_binop_urem(void)
     CHECK(buf_contains(rv_remu(RV_T0, RV_T0, RV_T1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_binop_urem);
+TH_REG("rvi", 24, "binop urem", rvi24);
 
 /* ---- ICMP variants ----
  *
@@ -475,7 +475,7 @@ static void build_bir_icmp(uint8_t kind)
     fake_bir.insts[3].subop = kind;
 }
 
-static void rv_isel_icmp_eq(void)
+static void rvi25(void)
 {
     build_bir_icmp(BIR_ICMP_EQ);
     rv_buf_init(&code);
@@ -484,9 +484,9 @@ static void rv_isel_icmp_eq(void)
     CHECK(buf_contains(rv_sltiu(RV_T0, RV_T0, 1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_icmp_eq);
+TH_REG("rvi", 25, "icmp eq", rvi25);
 
-static void rv_isel_icmp_ne(void)
+static void rvi26(void)
 {
     build_bir_icmp(BIR_ICMP_NE);
     rv_buf_init(&code);
@@ -495,9 +495,9 @@ static void rv_isel_icmp_ne(void)
     CHECK(buf_contains(rv_sltu(RV_T0, RV_ZERO, RV_T0)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_icmp_ne);
+TH_REG("rvi", 26, "icmp ne", rvi26);
 
-static void rv_isel_icmp_slt(void)
+static void rvi27(void)
 {
     build_bir_icmp(BIR_ICMP_SLT);
     rv_buf_init(&code);
@@ -505,9 +505,9 @@ static void rv_isel_icmp_slt(void)
     CHECK(buf_contains(rv_slt(RV_T0, RV_T0, RV_T1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_icmp_slt);
+TH_REG("rvi", 27, "icmp slt", rvi27);
 
-static void rv_isel_icmp_sgt(void)
+static void rvi28(void)
 {
     /* a > b implemented as b < a, so the operands are swapped. */
     build_bir_icmp(BIR_ICMP_SGT);
@@ -516,9 +516,9 @@ static void rv_isel_icmp_sgt(void)
     CHECK(buf_contains(rv_slt(RV_T0, RV_T1, RV_T0)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_icmp_sgt);
+TH_REG("rvi", 28, "icmp sgt", rvi28);
 
-static void rv_isel_icmp_sle(void)
+static void rvi29(void)
 {
     /* a <= b == NOT(b < a), so slt with swapped operands plus xori 1. */
     build_bir_icmp(BIR_ICMP_SLE);
@@ -528,9 +528,9 @@ static void rv_isel_icmp_sle(void)
     CHECK(buf_contains(rv_xori(RV_T0, RV_T0, 1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_icmp_sle);
+TH_REG("rvi", 29, "icmp sle", rvi29);
 
-static void rv_isel_icmp_ult(void)
+static void rvi30(void)
 {
     build_bir_icmp(BIR_ICMP_ULT);
     rv_buf_init(&code);
@@ -538,7 +538,7 @@ static void rv_isel_icmp_ult(void)
     CHECK(buf_contains(rv_sltu(RV_T0, RV_T0, RV_T1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_icmp_ult);
+TH_REG("rvi", 30, "icmp ult", rvi30);
 
 /* ---- load_imm32: small constant ---- */
 /* Below ADDI's 12-bit signed range, materialisation is a single ADDI
@@ -574,7 +574,7 @@ static void build_bir_return_const(int32_t v)
     fake_bir.insts[0].operands[0] = BIR_MAKE_CONST(0);
 }
 
-static void rv_isel_const_small_pos(void)
+static void rvi31(void)
 {
     build_bir_return_const(42);
     rv_buf_init(&code);
@@ -583,9 +583,9 @@ static void rv_isel_const_small_pos(void)
     CHECK(buf_contains(rv_addi(RV_A0, RV_ZERO, 42)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_const_small_pos);
+TH_REG("rvi", 31, "const small pos", rvi31);
 
-static void rv_isel_const_small_neg(void)
+static void rvi32(void)
 {
     build_bir_return_const(-1);
     rv_buf_init(&code);
@@ -593,9 +593,9 @@ static void rv_isel_const_small_neg(void)
     CHECK(buf_contains(rv_addi(RV_A0, RV_ZERO, -1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_const_small_neg);
+TH_REG("rvi", 32, "const small neg", rvi32);
 
-static void rv_isel_const_large_positive(void)
+static void rvi33(void)
 {
     /* 0x12345678: low 12 = 0x678 (bit 11 clear), so just LUI+ADDI
      * with hi=0x12345 and lo=0x678 (no carry correction). */
@@ -606,9 +606,9 @@ static void rv_isel_const_large_positive(void)
     CHECK(buf_contains(rv_addi(RV_A0, RV_A0, 0x678)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_const_large_positive);
+TH_REG("rvi", 33, "const large positive", rvi33);
 
-static void rv_isel_const_large_signbump(void)
+static void rvi34(void)
 {
     /* 0x12345fff: low 12 = 0xfff (bit 11 set, lo treated as -1),
      * so hi must bump from 0x12345 to 0x12346 and ADDI = -1. */
@@ -619,11 +619,11 @@ static void rv_isel_const_large_signbump(void)
     CHECK(buf_contains(rv_addi(RV_A0, RV_A0, -1)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_const_large_signbump);
+TH_REG("rvi", 34, "const large signbump", rvi34);
 
 /* ---- UNREACHABLE emits EBREAK ---- */
 
-static void rv_isel_unreachable_ebreak(void)
+static void rvi35(void)
 {
     memset(&fake_bir, 0, sizeof(fake_bir));
     fake_bir.num_types = 1;
@@ -645,7 +645,7 @@ static void rv_isel_unreachable_ebreak(void)
     CHECK(buf_contains(rv_ebreak()));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_unreachable_ebreak);
+TH_REG("rvi", 35, "unreachable EBREAK", rvi35);
 
 /* ---- Identity casts: PTRTOINT / INTTOPTR / BITCAST ---- */
 /*
@@ -655,7 +655,7 @@ TH_REG("rv_enc", rv_isel_unreachable_ebreak);
  * between the load+store pair should match what we'd get with
  * a no-op transformation. */
 
-static void rv_isel_cast_id_bitcast(void)
+static void rvi36(void)
 {
     build_bir_add();
     fake_bir.insts[3].op = BIR_BITCAST;
@@ -667,7 +667,7 @@ static void rv_isel_cast_id_bitcast(void)
     CHECK(buf_contains(rv_lw(RV_T0, RV_SP, 12)));   /* load %1 slot */
     PASS();
 }
-TH_REG("rv_enc", rv_isel_cast_id_bitcast);
+TH_REG("rvi", 36, "cast id bitcast", rvi36);
 
 /* ---- Width conversions ---- */
 /*
@@ -711,7 +711,7 @@ static void build_bir_zext_i8_to_i32(void)
     fake_bir.insts[2].operands[0] = BIR_MAKE_VAL(1);
 }
 
-static void rv_isel_zext_i8(void)
+static void rvi37(void)
 {
     build_bir_zext_i8_to_i32();
     rv_buf_init(&code);
@@ -720,9 +720,9 @@ static void rv_isel_zext_i8(void)
     CHECK(buf_contains(rv_srli(RV_T0, RV_T0, 24)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_zext_i8);
+TH_REG("rvi", 37, "zext i8", rvi37);
 
-static void rv_isel_sext_i8(void)
+static void rvi38(void)
 {
     build_bir_zext_i8_to_i32();
     fake_bir.insts[1].op = BIR_SEXT;
@@ -732,7 +732,7 @@ static void rv_isel_sext_i8(void)
     CHECK(buf_contains(rv_srai(RV_T0, RV_T0, 24)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_sext_i8);
+TH_REG("rvi", 38, "sext i8", rvi38);
 
 /* ---- Multi-function module: kernel calls a helper ----
  *
@@ -842,7 +842,7 @@ static void build_bir_kern_calls_helper(void)
     fake_bir.insts[9].operands[0] = BIR_MAKE_VAL(8);
 }
 
-static void rv_isel_module_two_funcs(void)
+static void rvi39(void)
 {
     build_bir_kern_calls_helper();
     rv_buf_init(&code);
@@ -859,13 +859,13 @@ static void rv_isel_module_two_funcs(void)
     CHEQ(count, 2);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_module_two_funcs);
+TH_REG("rvi", 39, "module two funcs", rvi39);
 
 /* The JAL for the kern->helper call should appear with a positive
  * offset (helper is emitted after kern). The exact value depends
  * on kern's body length, so we just check that some JAL with a
  * positive J-immediate exists. */
-static void rv_isel_module_jal_present(void)
+static void rvi40(void)
 {
     build_bir_kern_calls_helper();
     rv_buf_init(&code);
@@ -883,12 +883,12 @@ static void rv_isel_module_jal_present(void)
     CHECK(found_forward_jal);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_module_jal_present);
+TH_REG("rvi", 40, "module JAL present", rvi40);
 
 /* Args land in a0, a1, etc. The call sequence loads the first
  * two arg values from the kern's local slots into a0 and a1 just
  * before the JAL. */
-static void rv_isel_module_args_in_regs(void)
+static void rvi41(void)
 {
     build_bir_kern_calls_helper();
     rv_buf_init(&code);
@@ -903,14 +903,14 @@ static void rv_isel_module_args_in_regs(void)
     CHECK(buf_contains(rv_lw(RV_A1, RV_SP, 16)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_module_args_in_regs);
+TH_REG("rvi", 41, "module args in regs", rvi41);
 
 /* Direct recursion is refused cleanly. A function calling itself
  * needs more sophisticated prologue/epilogue handling than we have
  * today; the alternative is to silently miscompile, which is the
  * sort of decision that turns up later in a debugger as a value
  * that was perfectly correct an instant ago. */
-static void rv_isel_module_refuses_recursion(void)
+static void rvi42(void)
 {
     build_bir_kern_calls_helper();
     /* Edit function 1 (helper) to call itself instead of just
@@ -926,7 +926,7 @@ static void rv_isel_module_refuses_recursion(void)
     CHEQ(rv_isel_module(&fake_bir, &code), BC_ERR_TDF);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_module_refuses_recursion);
+TH_REG("rvi", 42, "module refuses recursion", rvi42);
 
 /* ---- Forward + backward branches ----
  *
@@ -975,7 +975,7 @@ static void build_bir_three_blocks(void)
     fake_bir.insts[2].num_operands = 0;
 }
 
-static void rv_isel_br_forward_and_backward(void)
+static void rvi43(void)
 {
     build_bir_three_blocks();
     rv_buf_init(&code);
@@ -1008,13 +1008,13 @@ static void rv_isel_br_forward_and_backward(void)
     CHECK(found_back);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_br_forward_and_backward);
+TH_REG("rvi", 43, "br forward and backward", rvi43);
 
 /* ---- BR_COND emits BNE + JAL ---- */
 /* `if (cond) goto X; else goto Y;` lowers to loading cond into T0, a
  * BNE T0, zero, X, then a JAL zero, Y. We construct a two-arm BIR and
  * check both branch flavours appear in the output. */
-static void rv_isel_br_cond_shape(void)
+static void rvi44(void)
 {
     memset(&fake_bir, 0, sizeof(fake_bir));
     fake_bir.num_types = 2;
@@ -1080,7 +1080,7 @@ static void rv_isel_br_cond_shape(void)
     }
     PASS();
 }
-TH_REG("rv_enc", rv_isel_br_cond_shape);
+TH_REG("rvi", 44, "br cond shape", rvi44);
 
 /* ---- SELECT: BEQ skip + value loads ---- */
 /* cond ? a : b lowers to loading cond into T2 and b into T0, a
@@ -1089,7 +1089,7 @@ TH_REG("rv_enc", rv_isel_br_cond_shape);
  * depending on every downstream instruction count, but we can check a
  * BEQ appears and the buffer parses past it without unresolved
  * placeholders. */
-static void rv_isel_select_shape(void)
+static void rvi45(void)
 {
     memset(&fake_bir, 0, sizeof(fake_bir));
     fake_bir.num_types = 2;
@@ -1141,7 +1141,7 @@ static void rv_isel_select_shape(void)
     CHECK(found_beq);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_select_shape);
+TH_REG("rvi", 45, "select shape", rvi45);
 
 /* ---- Beyond a0..a7 still works because all params go via L1 ----
  *
@@ -1151,7 +1151,7 @@ TH_REG("rv_enc", rv_isel_select_shape);
  * RT_ARG_KERNEL_BASE + i*4 in L1. We construct a kernel with 10
  * params and check that the 9th (subop=8) and 10th (subop=9)
  * read from slot 8 and slot 9 of the kernel-arg block. */
-static void rv_isel_param_9_via_l1(void)
+static void rvi46(void)
 {
     memset(&fake_bir, 0, sizeof(fake_bir));
     fake_bir.num_types = 2;
@@ -1187,10 +1187,10 @@ static void rv_isel_param_9_via_l1(void)
                              (int16_t)RT_ARG_OFF_KARG(9))));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_param_9_via_l1);
+TH_REG("rvi", 46, "param 9 via L1", rvi46);
 
 /* Past RT_ARG_N_KERNEL_SLOTS the isel refuses cleanly. */
-static void rv_isel_param_overflow_refused(void)
+static void rvi47(void)
 {
     build_bir_add();
     fake_bir.insts[1].subop = RT_ARG_N_KERNEL_SLOTS;
@@ -1198,7 +1198,7 @@ static void rv_isel_param_overflow_refused(void)
     CHEQ(rv_isel_func(&fake_bir, 0, &code), BC_ERR_TDF);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_param_overflow_refused);
+TH_REG("rvi", 47, "param overflow refused", rvi47);
 
 /* ---- Struct GEP: field index becomes byte offset ----
  *
@@ -1210,7 +1210,7 @@ TH_REG("rv_enc", rv_isel_param_overflow_refused);
  * The BIR uses types 0=i32, 1=struct{i32,i32,f32,i32}, 2=ptr<global,
  * struct>, 3=ptr<global,i32>, 4=void and 5=f32, one i32 const of 1, and
  * insts PARAM 0, a no-op GEP on idx 0, a GEP to field 1, then RET void. */
-static void rv_isel_struct_gep_field1(void)
+static void rvi48(void)
 {
     memset(&fake_bir, 0, sizeof(fake_bir));
     fake_bir.num_types = 6;
@@ -1281,7 +1281,7 @@ static void rv_isel_struct_gep_field1(void)
     CHECK(buf_contains(rv_addi(RV_T0, RV_T0, 4)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_struct_gep_field1);
+TH_REG("rvi", 48, "struct GEP field1", rvi48);
 
 /* ---- type_bytes for nested types ----
  *
@@ -1292,7 +1292,7 @@ TH_REG("rv_enc", rv_isel_struct_gep_field1);
  * For struct { i8, [4 x i32], i32 } the i8 sits at offset 0, the [4 x i32]
  * starts at 4 (aligned) with size 16, and the trailing i32 lands at offset
  * 20, so GEP-to-field-2 should produce ADDI 20. */
-static void rv_isel_struct_gep_with_array(void)
+static void rvi49(void)
 {
     memset(&fake_bir, 0, sizeof(fake_bir));
     fake_bir.num_types = 6;
@@ -1358,7 +1358,7 @@ static void rv_isel_struct_gep_with_array(void)
     CHECK(buf_contains(rv_addi(RV_T0, RV_T0, 20)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_struct_gep_with_array);
+TH_REG("rvi", 49, "struct GEP with array", rvi49);
 
 /* ---- Array-of-struct GEP: stride access (the bug regression) ----
  *
@@ -1371,7 +1371,7 @@ TH_REG("rv_enc", rv_isel_struct_gep_with_array);
  * struct> param and a runtime i32 idx, then GEPs base by idx to yield the
  * same pointee before RET. The codegen loads base and idx, multiplies idx
  * by 8 and adds it to base, so we look for the LI of 8 and the MUL. */
-static void rv_isel_array_of_struct_stride(void)
+static void rvi50(void)
 {
     memset(&fake_bir, 0, sizeof(fake_bir));
     fake_bir.num_types = 5;
@@ -1425,7 +1425,7 @@ static void rv_isel_array_of_struct_stride(void)
     CHECK(buf_contains(rv_mul (RV_T1, RV_T1, RV_T2)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_array_of_struct_stride);
+TH_REG("rvi", 50, "array of struct stride", rvi50);
 
 /* ---- ALLOCA: pointer into the frame's alloca region ---- */
 /*
@@ -1433,7 +1433,7 @@ TH_REG("rv_enc", rv_isel_array_of_struct_stride);
  * should be sp + (ISEL_LOCALS_BASE + total_insts*4 + 0).
  * total_insts here is 2 (the ALLOCA itself and the RET). So
  * the absolute offset is 8 + 8 = 16. We expect ADDI t0, sp, 16. */
-static void rv_isel_alloca_offset(void)
+static void rvi51(void)
 {
     memset(&fake_bir, 0, sizeof(fake_bir));
     fake_bir.num_types = 3;
@@ -1463,7 +1463,7 @@ static void rv_isel_alloca_offset(void)
     CHECK(buf_contains(rv_addi(RV_T0, RV_SP, 16)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_alloca_offset);
+TH_REG("rvi", 51, "alloca offset", rvi51);
 
 /*
  * Regressions for the four silent miscompiles found in the July 2026
@@ -1488,7 +1488,7 @@ static int sp_slot_off(uint32_t w)
  * the function's own instruction count, so function 1 addressed past its
  * frame and into the caller's. Every slot must sit inside the largest
  * frame this module allocates, which is 32 bytes here. */
-static void rv_isel_slots_are_frame_local(void)
+static void rvi52(void)
 {
     build_bir_kern_calls_helper();
     rv_buf_init(&code);
@@ -1500,12 +1500,12 @@ static void rv_isel_slots_are_frame_local(void)
     }
     PASS();
 }
-TH_REG("rv_enc", rv_isel_slots_are_frame_local);
+TH_REG("rvi", 52, "slots are frame local", rvi52);
 
 /* Past roughly 510 instructions the slot offset overflowed the 12-bit
  * signed immediate and wrapped negative, reading below the frame. It has
  * to refuse instead. */
-static void rv_isel_refuses_huge_frame(void)
+static void rvi53(void)
 {
     memset(&fake_bir, 0, sizeof(fake_bir));
     fake_bir.num_types = 2;
@@ -1536,7 +1536,7 @@ static void rv_isel_refuses_huge_frame(void)
     CHEQ(rv_isel_func(&fake_bir, 0, &code), BC_ERR_TDF);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_refuses_huge_frame);
+TH_REG("rvi", 53, "refuses huge frame", rvi53);
 
 /* Build a kernel storing through a pointer whose pointee is `w` bits
  * wide, then loading it back: PARAM ptr, LOAD, STORE, RET. */
@@ -1581,7 +1581,7 @@ static void build_bir_narrow(uint16_t w)
 
 /* Sub-word accesses used to emit LW/SW regardless of pointee width, so a
  * char store clobbered the three neighbouring bytes. */
-static void rv_isel_byte_access(void)
+static void rvi54(void)
 {
     build_bir_narrow(8);
     rv_buf_init(&code);
@@ -1592,9 +1592,9 @@ static void rv_isel_byte_access(void)
     CHECK(!buf_contains(rv_sw(RV_T0, RV_T1, 0)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_byte_access);
+TH_REG("rvi", 54, "byte access", rvi54);
 
-static void rv_isel_half_access(void)
+static void rvi55(void)
 {
     build_bir_narrow(16);
     rv_buf_init(&code);
@@ -1603,9 +1603,9 @@ static void rv_isel_half_access(void)
     CHECK(buf_contains(rv_sh(RV_T0, RV_T1, 0)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_half_access);
+TH_REG("rvi", 55, "half access", rvi55);
 
-static void rv_isel_word_access_unchanged(void)
+static void rvi56(void)
 {
     build_bir_narrow(32);
     rv_buf_init(&code);
@@ -1614,11 +1614,11 @@ static void rv_isel_word_access_unchanged(void)
     CHECK(buf_contains(rv_sw(RV_T0, RV_T1, 0)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_word_access_unchanged);
+TH_REG("rvi", 56, "word access unchanged", rvi56);
 
 /* tt-metal reads a0 as the stack watermark, where zero means "not
  * computed". A void return used to leave it holding whatever was there. */
-static void rv_isel_void_ret_zeroes_a0(void)
+static void rvi57(void)
 {
     build_bir_narrow(32);
     rv_buf_init(&code);
@@ -1626,7 +1626,7 @@ static void rv_isel_void_ret_zeroes_a0(void)
     CHECK(buf_contains(rv_addi(RV_A0, RV_ZERO, 0)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_void_ret_zeroes_a0);
+TH_REG("rvi", 57, "void ret zeroes a0", rvi57);
 
 /* Build two functions where the second one allocas, so the alloca table is
  * indexed by a nonzero module-global instruction index. */
@@ -1680,7 +1680,7 @@ static void build_bir_helper_allocas(void)
  * the region was sized per function, so a second function's allocas landed
  * outside its own frame. Function 1's frame is 8 + 3*4 + 8 = 28, rounded to
  * 32, with its allocas at 20 and 24. */
-static void rv_isel_alloca_in_second_func(void)
+static void rvi58(void)
 {
     build_bir_helper_allocas();
     rv_buf_init(&code);
@@ -1689,12 +1689,12 @@ static void rv_isel_alloca_in_second_func(void)
     CHECK(buf_contains(rv_addi(RV_T0, RV_SP, 24)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_alloca_in_second_func);
+TH_REG("rvi", 58, "alloca in second func", rvi58);
 
 /* An unpatched call placeholder is a zero word, which is an illegal RV32
  * instruction that traps with no diagnostic. Nothing the module path emits
  * should ever be zero. */
-static void rv_isel_no_illegal_words(void)
+static void rvi59(void)
 {
     build_bir_kern_calls_helper();
     rv_buf_init(&code);
@@ -1703,21 +1703,21 @@ static void rv_isel_no_illegal_words(void)
     CHECK(!buf_contains(0u));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_no_illegal_words);
+TH_REG("rvi", 59, "no illegal words", rvi59);
 
 /* An i64 access has no single RV32 instruction. It used to compile to LW and
  * silently move four of the eight bytes. */
-static void rv_isel_refuses_i64_access(void)
+static void rvi60(void)
 {
     build_bir_narrow(64);
     rv_buf_init(&code);
     CHEQ(rv_isel_func(&fake_bir, 0, &code), BC_ERR_TDF);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_refuses_i64_access);
+TH_REG("rvi", 60, "refuses i64 access", rvi60);
 
 /* Same for an aggregate pointee. */
-static void rv_isel_refuses_struct_access(void)
+static void rvi61(void)
 {
     build_bir_narrow(32);
     /* Repoint the pointer at a two-field struct instead of a bare i32. */
@@ -1734,7 +1734,7 @@ static void rv_isel_refuses_struct_access(void)
     CHEQ(rv_isel_func(&fake_bir, 0, &code), BC_ERR_TDF);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_refuses_struct_access);
+TH_REG("rvi", 61, "refuses struct access", rvi61);
 
 /* Build a single function of n instructions: n-1 PARAMs then a void RET. */
 static void build_bir_n_insts(uint32_t n)
@@ -1766,7 +1766,7 @@ static void build_bir_n_insts(uint32_t n)
 /* The frame is 8 + 4n rounded to 16, and the prologue adjusts sp with one
  * ADDI, so 2032 bytes is the last frame that fits the 12-bit immediate.
  * That puts the boundary at 506 instructions. */
-static void rv_isel_frame_boundary_ok(void)
+static void rvi62(void)
 {
     build_bir_n_insts(506);
     rv_buf_init(&code);
@@ -1775,20 +1775,20 @@ static void rv_isel_frame_boundary_ok(void)
     CHECK(buf_contains(rv_addi(RV_SP, RV_SP, 2032)));
     PASS();
 }
-TH_REG("rv_enc", rv_isel_frame_boundary_ok);
+TH_REG("rvi", 62, "frame boundary ok", rvi62);
 
-static void rv_isel_frame_boundary_refused(void)
+static void rvi63(void)
 {
     build_bir_n_insts(507);
     rv_buf_init(&code);
     CHEQ(rv_isel_func(&fake_bir, 0, &code), BC_ERR_TDF);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_frame_boundary_refused);
+TH_REG("rvi", 63, "frame boundary refused", rvi63);
 
 /* Every slot access in the largest accepted function stays inside the frame
  * and within the positive half of the 12-bit immediate. */
-static void rv_isel_max_frame_slots_in_range(void)
+static void rvi64(void)
 {
     build_bir_n_insts(506);
     rv_buf_init(&code);
@@ -1801,11 +1801,11 @@ static void rv_isel_max_frame_slots_in_range(void)
     }
     PASS();
 }
-TH_REG("rv_enc", rv_isel_max_frame_slots_in_range);
+TH_REG("rvi", 64, "max frame slots in range", rvi64);
 
 /* i64 has no RV32 representation. This used to compile, with the mul becoming
  * 32-bit and the shift by 32 becoming a shift by zero. No diagnostic. */
-static void rv_isel_refuses_i64_arith(void)
+static void rvi65(void)
 {
     memset(&fake_bir, 0, sizeof(fake_bir));
     fake_bir.num_types = 3;
@@ -1842,4 +1842,4 @@ static void rv_isel_refuses_i64_arith(void)
     CHEQ(rv_isel_func(&fake_bir, 0, &code), BC_ERR_TDF);
     PASS();
 }
-TH_REG("rv_enc", rv_isel_refuses_i64_arith);
+TH_REG("rvi", 65, "refuses i64 arith", rvi65);
