@@ -84,6 +84,7 @@ Based in New Zealand, where it's already tomorrow and the GPUs are just as confu
 
 - **Fernando Magno Quintão Pereira** and the **Compilers Lab at UFMG** (Universidade Federal de Minas Gerais). Fernando reached out after seeing the project, pointed me to the divergence analysis papers, and offered guidance. The SSA register allocator exists because of that conversation.
 - **[Jorge Galvez](https://github.com/JorgeG94)** for sending me his `do concurrent` Fortran benchmarks and letting me run tests on them. Three real frontend bugs turned up in an afternoon, which is exactly what you want somebody else's code to do.
+- **Jon Stevens** from Hot Aisle who has very generously supported this compiler by providing access to AMD CDNA GPUs. You can find more about Hot Aisle [here](https://hotaisle.xyz/).
 - **The academic community**: Cooper, Harvey & Kennedy for dominators; Braun & Hack for SSA spilling; Sampaio, Souza, Collange & Pereira for divergence analysis. I'm just a hobbyist who reads papers and writes C. The actual hard work was done by the researchers.
 - **Steven Muchnick** for *Advanced Compiler Design and Implementation*. If this compiler does anything right, that book is why.
 - **Low Level** for the Zero to Hero C course and the YouTube channel. That's where I learnt C.
