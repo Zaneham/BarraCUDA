@@ -39,6 +39,7 @@ The following CUDA features compile to working GFX9/GFX10/GFX11/GFX12 machine co
 - Struct pass-by-value
 - Triton tile shape inference: rank-0/1/2 shape annotation on every expression, constexpr default propagation (`BLOCK: tl.constexpr = 256` resolves to `vec[256]`), numpy-style broadcasting, `[:, None]` / `[None, :]` reshape patterns
 - Triton matmul on the CPU: `tl.dot` lowers and runs via `--cpu`, with a runtime K-loop so the contraction can be any size. Rank-2 tiles materialise and unroll
+- MLIR frontend (`--mlir`): `func.func`, `return`, `arith.constant`, the `arith` binops, compares and conversions lower to BIR and run through the same pipeline as CUDA and Triton. `--mlir --pp` reprints what was read
 - x86-64 CPU backend (`--cpu`): CUDA and Triton kernels compile to a host object and run with no GPU. SIMT becomes a thread loop. Stack-everything codegen, no register allocator yet
 - TDF (Tile DataFlow) IR layer above BIR: regions / channels / NoC arcs as first-class compiler concepts, L1 placement, fission pass for multi-core kernels
 - SYSPRINT: class-tagged structured kernel output, pattern-routed sinks on the host. See [mainframe.md](mainframe.md) for the kernel/host workflow.
@@ -54,6 +55,7 @@ Being honest about limitations is important. Here's what's missing:
 - Host code generation (only device code is compiled)
 - Rank-2 matrix codegen on the GPU backends (MFMA on AMD, mma.sync on NVIDIA). Triton `tl.dot` already runs on the CPU backend, materialised and unrolled with a K-loop, but the GPU matrix-instruction path is a separate job. On GPU targets rank-2 tiles still refuse cleanly with E099, no silent wrong code.
 - CPU backend is correct-first: stack-everything codegen, no register allocator yet, single block per call, and `tl.load` masks aren't honoured (so keep the launch's nthreads equal to the element count). It runs; it isn't fast.
+- MLIR beyond `func`, `return` and `arith`. No `memref`, `scf` or `gpu` dialect, and a function body with more than one block is refused rather than flattened. Nothing marks an MLIR function as a kernel, so it lowers as a device function: `--cpu` and `--rv64` emit real code, `--metal` counts it as a kernel, and `--amdgpu-bin` and `--nvidia-ptx` report zero kernels and write an empty container
 - Soft-float for the Tenstorrent native RV32IM path. The runtime exists and validates against host FPU; wiring it into `--rv-elf` is a sitting's work away.
 
 None of these are architectural blockers. They're all "haven't got round to it yet" items.
