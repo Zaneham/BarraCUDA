@@ -177,6 +177,14 @@ test: $(TARGET) trunner
 
 # bir.h claims a deterministic layout. This makes that a property rather
 # than an intention, and it only stays cheap if it runs from now on.
+# Bends one line at a time in a scratch copy and checks the suite notices.
+# Never touches the working tree. See tests/mutants.tbl.
+mutate: $(TARGET) trunner
+	sh tests/mutate.sh
+
+mutate-discover: $(TARGET) trunner
+	sh tests/mutate.sh --discover
+
 repro: $(TARGET)
 	tests/reprocheck.sh
 
@@ -286,4 +294,4 @@ clean:
 # linked in and the build silently disagrees with the source.
 -include $(OBJECTS:.o=.d) $(TOBJS:.o=.d) $(HOSTRT:.o=.d)
 
-.PHONY: all clean test repro install uninstall coverage
+.PHONY: all clean test repro mutate mutate-discover install uninstall coverage

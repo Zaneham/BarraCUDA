@@ -132,3 +132,22 @@ static void cfd06(void)
     PASS();
 }
 TH_REG("cfd", 6, "float arithmetic folds", cfd06)
+
+/* ---- cf: subtraction folds in the right order ---- */
+
+static void cfd07(void)
+{
+    int rc = th_run(BC_BIN " --ir tests/test_cf.cu", obuf, TH_BUFSZ);
+    CHEQ(rc, 0);
+    const char *fn = strstr(obuf, "cf_sub");
+    CHECK(fn != NULL);
+    const char *body = strchr(fn, '\n');
+    CHECK(body != NULL);
+    const char *fn_end = strstr(body, "\n}");
+    CHECK(fn_end != NULL);
+    /* 20-6 is 14. Backwards it is -14, which prints with the sign attached,
+     * so the leading space is doing real work here. */
+    CHECK(strnstr_range(body, fn_end, " 14") != NULL);
+    PASS();
+}
+TH_REG("cfd", 7, "subtraction folds in order", cfd07)

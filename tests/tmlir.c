@@ -79,6 +79,10 @@ static void mlr12(void)
     /* Arguments become parameters, the constant folds into the operand slot
      * rather than taking an instruction, and the compare keeps its predicate. */
     CHECK(strstr(obuf, "func @mix(i32 %0, i32 %1)") != NULL);
+    /* A plain func.func is a device function. Marking every one a kernel
+     * would hand the GPU backends every host helper in the module. */
+    CHECK(strstr(obuf, "__device__") != NULL);
+    CHECK(strstr(obuf, "__global__") == NULL);
     CHECK(strstr(obuf, "add i32 %0, %1") != NULL);
     CHECK(strstr(obuf, "mul i32 %2, 7") != NULL);
     CHECK(strstr(obuf, "icmp slt") != NULL);

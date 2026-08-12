@@ -495,6 +495,10 @@ static void tri28(void)
     /* for.exit falls past the 4 KB capture; the three above already show the
      * names are real and that none of them is the function's. */
     CHECK(strstr(obuf, "\nmatmul_k:") == NULL);
+    /* range(n) stops before n, so the head compares slt. sle would run one
+     * iteration past the end and nothing else here would notice. */
+    CHECK(strstr(obuf, "icmp slt") != NULL);
+    CHECK(strstr(obuf, "icmp sle") == NULL);
     PASS();
 }
 TH_REG("tri", 28, "loop blocks are named", tri28)

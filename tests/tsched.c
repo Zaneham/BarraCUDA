@@ -87,3 +87,20 @@ static void sch04(void)
     PASS();
 }
 TH_REG("sch", 4, "every target compiles with scheduling", sch04)
+
+/* ---- sched: a memory wait waits on the memory counter ---- */
+
+static void sch05(void)
+{
+    int rc = th_run(BC_BIN " --amdgpu tests/test_sched.cu", obuf, TH_BUFSZ);
+    CHEQ(rc, 0);
+
+    /* The loads are grouped, so something has to wait on them before the
+     * first use. Waiting on lgkmcnt instead reads the registers before the
+     * data lands, which is a race rather than a wrong number and would not
+     * show up in any output this suite compares. */
+    CHECK(strstr(obuf, "global_load_") != NULL);
+    CHECK(strstr(obuf, "s_waitcnt vmcnt(0)") != NULL);
+    PASS();
+}
+TH_REG("sch", 5, "memory waits on the memory counter", sch05)

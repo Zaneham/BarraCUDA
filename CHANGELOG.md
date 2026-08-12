@@ -62,6 +62,19 @@ Booth — Changelog
 
 ### CI and tests
 
+- `make mutate` bends one line of Booth at a time in a scratch copy and checks
+  the suite notices, from a table in `tests/mutants.tbl`. Ported from Kahu's
+  (Zane Hambly, 2026-08-12)
+
+- six tests that were not testing what they looked like they were. The `cfd`
+  family could not tell a reversed subtraction from an addition, because both
+  fixtures folded to 7. The only SOP2 encoding test used `s_add_u32`, whose
+  opcode is 0x00, so the opcode field could sit anywhere in the word. The GFX9
+  SMEM branch had no test at all, on a shipping target. `rss` accepted a clean
+  rejection everywhere, so an allocator that rejected everything would have
+  passed. Nothing checked a memory wait waits on the memory counter, or that a
+  plain `func.func` is not a kernel (Zane Hambly, 2026-08-12)
+
 - #160: `make repro` compiles every test file twice under `--amdgpu`,
   `--nvidia-ptx` and `--ir` and compares the bytes, so the deterministic
   layout `bir.h` claims is checked rather than assumed
