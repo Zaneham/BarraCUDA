@@ -193,3 +193,32 @@ no FPU, so float has to go through a soft-float runtime, which is in progress.
 
 If something breaks and you cannot tell whether it is an LFortran gap or a
 Booth one, raise it here and it will get sorted out from this side.
+
+## MLIR
+
+`--mlir` reads MLIR text. The reader is Ondřej Čertík's, vendored under
+`src/mlir/vendor`, and there is no LLVM in the path.
+
+```bash
+# Lower MLIR and compile it, same as any other frontend
+./kath --mlir kernel.mlir --cpu -o kernel.o
+./kath --mlir kernel.mlir --rv64 -o kernel.o
+
+# Dump the BIR the lowering produced
+./kath --mlir --ir kernel.mlir
+
+# Reprint what was read instead of lowering it, for telling a misreading
+# from a bad file
+./kath --mlir --pp kernel.mlir
+```
+
+Accepted today: `func.func` with named arguments, `return`, `arith.constant`,
+every `arith` integer and float binop, `arith.cmpi` and `arith.cmpf`, and the
+`arith` conversions. Anything else is named on stderr and the whole lowering
+fails, because an op skipped quietly is a kernel that compiles and computes
+something different.
+
+Nothing in MLIR marks a function as a kernel yet, so everything lowers as a
+device function. `--cpu` and `--rv64` give you real code; the GPU backends will
+take the file and then report zero kernels, which is an honest answer until
+the `gpu` dialect arrives.

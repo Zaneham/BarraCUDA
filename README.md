@@ -6,15 +6,20 @@ It is named to honour Kathleen Booth: creator of the first assembly language, co
 
 A running log of what's changed is in [CHANGELOG.md](CHANGELOG.md).
 
-**Update:** Fortran `do concurrent` kernels now compile to AMD, NVIDIA and
-x86-64 through LFortran, checked against SLATEC values in CI. See
-[Using Fortran](docs/usage.md#fortran).
+**Update:** `--mlir` reads MLIR text, with no LLVM anywhere in the path.
+`func.func` and the `arith` dialect lower to BIR and go down the same pipeline
+CUDA and Triton use. It is a small subset on purpose, and anything outside it
+is named and refused rather than skipped. See [Using MLIR](docs/usage.md#mlir).
 
 ## What It Does
 
 Takes CUDA C, HIP, or Triton source (the same files you'd hand to `nvcc`, `ROCm`, or Triton's JIT) and turns them into AMD RDNA 2/3/4 binaries, NVIDIA PTX, Tenstorrent Metalium C++ or native RV32IM, or just plain x86-64 you can run on a laptop with no GPU in it.
 
 That last one still surprises me a bit. You can write a Triton kernel, matmul and all, and run it on a machine that's never seen a GPU, from scratch, no LLVM, straight to native. I haven't come across anyone else doing Triton like this, but I'd happily be proven wrong, so give me a yell if you've seen it somewhere.
+
+Fortran `do concurrent` kernels go down the same path through
+[LFortran](https://lfortran.org/), checked against SLATEC values in CI. See
+[Using Fortran](docs/usage.md#fortran).
 
 It also borrows a pile of operational discipline from the mainframe world: real crash dumps when a kernel faults, structured output routed by class, parameter snapshots on entry. See [docs/mainframe.md](docs/mainframe.md) if that sounds like your kind of thing.
 
