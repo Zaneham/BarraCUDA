@@ -72,8 +72,40 @@ SOURCES = src/main.c src/kauri_impl.c \
           src/nvidia/isel.c src/nvidia/emit.c src/nvidia/nv_be.c \
           src/metal/emit.c src/metal/metal_be.c \
           src/intel/emit.c src/intel/intel_be.c \
-          src/triton/lex.c src/triton/parse.c src/triton/sema.c src/triton/lower.c
-OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o)
+          src/triton/lex.c src/triton/parse.c src/triton/sema.c src/triton/lower.c \
+          src/mlir/mlir_fe.c src/mlir/lower.c
+
+# Certik's pure-C MLIR reader, vendored under src/mlir/vendor. It carries his
+# corec base library and a syscall shim per host, so only one of the three
+# platform files is ever built.
+#
+# c2x rather than c99 because corec's format.h dispatches on _Generic and
+# needs __VA_OPT__, and the ~100 format() call sites through it are not worth
+# rewriting. -Wno-switch-enum because these switch over a 140-value op enum
+# with a default label and upstream keeps adding ops. Nothing else in the
+# warning set is relaxed. PLATFORM_SKIP_ENTRY leaves main to Booth,
+# COREC_STDLIB_PROVIDES_MEM stops corec defining memcpy and memset when a real
+# libc is already doing it.
+VDIR = src/mlir/vendor
+VPLAT = platform_windows.c
+ifeq ($(UNAME_S),Linux)
+  VPLAT = platform_linux.c
+endif
+ifeq ($(UNAME_S),Darwin)
+  VPLAT = platform_macos.c
+endif
+VSOURCES = $(VDIR)/tokenizer.c $(VDIR)/mlir_parser.c $(VDIR)/op_parsers.c \
+           $(VDIR)/mlir_api_impl.c $(VDIR)/mlir_op_names.c \
+           $(VDIR)/mlir_classic_printer.c $(VDIR)/mlir_lift_cf_to_scf.c \
+           $(VDIR)/base/io.c $(VDIR)/base/buddy.c $(VDIR)/base/arena.c \
+           $(VDIR)/base/scratch.c $(VDIR)/base/format.c $(VDIR)/base/math.c \
+           $(VDIR)/base/string.c $(VDIR)/base/strbuf.c $(VDIR)/base/mem.c \
+           $(VDIR)/base/numconv.c $(VDIR)/base/assert.c $(VDIR)/base/exit.c \
+           $(VDIR)/platform/$(VPLAT)
+VCFLAGS = $(subst -std=c99,-std=c2x,$(CFLAGS)) -Wno-switch-enum \
+          -DPLATFORM_SKIP_ENTRY -DCOREC_STDLIB_PROVIDES_MEM -I$(VDIR)
+
+OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o) $(VSOURCES:%.c=$(OBJDIR)/%.o)
 TARGET  = kath
 
 all: $(TARGET) $(ALT_RT)
@@ -85,10 +117,16 @@ $(OBJDIR)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Everything under src/mlir builds on VCFLAGS, vendored or not. mlir_fe.c is
+# ours but it speaks corec types, so it needs the same flags.
+$(OBJDIR)/src/mlir/%.o: src/mlir/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(VCFLAGS) -c $< -o $@
+
 # ---- Test Suite ----
 TCFLAGS = -std=c99 -MMD -MP -D_POSIX_C_SOURCE=200809L -Wall -Wextra -O0 -g \
           -Isrc -Isrc/fe -Isrc/ir -Isrc/tdf -Isrc/backend -Isrc/amdgpu -Isrc/tensix -Isrc/nvidia -Isrc/metal -Isrc/intel -Isrc/triton -Isrc/cpu -Isrc/runtime \
-          -Iruntime $(COVFLAGS)
+          -Isrc/mlir -Iruntime $(COVFLAGS)
 TSRC    = tests/tmain.c tests/tsmoke.c tests/tcomp.c tests/tenc.c \
           tests/ttabs.c tests/ttypes.c tests/terrs.c tests/tphase.c \
           tests/tdce.c \
@@ -112,7 +150,8 @@ TSRC    = tests/tmain.c tests/tsmoke.c tests/tcomp.c tests/tenc.c \
           tests/tsysprint.c \
           tests/tbackend.c \
           tests/tordr.c \
-          tests/trpi.c
+          tests/trpi.c \
+          tests/tmlir.c
 
 TOBJS   = $(TSRC:%.c=$(OBJDIR)/%.o)
 COBJS   = $(OBJDIR)/src/kauri_impl.o $(OBJDIR)/src/ir/bir.o $(OBJDIR)/src/ir/bir_print.o $(OBJDIR)/src/ir/bir_lower.o $(OBJDIR)/src/ir/bir_mem2reg.o $(OBJDIR)/src/ir/bir_cfold.o $(OBJDIR)/src/ir/bir_dce.o $(OBJDIR)/src/ir/bir_struct.o $(OBJDIR)/src/ir/bir_insert.o $(OBJDIR)/src/ir/bir_sroa.o $(OBJDIR)/src/ir/bir_inline.o \
@@ -130,7 +169,8 @@ COBJS   = $(OBJDIR)/src/kauri_impl.o $(OBJDIR)/src/ir/bir.o $(OBJDIR)/src/ir/bir
           $(OBJDIR)/src/cpu/cpu_emit.o $(OBJDIR)/src/cpu/cpu_elf.o \
           $(OBJDIR)/src/cpu/rv64_emit.o $(OBJDIR)/src/cpu/rv64_elf.o \
           $(OBJDIR)/src/tensix/isel.o $(OBJDIR)/src/tensix/coarsen.o $(OBJDIR)/src/tensix/datamov.o \
-          $(OBJDIR)/src/metal/emit.o $(OBJDIR)/src/intel/emit.o
+          $(OBJDIR)/src/metal/emit.o $(OBJDIR)/src/intel/emit.o \
+          $(OBJDIR)/src/mlir/mlir_fe.o $(OBJDIR)/src/mlir/lower.o $(VSOURCES:%.c=$(OBJDIR)/%.o)
 
 test: $(TARGET) trunner
 	./trunner --all

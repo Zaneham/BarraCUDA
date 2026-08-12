@@ -5,6 +5,34 @@ Booth — Changelog
 
 ### Frontend
 
+- `kath --mlir` reads MLIR text, no LLVM in the path. Čertík's pure-C
+  reader vendored under `src/mlir/vendor` (mlir 826b69c9, corec a160199d),
+  reached only through `src/mlir/mlir_fe.c` (Zane Hambly, 2026-08-11)
+
+- `src/mlir/lower.c` walks the parsed module into BIR: `func.func`, `return`,
+  `arith.constant` and every arith binop, compare and conversion the reader
+  classifies. From there it is the pipeline CUDA and Triton already use, and
+  MLIR reaches all four backends. `--mlir --pp` reprints instead
+  (Zane Hambly, 2026-08-11)
+
+- an op outside the subset stops the lowering and names itself. Skipping it
+  would leave a function that compiles and computes something else
+  (Zane Hambly, 2026-08-11)
+
+- five fixes to the vendored reader, all worth upstreaming, and four of them
+  are `func.func` being unfinished where `tt.func` is not: `parser_init`
+  renamed off Booth's own, `parser_error`'s `exit(1)` replaced by a
+  `mlir_parse_fail()` the linker supplies, `func.func` binding its arguments
+  before parsing the body rather than after, `func.func` accepting the
+  `attributes` clause where MLIR actually writes it, and `arith.xori`,
+  `shli` and `shrsi` added to `op_string_to_type`, which the printer could
+  already write but the parser could not read back
+  (Zane Hambly, 2026-08-11)
+
+- `ml_parse` resets the reader's process-wide type interning, which upstream
+  assumes one context per process. Without it a closed context left the next
+  parse in freed memory (Zane Hambly, 2026-08-11)
+
 - the Triton lowering records pool overflow through `bir_pfull`, which the C99
   one already did and it never has. It answered a full block pool with index 0,
   a live block, so `bir_pchk` could not see a Triton arena exhaustion at all
