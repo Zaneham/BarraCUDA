@@ -1,5 +1,6 @@
 #include "bir.h"
 #include <string.h>
+#include <stdio.h>
 
 /* ---- Name Tables ---- */
 
@@ -187,6 +188,45 @@ const char *bir_order_name(int ord)
     return "???";
 }
 
+/* ---- Pool overflow ---- */
+
+/* Fixed order, so the report reads the same whichever pool filled first. */
+static const struct { uint32_t bit; const char *name; uint32_t cap; }
+pool_tab[] = {
+    { BIR_P_TYPES,    "type",           BIR_MAX_TYPES       },
+    { BIR_P_TFIELDS,  "type field",     BIR_MAX_TYPE_FIELDS },
+    { BIR_P_STRINGS,  "string table",   BIR_MAX_STRINGS     },
+    { BIR_P_CONSTS,   "constant",       BIR_MAX_CONSTS      },
+    { BIR_P_INSTS,    "instruction",    BIR_MAX_INSTS       },
+    { BIR_P_BLOCKS,   "block",          BIR_MAX_BLOCKS      },
+    { BIR_P_FUNCS,    "function",       BIR_MAX_FUNCS       },
+    { BIR_P_GLOBALS,  "global",         BIR_MAX_GLOBALS     },
+    { BIR_P_EXTRAOPS, "extra operand",  BIR_MAX_EXTRA_OPS   },
+    { BIR_P_PHIS,     "mem2reg phi",    0u                  },
+};
+
+void bir_pfull(bir_module_t *M, uint32_t bit)
+{
+    if (M != NULL) M->pool_full |= bit;
+}
+
+int bir_pchk(const bir_module_t *M, const char *phase)
+{
+    if (M == NULL || M->pool_full == 0u) return BC_OK;
+
+    for (uint32_t i = 0; i < sizeof(pool_tab) / sizeof(pool_tab[0]); i++) {
+        if (!(M->pool_full & pool_tab[i].bit)) continue;
+        if (pool_tab[i].cap != 0u)
+            fprintf(stderr, "E120: BIR %s pool exhausted during %s "
+                    "(capacity %u). Raise the matching BIR_MAX_* and "
+                    "rebuild.\n", pool_tab[i].name, phase, pool_tab[i].cap);
+        else
+            fprintf(stderr, "E120: BIR %s pool exhausted during %s.\n",
+                    pool_tab[i].name, phase);
+    }
+    return BC_ERR_OVERFLOW;
+}
+
 /* ---- Module Init ---- */
 
 void bir_module_init(bir_module_t *M)
@@ -219,8 +259,10 @@ static uint32_t intern_type(bir_module_t *M, const bir_type_t *t)
         if (type_eq_simple(&M->types[i], t))
             return i;
     }
-    if (M->num_types >= BIR_MAX_TYPES)
+    if (M->num_types >= BIR_MAX_TYPES) {
+        bir_pfull(M, BIR_P_TYPES);
         return 0;
+    }
     uint32_t idx = M->num_types++;
     M->types[idx] = *t;
     return idx;
@@ -244,10 +286,14 @@ static uint32_t intern_compound(bir_module_t *M, uint8_t kind,
         }
         if (match) return i;
     }
-    if (M->num_type_fields + (uint32_t)nfields > BIR_MAX_TYPE_FIELDS)
+    if (M->num_type_fields + (uint32_t)nfields > BIR_MAX_TYPE_FIELDS) {
+        bir_pfull(M, BIR_P_TFIELDS);
         return 0;
-    if (M->num_types >= BIR_MAX_TYPES)
+    }
+    if (M->num_types >= BIR_MAX_TYPES) {
+        bir_pfull(M, BIR_P_TYPES);
         return 0;
+    }
 
     uint32_t start = M->num_type_fields;
     for (int i = 0; i < nfields; i++)
@@ -343,8 +389,11 @@ uint32_t bir_type_func(bir_module_t *M, uint32_t ret,
 
 uint32_t bir_add_string(bir_module_t *M, const char *s, uint32_t len)
 {
-    if (M->string_len + len + 1 > BIR_MAX_STRINGS)
+    /* Offset 0 is a live string, not a sentinel. */
+    if (M->string_len + len + 1 > BIR_MAX_STRINGS) {
+        bir_pfull(M, BIR_P_STRINGS);
         return 0;
+    }
     uint32_t offset = M->string_len;
     memcpy(&M->strings[offset], s, len);
     M->strings[offset + len] = '\0';
@@ -353,6 +402,9 @@ uint32_t bir_add_string(bir_module_t *M, const char *s, uint32_t len)
 }
 
 /* ---- Constants ---- */
+
+/* Nothing is pinned at const 0 the way void is at type 0, so a refusal
+   here is indistinguishable from a real index. Hence the bit. */
 
 uint32_t bir_const_int(bir_module_t *M, uint32_t type, int64_t val)
 {
@@ -363,8 +415,10 @@ uint32_t bir_const_int(bir_module_t *M, uint32_t type, int64_t val)
             && M->consts[i].d.ival == val)
             return i;
     }
-    if (M->num_consts >= BIR_MAX_CONSTS)
+    if (M->num_consts >= BIR_MAX_CONSTS) {
+        bir_pfull(M, BIR_P_CONSTS);
         return 0;
+    }
     uint32_t idx = M->num_consts++;
     M->consts[idx].kind = BIR_CONST_INT;
     memset(M->consts[idx].pad, 0, sizeof(M->consts[idx].pad));
@@ -384,7 +438,10 @@ uint32_t bir_const_int(bir_module_t *M, uint32_t type, int64_t val)
 uint32_t bir_const_bytes(bir_module_t *M, uint32_t type,
                          uint32_t off, uint32_t len)
 {
-    if (M->num_consts >= BIR_MAX_CONSTS) return 0;
+    if (M->num_consts >= BIR_MAX_CONSTS) {
+        bir_pfull(M, BIR_P_CONSTS);
+        return 0;
+    }
     uint32_t idx = M->num_consts++;
     M->consts[idx].kind = BIR_CONST_BYTES;
     memset(M->consts[idx].pad, 0, sizeof(M->consts[idx].pad));
@@ -414,8 +471,10 @@ uint32_t bir_const_float(bir_module_t *M, uint32_t type, double val)
             && M->consts[i].d.fval == val)
             return i;
     }
-    if (M->num_consts >= BIR_MAX_CONSTS)
+    if (M->num_consts >= BIR_MAX_CONSTS) {
+        bir_pfull(M, BIR_P_CONSTS);
         return 0;
+    }
     uint32_t idx = M->num_consts++;
     M->consts[idx].kind = BIR_CONST_FLOAT;
     memset(M->consts[idx].pad, 0, sizeof(M->consts[idx].pad));
@@ -431,8 +490,10 @@ uint32_t bir_const_null(bir_module_t *M, uint32_t type)
         if (M->consts[i].kind == BIR_CONST_NULL && M->consts[i].type == type)
             return i;
     }
-    if (M->num_consts >= BIR_MAX_CONSTS)
+    if (M->num_consts >= BIR_MAX_CONSTS) {
+        bir_pfull(M, BIR_P_CONSTS);
         return 0;
+    }
     uint32_t idx = M->num_consts++;
     M->consts[idx].kind = BIR_CONST_NULL;
     memset(M->consts[idx].pad, 0, sizeof(M->consts[idx].pad));

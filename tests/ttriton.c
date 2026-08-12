@@ -480,3 +480,25 @@ static void tri27(void)
     PASS();
 }
 TH_REG("tri", 27, "AMD ai slop still compiles", tri27)
+
+/* String offset 0 is a live string rather than a sentinel, so a block left
+ * nameless is printed with whatever went into the table first. That was the
+ * function's own name, and this kernel's four blocks all carried it. */
+
+static void tri28(void)
+{
+    int rc = tt_run("--triton --ir tests/tri_matmul_k.py");
+    CHEQ(rc, 0);
+    CHECK(strstr(obuf, "\nentry:") != NULL);
+    CHECK(strstr(obuf, "\nfor.head:") != NULL);
+    CHECK(strstr(obuf, "\nfor.body:") != NULL);
+    /* for.exit falls past the 4 KB capture; the three above already show the
+     * names are real and that none of them is the function's. */
+    CHECK(strstr(obuf, "\nmatmul_k:") == NULL);
+    /* range(n) stops before n, so the head compares slt. sle would run one
+     * iteration past the end and nothing else here would notice. */
+    CHECK(strstr(obuf, "icmp slt") != NULL);
+    CHECK(strstr(obuf, "icmp sle") == NULL);
+    PASS();
+}
+TH_REG("tri", 28, "loop blocks are named", tri28)

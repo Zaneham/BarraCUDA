@@ -72,8 +72,52 @@ SOURCES = src/main.c src/kauri_impl.c \
           src/nvidia/isel.c src/nvidia/emit.c src/nvidia/nv_be.c \
           src/metal/emit.c src/metal/metal_be.c \
           src/intel/emit.c src/intel/intel_be.c \
-          src/triton/lex.c src/triton/parse.c src/triton/sema.c src/triton/lower.c
-OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o)
+          src/triton/lex.c src/triton/parse.c src/triton/sema.c src/triton/lower.c \
+          src/mlir/mlir_fe.c src/mlir/lower.c
+
+# Certik's pure-C MLIR reader, vendored under src/mlir/vendor. It carries his
+# corec base library and a syscall shim per host, so only one of the three
+# platform files is ever built.
+#
+# c2x rather than c99 because corec's format.h dispatches on _Generic and
+# needs __VA_OPT__, and the ~100 format() call sites through it are not worth
+# rewriting. -Wno-switch-enum because these switch over a 140-value op enum
+# with a default label and upstream keeps adding ops. Nothing else in the
+# warning set is relaxed. PLATFORM_SKIP_ENTRY leaves main to Booth,
+# COREC_STDLIB_PROVIDES_MEM stops corec defining memcpy and memset when a real
+# libc is already doing it.
+VDIR = src/mlir/vendor
+VPLAT = platform_windows.c
+ifeq ($(UNAME_S),Linux)
+  VPLAT = platform_linux.c
+endif
+ifeq ($(UNAME_S),Darwin)
+  VPLAT = platform_macos.c
+endif
+VSOURCES = $(VDIR)/tokenizer.c $(VDIR)/mlir_parser.c $(VDIR)/op_parsers.c \
+           $(VDIR)/mlir_api_impl.c $(VDIR)/mlir_op_names.c \
+           $(VDIR)/mlir_classic_printer.c $(VDIR)/mlir_lift_cf_to_scf.c \
+           $(VDIR)/base/io.c $(VDIR)/base/buddy.c $(VDIR)/base/arena.c \
+           $(VDIR)/base/scratch.c $(VDIR)/base/format.c $(VDIR)/base/math.c \
+           $(VDIR)/base/string.c $(VDIR)/base/strbuf.c $(VDIR)/base/mem.c \
+           $(VDIR)/base/numconv.c $(VDIR)/base/assert.c $(VDIR)/base/exit.c \
+           $(VDIR)/platform/$(VPLAT)
+# Simply expanded, so the target-specific assignment below is a plain string
+# rather than something that re-expands CFLAGS into itself.
+VCFLAGS := $(subst -std=c99,-std=c2x,$(CFLAGS)) -Wno-switch-enum \
+           -DPLATFORM_SKIP_ENTRY -DCOREC_STDLIB_PROVIDES_MEM -I$(VDIR)
+
+OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o) $(VSOURCES:%.c=$(OBJDIR)/%.o)
+
+# Everything under src/mlir compiles on VCFLAGS, vendored or not. mlir_fe.c and
+# lower.c are ours but they speak corec types, so they want the same flags.
+# A target-specific variable rather than a pattern rule, because two patterns
+# match these objects and make 3.81, which is what macOS ships, does not
+# resolve that the way make 4 does. It took the generic rule and the build lost
+# its include path.
+MLOBJECTS = $(VSOURCES:%.c=$(OBJDIR)/%.o) \
+            $(OBJDIR)/src/mlir/mlir_fe.o $(OBJDIR)/src/mlir/lower.o
+$(MLOBJECTS): CFLAGS := $(VCFLAGS)
 TARGET  = kath
 
 all: $(TARGET) $(ALT_RT)
@@ -88,7 +132,7 @@ $(OBJDIR)/%.o: %.c
 # ---- Test Suite ----
 TCFLAGS = -std=c99 -MMD -MP -D_POSIX_C_SOURCE=200809L -Wall -Wextra -O0 -g \
           -Isrc -Isrc/fe -Isrc/ir -Isrc/tdf -Isrc/backend -Isrc/amdgpu -Isrc/tensix -Isrc/nvidia -Isrc/metal -Isrc/intel -Isrc/triton -Isrc/cpu -Isrc/runtime \
-          -Iruntime $(COVFLAGS)
+          -Isrc/mlir -Iruntime $(COVFLAGS)
 TSRC    = tests/tmain.c tests/tsmoke.c tests/tcomp.c tests/tenc.c \
           tests/ttabs.c tests/ttypes.c tests/terrs.c tests/tphase.c \
           tests/tdce.c \
@@ -112,7 +156,8 @@ TSRC    = tests/tmain.c tests/tsmoke.c tests/tcomp.c tests/tenc.c \
           tests/tsysprint.c \
           tests/tbackend.c \
           tests/tordr.c \
-          tests/trpi.c
+          tests/trpi.c \
+          tests/tmlir.c
 
 TOBJS   = $(TSRC:%.c=$(OBJDIR)/%.o)
 COBJS   = $(OBJDIR)/src/kauri_impl.o $(OBJDIR)/src/ir/bir.o $(OBJDIR)/src/ir/bir_print.o $(OBJDIR)/src/ir/bir_lower.o $(OBJDIR)/src/ir/bir_mem2reg.o $(OBJDIR)/src/ir/bir_cfold.o $(OBJDIR)/src/ir/bir_dce.o $(OBJDIR)/src/ir/bir_struct.o $(OBJDIR)/src/ir/bir_insert.o $(OBJDIR)/src/ir/bir_sroa.o $(OBJDIR)/src/ir/bir_inline.o \
@@ -130,13 +175,22 @@ COBJS   = $(OBJDIR)/src/kauri_impl.o $(OBJDIR)/src/ir/bir.o $(OBJDIR)/src/ir/bir
           $(OBJDIR)/src/cpu/cpu_emit.o $(OBJDIR)/src/cpu/cpu_elf.o \
           $(OBJDIR)/src/cpu/rv64_emit.o $(OBJDIR)/src/cpu/rv64_elf.o \
           $(OBJDIR)/src/tensix/isel.o $(OBJDIR)/src/tensix/coarsen.o $(OBJDIR)/src/tensix/datamov.o \
-          $(OBJDIR)/src/metal/emit.o $(OBJDIR)/src/intel/emit.o
+          $(OBJDIR)/src/metal/emit.o $(OBJDIR)/src/intel/emit.o \
+          $(OBJDIR)/src/mlir/mlir_fe.o $(OBJDIR)/src/mlir/lower.o $(VSOURCES:%.c=$(OBJDIR)/%.o)
 
 test: $(TARGET) trunner
 	./trunner --all
 
 # bir.h claims a deterministic layout. This makes that a property rather
 # than an intention, and it only stays cheap if it runs from now on.
+# Bends one line at a time in a scratch copy and checks the suite notices.
+# Never touches the working tree. See tests/mutants.tbl.
+mutate: $(TARGET) trunner
+	sh tests/mutate.sh
+
+mutate-discover: $(TARGET) trunner
+	sh tests/mutate.sh --discover
+
 repro: $(TARGET)
 	tests/reprocheck.sh
 
@@ -230,8 +284,11 @@ coverage:
 	-./trunner --all
 	@command -v gcovr >/dev/null 2>&1 || { echo "gcovr not found. pip install gcovr"; exit 1; }
 	@mkdir -p coverage-html
+	@# gcovr snuffles through the object dir like a skaven after warp tokens, so vendored data has to be gone rather than filtered.
+	find $(COVDIR)/src/mlir \( -name '*.gcda' -o -name '*.gcno' \) -delete 2>/dev/null || true
 	gcovr --root . --object-directory $(COVDIR) \
 	      --filter 'src/' --filter 'runtime/' \
+	      --exclude 'src/mlir/vendor/' \
 	      --exclude-unreachable-branches \
 	      --print-summary --txt coverage.txt --html-details coverage-html/index.html
 	rm -f $(TARGET) $(TARGET).exe trunner trunner.exe
@@ -246,4 +303,4 @@ clean:
 # linked in and the build silently disagrees with the source.
 -include $(OBJECTS:.o=.d) $(TOBJS:.o=.d) $(HOSTRT:.o=.d)
 
-.PHONY: all clean test repro install uninstall coverage
+.PHONY: all clean test repro mutate mutate-discover install uninstall coverage

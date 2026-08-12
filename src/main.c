@@ -17,6 +17,8 @@
 #include "metal.h"
 #include "intel.h"
 #include "triton.h"
+#include "mlir/mlir_fe.h"
+#include "mlir/mlir_lower.h"
 #include "tdf.h"
 #include "rv_buf.h"
 #include "rv_elf.h"
@@ -70,6 +72,11 @@ static int run_bir_backends(bir_module_t *bir, const backend_cfg_t *cfg)
 {
     int rc = BC_OK;
 
+    /* Arena overflow during lowering. Checked before the passes get a
+     * chance to fold the wrong values into something that looks right. */
+    rc = bir_pchk(bir, "lowering");
+    if (rc != BC_OK) return rc;
+
     /* String literal globals (BIR_CONST_BYTES initializer) require
      * backend support that is still being wired in. Phase 1 of the
      * string-literal work landed the BIR shape and the frontend
@@ -109,6 +116,10 @@ static int run_bir_backends(bir_module_t *bir, const backend_cfg_t *cfg)
     if (!cfg->no_mem2reg) bir_mem2reg(bir);
     if (!cfg->no_cfold)   bir_cfold(bir);
     if (!cfg->no_dce)     bir_dce(bir);
+
+    /* Inlining and mem2reg both grow the arenas, so ask again. */
+    rc = bir_pchk(bir, "optimisation");
+    if (rc != BC_OK) return rc;
 
     /* Wrap the BIR in a TDF module and lower it. For AMD and NVIDIA
      * this is a degenerate passthrough, the lowering hands the same
@@ -248,6 +259,7 @@ static void usage(const char *prog)
         "  --nvidia-ptx  Compile to NVIDIA PTX (sm_89)\n"
         "  --hip         HIP frontend mode (predefines __HIPCC__ and platform macros;\n"
         "                auto-on for .hip files; combine with --amdgpu-bin or --nvidia-ptx)\n"
+        "  --mlir        Read MLIR text. Core dialects only, anything else is refused\n"
         "  --triton      Triton frontend mode (parses Python source). Pair with a target\n"
         "                backend (--cpu, --amdgpu-bin, --nvidia-ptx). tl.dot matmul runs.\n"
         "  --cpu         x86-64 host backend; emits a normal object you can link and run\n"
@@ -284,6 +296,7 @@ int main(int argc, char *argv[])
     int mode_tdf_fission = 0;
     int mode_hip = 0;           /* HIP frontend: see HIP NOTES below */
     int mode_triton = 0;        /* Triton frontend: see TRITON NOTES below */
+    int mode_mlir = 0;          /* MLIR frontend: see MLIR NOTES below */
     int no_mem2reg = 0;
     int no_cfold = 0;
     int no_dce = 0;
@@ -330,6 +343,8 @@ int main(int argc, char *argv[])
             mode_hip = 1;
         else if (strcmp(argv[i], "--triton") == 0)
             mode_triton = 1;
+        else if (strcmp(argv[i], "--mlir") == 0)
+            mode_mlir = 1;
         else if (strcmp(argv[i], "--tt-chip") == 0 && i + 1 < argc) {
             if (td_pchip(argv[++i], &tt_chip) != BC_OK) {
                 fprintf(stderr, "unknown Tenstorrent chip: %s "
@@ -433,6 +448,57 @@ int main(int argc, char *argv[])
     uint32_t src_len = 0;
     if (read_file(file, source_buf, BC_MAX_SOURCE, &src_len) != BC_OK)
         return 1;
+
+    /* ---- MLIR NOTES ---------------------------------------------------
+     * MLIR arrives already structured, so there is no lexer, parser or
+     * sema on this path. src/mlir/vendor/ reads the text, src/mlir/lower.c
+     * walks it into BIR, and from there it is the same pipeline CUDA and
+     * Triton use. --pp reprints what was read instead, which is the
+     * quickest way to tell a misreading from a bad file. */
+    if (mode_mlir) {
+        ml_ctx_t *mc = ml_open(64u * 1024u * 1024u);
+        int mrc;
+
+        if (!mc) {
+            fprintf(stderr, "mlir: out of memory\n");
+            return 1;
+        }
+        mrc = ml_parse(mc, source_buf, src_len);
+        if (mrc != 0) {
+            ml_close(mc);
+            return 1;
+        }
+        if (mode_pp) {
+            mrc = ml_echo(mc, stdout);
+            ml_close(mc);
+            return mrc == 0 ? 0 : 1;
+        }
+
+        bir_module = (bir_module_t *)malloc(sizeof(bir_module_t));
+        if (!bir_module) {
+            fprintf(stderr, "error: failed to allocate BIR module\n");
+            ml_close(mc);
+            return 1;
+        }
+        mrc = ml_lowr(mc, (struct bir_module *)bir_module);
+        ml_close(mc);
+
+        if (mrc == 0) {
+            backend_cfg_t cfg = {0};
+            cfg.no_mem2reg = no_mem2reg;
+            cfg.no_cfold   = no_cfold;
+            cfg.no_dce     = no_dce;
+            cfg.no_sched   = no_sched;
+            cfg.no_sroa    = no_sroa;
+            cfg.mode_ir    = mode_ir;
+            cfg.mode_tdf   = mode_tdf;
+            cfg.mode_tdf_fission = mode_tdf_fission;
+            cfg.output_file      = output_file;
+            mrc = (run_bir_backends(bir_module, &cfg) == BC_OK) ? 0 : 1;
+        }
+        free(bir_module);
+        return mrc == 0 ? 0 : 1;
+    }
 
     /* ---- TRITON NOTES -------------------------------------------------
      * The Triton frontend is a parallel input path that does not share

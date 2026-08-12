@@ -145,8 +145,10 @@ static uint32_t make_undef(bir_module_t *M, uint32_t type)
         if (M->consts[i].kind == BIR_CONST_UNDEF && M->consts[i].type == type)
             return BIR_MAKE_CONST(i);
     }
-    if (M->num_consts >= BIR_MAX_CONSTS)
+    if (M->num_consts >= BIR_MAX_CONSTS) {
+        bir_pfull(M, BIR_P_CONSTS);
         return BIR_VAL_NONE;
+    }
     uint32_t ci = M->num_consts++;
     M->consts[ci].kind = BIR_CONST_UNDEF;
     memset(M->consts[ci].pad, 0, sizeof(M->consts[ci].pad));
@@ -468,8 +470,16 @@ static void step5_insert_phis(m2r_t *S)
                 if (has_phi[d]) continue;
                 has_phi[d] = 1;
 
-                if (M->num_insts >= BIR_MAX_INSTS) continue;
-                if (S->num_phis >= M2R_MAX_PHIS) continue;
+                /* A skipped phi is a wrong value at the join, not a lost
+                   optimisation. */
+                if (M->num_insts >= BIR_MAX_INSTS) {
+                    bir_pfull(M, BIR_P_INSTS);
+                    continue;
+                }
+                if (S->num_phis >= M2R_MAX_PHIS) {
+                    bir_pfull(M, BIR_P_PHIS);
+                    continue;
+                }
 
                 uint32_t phi_idx = M->num_insts++;
                 bir_inst_t *phi = &M->insts[phi_idx];
@@ -498,6 +508,7 @@ static void step5_insert_phis(m2r_t *S)
                         M->extra_operands[M->num_extra_ops++] = BIR_VAL_NONE;
                     }
                 } else {
+                    bir_pfull(M, BIR_P_EXTRAOPS);
                     M->num_insts--;
                     continue;
                 }

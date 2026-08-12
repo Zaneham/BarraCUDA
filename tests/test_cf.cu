@@ -38,3 +38,10 @@ __global__ void cf_float(float *out) {
     out[0] = 1.5f + 2.5f;
 }
 
+
+/* Subtraction, folding to a value nothing else in this file produces. The
+ * existing 10-3 folds to the same 7 as the 3+4 above it, so a fold that runs
+ * its operands backwards was invisible. */
+__global__ void cf_sub(int *out, int x) {
+    out[0] = x + (20 - 6);
+}

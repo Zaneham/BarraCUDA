@@ -276,3 +276,74 @@ static void enc09(void)
     PASS();
 }
 TH_REG("enc", 9, "s_waitcnt vmcnt(0) encodes", enc09)
+
+/* ---- encode: SOP2 with a non-zero opcode ---- */
+/* enc02 above uses s_add_u32, whose opcode is 0x00, so the OP field can sit
+ * anywhere in the word and the bits still come out right. s_andn2_b32 is 0x22
+ * on GFX11 and 0x12 on GFX10, which pins both the field position and the
+ * per-generation table.
+ *
+ * s_andn2_b32 s7, s2, s3
+ * [31:30]=10 [29:23]=OP [22:16]=SDST(7) [15:8]=SSRC1(3) [7:0]=SSRC0(2) */
+
+static void enc10(void)
+{
+    enc_setup(AMD_TARGET_GFX1100);
+    minst_t *mi     = &A->minsts[0];
+    mi->op          = AMD_S_ANDN2_B32;
+    mi->num_defs    = 1;
+    mi->num_uses    = 2;
+    mi->operands[0] = sgpr(7);
+    mi->operands[1] = sgpr(2);
+    mi->operands[2] = sgpr(3);
+
+    encode_function(A, 0);
+    CHEQX(dw(0), 0x91070302u);
+    PASS();
+}
+TH_REG("enc", 10, "SOP2 opcode field is where it should be", enc10)
+
+static void enc11(void)
+{
+    enc_setup(AMD_TARGET_GFX1030);
+    minst_t *mi     = &A->minsts[0];
+    mi->op          = AMD_S_ANDN2_B32;
+    mi->num_defs    = 1;
+    mi->num_uses    = 2;
+    mi->operands[0] = sgpr(7);
+    mi->operands[1] = sgpr(2);
+    mi->operands[2] = sgpr(3);
+
+    encode_function(A, 0);
+    CHEQX(dw(0), 0x89070302u);
+    PASS();
+}
+TH_REG("enc", 11, "GFX10 renumbers the same mnemonic", enc11)
+
+/* ---- encode: SMEM on CDNA ---- */
+/* enc05 covers GFX11 and GFX10. The GFX9 branch has its own dword layout and
+ * had no test at all, which matters because MI300X is a shipping target.
+ *
+ * s_load_dword s7, s[2:3], 0 -- GFX942
+ * DW0: [31:26]=110000 [25:18]=OP(0x00) [17]=IMM(1) [12:6]=SDATA(7) [5:0]=SBASE(1)
+ * DW1: [20:0]=OFFSET */
+
+static void enc12(void)
+{
+    enc_setup(AMD_TARGET_GFX942);
+    minst_t *mi     = &A->minsts[0];
+    mi->op          = AMD_S_LOAD_DWORD;
+    mi->num_defs    = 1;
+    mi->num_uses    = 2;
+    mi->operands[0] = sgpr(7);
+    mi->operands[1] = sgpr(2);
+    mi->operands[2] = imm(0);
+
+    encode_function(A, 0);
+    /* Bit 17 is IMM. Clear it and the hardware reads the offset out of a
+     * register that was never set up. */
+    CHEQX(dw(0), 0xC00201C1u);
+    CHEQX(dw(1), 0x00000000u);
+    PASS();
+}
+TH_REG("enc", 12, "SMEM encodes on CDNA", enc12)

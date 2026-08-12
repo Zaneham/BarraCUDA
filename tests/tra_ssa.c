@@ -281,3 +281,24 @@ static void rss07(void)
     PASS();
 }
 TH_REG("rss", 7, "the allocator emits a kernel", rss07)
+
+/* ---- The allocator succeeds on things that fit ---- */
+
+/* rss06 accepts a clean rejection, which is right for a squeezed budget and
+ * wrong as the only assertion: an allocator that rejected everything would
+ * pass every test above it. These fixtures fit inside the default ceiling and
+ * have to actually compile. */
+static void rss08(void)
+{
+    int i;
+
+    for (i = 0; sr_clean[i]; i++) {
+        int rc = ssa_compile(sr_clean[i], "");
+        if (rc != 0) {
+            printf("  %s: exit %d, should have fitted\n", sr_clean[i], rc);
+            CHECK(0);
+        }
+    }
+    PASS();
+}
+TH_REG("rss", 8, "kernels that fit are allocated", rss08)

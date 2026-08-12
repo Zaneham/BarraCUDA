@@ -107,7 +107,10 @@ uint32_t bir_insert(bir_module_t *M, uint32_t block_idx, uint32_t pos,
 
     if (!M || !src || n == 0)                 return BIR_VAL_NONE;
     if (block_idx >= M->num_blocks)           return BIR_VAL_NONE;
-    if (M->num_insts + n > BIR_MAX_INSTS)     return BIR_VAL_NONE;
+    if (M->num_insts + n > BIR_MAX_INSTS) {
+        bir_pfull(M, BIR_P_INSTS);
+        return BIR_VAL_NONE;
+    }
 
     TB = &M->blocks[block_idx];
     if (pos > TB->num_insts)                  return BIR_VAL_NONE;

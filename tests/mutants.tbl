@@ -1,0 +1,57 @@
+# mutants.tbl -- one row per deliberate defect
+#
+# id | file | find | replace | expected killer families | note
+#
+# The expected column lists families, not test names, so adding a test inside
+# a family does not churn the table. More families than declared means a new
+# coupling appeared; fewer means a test stopped noticing. Both are worth a
+# look, neither is automatically wrong.
+#
+# EQUIV in the expected column marks a mutation with no observable effect.
+# Every mutation tool grows this list eventually and it is far easier to
+# annotate as you go than to work out years later which survivors were
+# deliberate. A row marked EQUIV that starts killing tests is reported, since
+# that means the claim was wrong.
+#
+# Matching is literal, not regex, and the pattern has to appear exactly once
+# in the file or the row reports NOMATCH.
+
+# ---- MLIR lowering ----
+# Every row here is a defect that existed at some point on the way in, so the
+# tests were written against the real thing rather than against a guess.
+
+mlr01 | src/mlir/lower.c | case OP_TYPE_ARITH_XORI:  r = lw_bin(op, BIR_XOR,  ty); break; | case OP_TYPE_ARITH_XORI:  r = lw_bin(op, BIR_OR,   ty); break; | mlr | xor lowers to or
+mlr02 | src/mlir/lower.c | if (strcmp(buf, "slt") == 0) return BIR_ICMP_SLT; | if (strcmp(buf, "slt") == 0) return BIR_ICMP_SGT; | mlr | signed less-than compares the other way
+mlr03 | src/mlir/lower.c | lw_no(op, "op is outside the accepted subset"); | (void)0; | mlr | an op off the list is skipped instead of refused
+mlr04 | src/mlir/lower.c | if (ty < lw.M->num_types && lw.M->types[ty].kind == BIR_TYPE_FLOAT) { | if (0) { | mlr | a float result type stops deciding, so an integer literal keeps its bits
+mlr05 | src/mlir/lower.c | F->cuda_flags = CUDA_DEVICE; | F->cuda_flags = CUDA_GLOBAL; | mlr | every function becomes a kernel
+
+# ---- Triton lowering ----
+
+tri01 | src/triton/lower.c | M->blocks[idx].name = bir_add_string(M, name, (uint32_t)strlen(name)); | M->blocks[idx].name = 0; (void)name; | tri | blocks go back to being nameless
+tri02 | src/triton/lower.c | uint32_t cond = l_emit(L, BIR_ICMP, L->t_i32, BIR_ICMP_SLT); | uint32_t cond = l_emit(L, BIR_ICMP, L->t_i32, BIR_ICMP_SLE); | tri | loop bound becomes inclusive
+
+# ---- Constant folding ----
+
+cfd01 | src/ir/bir_cfold.c | case BIR_SUB:  r = a - b; break; | case BIR_SUB:  r = b - a; break; | cfd | subtraction folds with its operands the wrong way round
+cfd02 | src/ir/bir_cfold.c | case BIR_MUL:  r = a * b; break; | case BIR_MUL:  r = a + b; break; | cfd | multiply folds as add
+
+# ---- RISC-V encoding ----
+
+rve01 | src/tensix/rv_enc.c | uint32_t rv_sub (uint8_t rd, uint8_t rs1, uint8_t rs2) { return enc_r(0x20, rs2, rs1, 0x0, rd, 0x33); } | uint32_t rv_sub (uint8_t rd, uint8_t rs1, uint8_t rs2) { return enc_r(0x00, rs2, rs1, 0x0, rd, 0x33); } | rve | sub encodes as add, funct7 dropped
+
+# ---- AMD encoding ----
+# The encoder is the last place a wrong number stops looking like a number.
+# Every row here still assembles, still disassembles, and means something else.
+
+enc01 | src/amdgpu/enc_tab.c | [AMD_S_ANDN2_B32]       = { AMD_FMT_SOP2, 0x22, "s_andn2_b32"       }, | [AMD_S_ANDN2_B32]       = { AMD_FMT_SOP2, 0x12, "s_andn2_b32"       }, | enc | GFX11 takes GFX10's opcode for the same mnemonic
+enc02 | src/amdgpu/encode.c | ((uint32_t)(hw_op & 0x7F) << 23) | ((uint32_t)(hw_op & 0x7F) << 22) | enc | SOP2 opcode field shifted one bit low
+enc03 | src/amdgpu/encode.c | (1u << 17) | (0u << 17) | enc | SMEM immediate-offset bit cleared, so the offset reads as a register
+
+# ---- AMD scheduling ----
+
+sch01 | src/amdgpu/sched.c | if (kind == WAIT_VMEM) w->flags = AMD_WAIT_VMCNT0; | if (kind == WAIT_VMEM) w->flags = AMD_WAIT_LGKMCNT0; | sch | a memory wait waits on the wrong counter
+
+# ---- AMD SSA register allocation ----
+
+rss01 | src/amdgpu/ra_ssa.c | #define RS_VGPR_CEIL  250 | #define RS_VGPR_CEIL  1 | rss | the VGPR ceiling collapses

@@ -297,7 +297,10 @@ static void op_name_from_tok(int tok, char *out, int outsz)
 static uint32_t emit(lower_t *L, uint16_t op, uint32_t type,
                      uint8_t nops, uint8_t subop)
 {
-    if (L->M->num_insts >= BIR_MAX_INSTS) return 0;
+    if (L->M->num_insts >= BIR_MAX_INSTS) {
+        bir_pfull(L->M, BIR_P_INSTS);
+        return 0;
+    }
     uint32_t idx = L->M->num_insts++;
     bir_inst_t *I = &L->M->insts[idx];
     memset(I, 0, sizeof(*I));
@@ -314,6 +317,9 @@ static uint32_t emit(lower_t *L, uint16_t op, uint32_t type,
 
 static void set_op(lower_t *L, uint32_t inst, int slot, uint32_t val)
 {
+    /* emit answers 0 on a full pool, and inst 0 is real. Don't write it. */
+    if (inst >= L->M->num_insts) return;
+    if (slot < 0 || slot >= BIR_OPERANDS_INLINE) return;
     L->M->insts[inst].operands[slot] = val;
 }
 
@@ -321,7 +327,10 @@ static void set_op(lower_t *L, uint32_t inst, int slot, uint32_t val)
 
 static uint32_t new_block(lower_t *L, const char *name)
 {
-    if (L->M->num_blocks >= BIR_MAX_BLOCKS) return 0;
+    if (L->M->num_blocks >= BIR_MAX_BLOCKS) {
+        bir_pfull(L->M, BIR_P_BLOCKS);
+        return 0;
+    }
     uint32_t idx = L->M->num_blocks++;
     bir_block_t *B = &L->M->blocks[idx];
     B->name = bir_add_string(L->M, name, (uint32_t)strlen(name));
@@ -2003,11 +2012,14 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
         /* Overflow mode: pack into extra_operands */
         {
             uint32_t extra_start = L->M->num_extra_ops;
-            if (L->M->num_extra_ops < BIR_MAX_EXTRA_OPS)
-                L->M->extra_operands[L->M->num_extra_ops++] = fi;
+            /* All of it or none: packing what fits drops arguments. */
+            if (L->M->num_extra_ops + 1u + (uint32_t)nargs > BIR_MAX_EXTRA_OPS) {
+                bir_pfull(L->M, BIR_P_EXTRAOPS);
+                return BIR_VAL_NONE;
+            }
+            L->M->extra_operands[L->M->num_extra_ops++] = fi;
             for (int i = 0; i < nargs; i++)
-                if (L->M->num_extra_ops < BIR_MAX_EXTRA_OPS)
-                    L->M->extra_operands[L->M->num_extra_ops++] = args[i];
+                L->M->extra_operands[L->M->num_extra_ops++] = args[i];
             uint32_t total = L->M->num_extra_ops - extra_start;
             uint32_t inst = emit(L, BIR_CALL, ret_t, BIR_OPERANDS_OVERFLOW, 0);
             set_op(L, inst, 0, extra_start);
@@ -2758,6 +2770,11 @@ static void lower_stmt(lower_t *L, uint32_t node)
         /* Emit BIR_SWITCH in overflow mode */
         {
             uint32_t extra_start = L->M->num_extra_ops;
+            /* Worst case is cond, default, then a pair per case. Flag up
+               front; the pack below still truncates, but nothing reads it. */
+            if (L->M->num_extra_ops + 2u + 2u * (uint32_t)ncases
+                > BIR_MAX_EXTRA_OPS)
+                bir_pfull(L->M, BIR_P_EXTRAOPS);
             /* Pack: cond_val, default_block, (case_const, target_block)... */
             if (L->M->num_extra_ops < BIR_MAX_EXTRA_OPS)
                 L->M->extra_operands[L->M->num_extra_ops++] = cond_v;
@@ -2953,8 +2970,11 @@ static void lower_func_body(lower_t *L, uint32_t func_def,
     /* Create function type */
     uint32_t fn_type = bir_type_func(L->M, ret_t, param_types, nparams);
 
-    /* Create function */
-    if (L->M->num_funcs >= BIR_MAX_FUNCS) return;
+    /* Create function. Bailing leaves cur_func on the previous one. */
+    if (L->M->num_funcs >= BIR_MAX_FUNCS) {
+        bir_pfull(L->M, BIR_P_FUNCS);
+        return;
+    }
     uint32_t fi = L->M->num_funcs++;
     L->cur_func = fi;
 
@@ -3188,7 +3208,10 @@ static void collect_global_var(lower_t *L, uint32_t node)
 {
     uint16_t cuda = ND(L, node)->cuda_flags;
     if (!(cuda & (CUDA_SHARED | CUDA_CONSTANT | CUDA_DEVICE))) return;
-    if (L->M->num_globals >= BIR_MAX_GLOBALS) return;
+    if (L->M->num_globals >= BIR_MAX_GLOBALS) {
+        bir_pfull(L->M, BIR_P_GLOBALS);
+        return;
+    }
 
     uint32_t type_n = child_at(L, node, 0);
     uint32_t name_n = child_at(L, node, 1);

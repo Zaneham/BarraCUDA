@@ -267,6 +267,21 @@ typedef struct {
     uint8_t     is_const;
 } bir_global_t;  /* 16 bytes */
 
+/* ---- Pool overflow ---- */
+
+/* One bit per arena, set when a writer refuses for want of room. Sticky and
+   OR-ed, so the mask doesn't depend on which pool filled first. */
+#define BIR_P_TYPES     0x001u
+#define BIR_P_TFIELDS   0x002u
+#define BIR_P_STRINGS   0x004u
+#define BIR_P_CONSTS    0x008u
+#define BIR_P_INSTS     0x010u
+#define BIR_P_BLOCKS    0x020u
+#define BIR_P_FUNCS     0x040u
+#define BIR_P_GLOBALS   0x080u
+#define BIR_P_EXTRAOPS  0x100u
+#define BIR_P_PHIS      0x200u
+
 /* ---- Module ---- */
 
 /* The whole program in one struct. No malloc. Deterministic layout. */
@@ -296,11 +311,18 @@ typedef struct {
 
     char            strings[BIR_MAX_STRINGS];
     uint32_t        string_len;
+
+    uint32_t        pool_full;  /* BIR_P_* bits; zeroed by bir_module_init */
 } bir_module_t;
 
 /* ---- API ---- */
 
 void        bir_module_init(bir_module_t *M);
+
+/* bir_pfull records a refusal; bir_pchk reports them and answers
+   BC_ERR_OVERFLOW if the module is unsafe to emit. */
+void        bir_pfull(bir_module_t *M, uint32_t bit);
+int         bir_pchk(const bir_module_t *M, const char *phase);
 
 /* Type interning — returns index of existing or newly created type */
 uint32_t    bir_type_void(bir_module_t *M);
