@@ -78,7 +78,10 @@ static uint32_t l_nkids(const tn_node_t *n)
 static uint32_t l_emit(tn_lower_t *L, int op, uint32_t type, int subop)
 {
     bir_module_t *M = L->bir;
-    if (M->num_insts >= BIR_MAX_INSTS) return BIR_VAL_NONE;
+    if (M->num_insts >= BIR_MAX_INSTS) {
+        bir_pfull(M, BIR_P_INSTS);
+        return BIR_VAL_NONE;
+    }
     uint32_t idx = M->num_insts++;
     bir_inst_t *I = &M->insts[idx];
     I->op = (uint16_t)op;
@@ -108,14 +111,22 @@ static void l_op(tn_lower_t *L, uint32_t inst_val, uint32_t operand)
     }
 }
 
-/* Create a new BIR block as a child of the current function. */
+/* Create a new BIR block as a child of the current function. The name is not
+ * decoration: string offset 0 is a live string rather than a sentinel, so a
+ * block left nameless is printed with whatever went into the table first,
+ * which is the function's own name. */
 
-static uint32_t l_new_block(tn_lower_t *L)
+static uint32_t l_new_block(tn_lower_t *L, const char *name)
 {
     bir_module_t *M = L->bir;
-    if (M->num_blocks >= BIR_MAX_BLOCKS) return 0;
+    /* Block 0 is a real block, so answering a refusal with it hands the caller
+     * somebody else's block. Record it and let bir_pchk stop the compile. */
+    if (M->num_blocks >= BIR_MAX_BLOCKS) {
+        bir_pfull(M, BIR_P_BLOCKS);
+        return 0;
+    }
     uint32_t idx = M->num_blocks++;
-    M->blocks[idx].name = 0;
+    M->blocks[idx].name = bir_add_string(M, name, (uint32_t)strlen(name));
     M->blocks[idx].first_inst = M->num_insts;
     M->blocks[idx].num_insts = 0;
     /* Attach to the current function. */
@@ -1168,14 +1179,14 @@ static void l_for(tn_lower_t *L, uint32_t node_idx)
     uint32_t pre = L->cur_block;
     uint32_t br0 = l_emit(L, BIR_BR, L->t_void, 0);                 /* preheader -> head */
 
-    uint32_t head = l_new_block(L); l_op(L, br0, head);
+    uint32_t head = l_new_block(L, "for.head"); l_op(L, br0, head);
     L->cur_block = head;
     uint32_t kphi = l_emit(L, BIR_PHI, L->t_i32, 0);
     l_op(L, kphi, pre); l_op(L, kphi, start);                       /* [preheader: start] */
     uint32_t cond = l_emit(L, BIR_ICMP, L->t_i32, BIR_ICMP_SLT); l_op(L,cond,kphi); l_op(L,cond,stop);
     uint32_t brc = l_emit(L, BIR_BR_COND, L->t_void, 0); l_op(L,brc,cond);  /* [0]=cond */
 
-    uint32_t bodyb = l_new_block(L); l_op(L, brc, bodyb);                   /* [1]=true */
+    uint32_t bodyb = l_new_block(L, "for.body"); l_op(L, brc, bodyb);                   /* [1]=true */
     L->cur_block = bodyb;
     L->node_val[node_idx] = kphi;          /* bind the loop variable k */
     l_block(L, body);
@@ -1183,7 +1194,7 @@ static void l_for(tn_lower_t *L, uint32_t node_idx)
     l_op(L, kphi, bodyb); l_op(L, kphi, kn);   /* phi back-edge pair [body: k+step] */
     uint32_t brh = l_emit(L, BIR_BR, L->t_void, 0); l_op(L,brh,head);       /* back-edge */
 
-    uint32_t exitb = l_new_block(L); l_op(L, brc, exitb);                   /* [2]=false */
+    uint32_t exitb = l_new_block(L, "for.exit"); l_op(L, brc, exitb);                   /* [2]=false */
     L->cur_block = exitb;
 }
 
@@ -1338,7 +1349,10 @@ static void l_funcdef(tn_lower_t *L, uint32_t node_idx, int is_kernel)
     const tn_parse_t *P = L->parser;
     const tn_node_t *n = &P->nodes[node_idx];
     bir_module_t *M = L->bir;
-    if (M->num_funcs >= BIR_MAX_FUNCS) return;
+    if (M->num_funcs >= BIR_MAX_FUNCS) {
+        bir_pfull(M, BIR_P_FUNCS);
+        return;
+    }
 
     uint32_t fi = M->num_funcs++;
     bir_func_t *F = &M->funcs[fi];
@@ -1427,7 +1441,7 @@ static void l_funcdef(tn_lower_t *L, uint32_t node_idx, int is_kernel)
     F->cuda_flags = is_kernel ? CUDA_GLOBAL : CUDA_DEVICE;
 
     L->cur_func = fi;
-    L->cur_block = l_new_block(L);
+    L->cur_block = l_new_block(L, "entry");
     L->cur_param_base = M->num_insts;
 
     /* Emit one BIR_PARAM instruction per parameter, in order. The

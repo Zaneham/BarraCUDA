@@ -3,7 +3,23 @@ Booth — Changelog
 
 ## Unreleased
 
+### Frontend
+
+- the Triton lowering records pool overflow through `bir_pfull`, which the C99
+  one already did and it never has. It answered a full block pool with index 0,
+  a live block, so `bir_pchk` could not see a Triton arena exhaustion at all
+  (Zane Hambly, 2026-08-11)
+
+- Triton blocks are named. String offset 0 is a live string, so a nameless
+  block printed as whatever went into the table first, and all four blocks of
+  a loop kernel were labelled with the kernel's own name
+  (Zane Hambly, 2026-08-11)
+
 ### Architecture
+
+- BIR arena writers record a `pool_full` bit rather than returning index 0,
+  which is a live entry and not a sentinel. A full pool emitted wrong
+  immediates under exit 0; `bir_pchk` now refuses (Zane Hambly, 2026-08-11)
 
 - #160: DCE and mem2reg move instructions without moving `inst_lines[]`
   with them, so every line number past the first deleted instruction
