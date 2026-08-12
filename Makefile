@@ -102,10 +102,22 @@ VSOURCES = $(VDIR)/tokenizer.c $(VDIR)/mlir_parser.c $(VDIR)/op_parsers.c \
            $(VDIR)/base/string.c $(VDIR)/base/strbuf.c $(VDIR)/base/mem.c \
            $(VDIR)/base/numconv.c $(VDIR)/base/assert.c $(VDIR)/base/exit.c \
            $(VDIR)/platform/$(VPLAT)
-VCFLAGS = $(subst -std=c99,-std=c2x,$(CFLAGS)) -Wno-switch-enum \
-          -DPLATFORM_SKIP_ENTRY -DCOREC_STDLIB_PROVIDES_MEM -I$(VDIR)
+# Simply expanded, so the target-specific assignment below is a plain string
+# rather than something that re-expands CFLAGS into itself.
+VCFLAGS := $(subst -std=c99,-std=c2x,$(CFLAGS)) -Wno-switch-enum \
+           -DPLATFORM_SKIP_ENTRY -DCOREC_STDLIB_PROVIDES_MEM -I$(VDIR)
 
 OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o) $(VSOURCES:%.c=$(OBJDIR)/%.o)
+
+# Everything under src/mlir compiles on VCFLAGS, vendored or not. mlir_fe.c and
+# lower.c are ours but they speak corec types, so they want the same flags.
+# A target-specific variable rather than a pattern rule, because two patterns
+# match these objects and make 3.81, which is what macOS ships, does not
+# resolve that the way make 4 does. It took the generic rule and the build lost
+# its include path.
+MLOBJECTS = $(VSOURCES:%.c=$(OBJDIR)/%.o) \
+            $(OBJDIR)/src/mlir/mlir_fe.o $(OBJDIR)/src/mlir/lower.o
+$(MLOBJECTS): CFLAGS := $(VCFLAGS)
 TARGET  = kath
 
 all: $(TARGET) $(ALT_RT)
@@ -116,12 +128,6 @@ $(TARGET): $(OBJECTS)
 $(OBJDIR)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
-
-# Everything under src/mlir builds on VCFLAGS, vendored or not. mlir_fe.c is
-# ours but it speaks corec types, so it needs the same flags.
-$(OBJDIR)/src/mlir/%.o: src/mlir/%.c
-	@mkdir -p $(dir $@)
-	$(CC) $(VCFLAGS) -c $< -o $@
 
 # ---- Test Suite ----
 TCFLAGS = -std=c99 -MMD -MP -D_POSIX_C_SOURCE=200809L -Wall -Wextra -O0 -g \
