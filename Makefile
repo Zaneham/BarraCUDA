@@ -284,8 +284,11 @@ coverage:
 	-./trunner --all
 	@command -v gcovr >/dev/null 2>&1 || { echo "gcovr not found. pip install gcovr"; exit 1; }
 	@mkdir -p coverage-html
+	@# gcovr snuffles through the object dir like a skaven after warp tokens, so vendored data has to be gone rather than filtered.
+	find $(COVDIR)/src/mlir \( -name '*.gcda' -o -name '*.gcno' \) -delete 2>/dev/null || true
 	gcovr --root . --object-directory $(COVDIR) \
 	      --filter 'src/' --filter 'runtime/' \
+	      --exclude 'src/mlir/vendor/' \
 	      --exclude-unreachable-branches \
 	      --print-summary --txt coverage.txt --html-details coverage-html/index.html
 	rm -f $(TARGET) $(TARGET).exe trunner trunner.exe
