@@ -2283,9 +2283,8 @@ static void isel_umulhi(uint32_t idx, const bir_inst_t *I)
     emit2(AMD_V_MUL_HI_U32, mop_vreg_v((uint16_t)vr), a, b);
 }
 
-/* Width of an operand, or 0 when it can't be traced back to an instruction.
- * The bit-counting ops care what they are counting over, and the result type
- * won't tell them — a count is i32 whatever it counted. */
+/* Width of an operand, 0 if untraceable. A count is i32 whatever it counted,
+ * so the result type can't answer this. */
 static int operand_width(uint32_t v)
 {
     if (v == BIR_VAL_NONE || BIR_VAL_IS_CONST(v)) return 0;
@@ -2293,11 +2292,8 @@ static int operand_width(uint32_t v)
     return si < S.bir->num_insts ? bir_type_width(S.bir->insts[si].type) : 0;
 }
 
-/* popcount / ctz / clz / brev at 32 bits. v_bcnt_u32_b32 adds src1 into the
- * count, so a bare popcount passes zero. ffbl and ffbh answer -1 where BIR
- * promises the width, and -1 is the only result they give outside 0..31, so
- * an unsigned min against 32 corrects it in one instruction rather than a
- * compare and a cndmask. */
+/* 32-bit only. ffbl and ffbh answer -1 for zero where BIR promises 32, and
+ * -1 is their only result outside 0..31, so an unsigned min fixes it. */
 static void isel_bitcount(uint32_t idx, const bir_inst_t *I)
 {
     moperand_t a = ensure_vgpr(resolve_val(I->operands[0], 1));
@@ -2692,9 +2688,7 @@ static void isel_function(uint32_t fi)
 
             case BIR_POPCOUNT: case BIR_CTZ:
             case BIR_CLZ: case BIR_BREV:
-                /* Narrower than 32 would need the count corrected for the
-                 * padding bits sitting in the register, so it is refused
-                 * rather than quietly counted. */
+                /* Narrower widths would count the register's padding bits */
                 if (operand_width(I->operands[0]) == 32)
                     isel_bitcount(idx, I);
                 else

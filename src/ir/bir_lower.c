@@ -1466,9 +1466,8 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
             return BIR_MAKE_VAL(inst);
         }
 
-        /* __popc / __clz / __ffs / __brev, and the ll forms. The ll suffix
-           carries no weight here — the operand's own type picks the width,
-           which is what C would have done anyway. */
+        /* __popc / __clz / __ffs / __brev. The ll suffix carries no weight,
+           the operand's own type picks the width. */
         {
             static const struct { const char *n; uint16_t op; int ffs; } btab[] = {
                 {"__popc",   BIR_POPCOUNT, 0},
@@ -1491,8 +1490,7 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
                 set_op(L, inst, 0, a0);
                 if (!btab[bi].ffs) return BIR_MAKE_VAL(inst);
 
-                /* ffs is ctz+1, but a zero input answers 0 rather than
-                   width+1, so it needs the one guard. */
+                /* ffs is ctz+1, but zero answers 0 rather than width+1 */
                 uint32_t nz = emit(L, BIR_ICMP, bir_type_int(L->M, 1), 2,
                                    BIR_ICMP_NE);
                 set_op(L, nz, 0, a0);

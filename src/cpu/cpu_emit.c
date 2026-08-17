@@ -37,9 +37,7 @@ static int32_t slot(cpu_mod_t *X,uint32_t i){ return X->slots[i]; }
 
 /* ---- 32-bit operand forms ---- */
 
-/* No REX, so every write clears the upper half of the register for free,
- * which is what the bit-counting ops want after a 64-bit slot load. Only
- * RAX/RCX go through here and both are low-8, so no REX.B either. */
+/* No REX, so every write clears the upper half for free. RAX/RCX only. */
 static void e32_movrr(cpu_mod_t *X,int d,int s){ eb(X,0x89);modrm(X,3,s,d); }
 static void e32_movi(cpu_mod_t *X,int r,uint32_t v){ eb(X,(uint8_t)(0xB8+r));ei32(X,(int32_t)v); }
 static void e32_shr(cpu_mod_t *X,int r,int n){ eb(X,0xC1);modrm(X,3,5,r);eb(X,(uint8_t)n); }
@@ -54,11 +52,8 @@ static void e32_bsr(cpu_mod_t *X,int d,int s){ eb(X,0x0F);eb(X,0xBD);modrm(X,3,d
 static void e32_cmovz(cpu_mod_t *X,int d,int s){ eb(X,0x0F);eb(X,0x44);modrm(X,3,d,s); }
 static void e32_bswap(cpu_mod_t *X,int r){ eb(X,0x0F);eb(X,(uint8_t)(0xC8+r)); }
 
-/* Bit counting with nothing newer than a 486 assumed. popcnt and tzcnt would
- * be two bytes each, but they are SSE4.2 and BMI1, and a backend whose whole
- * pitch is "runs on the laptop you already have" should not hand out a SIGILL
- * to make a kernel shorter. So: SWAR for the counts, bsf/bsr with a zero
- * guard for the scans. Operand arrives in EAX, answer leaves in EAX. */
+/* SWAR rather than popcnt, which is SSE4.2 and would SIGILL on old kit.
+ * Operand arrives in EAX, answer leaves in EAX. */
 static void x86_popcount(cpu_mod_t *X)
 {
     e32_movrr(X,X_RCX,X_RAX); e32_shr(X,X_RCX,1);
@@ -466,8 +461,8 @@ static void cpu_func(cpu_mod_t *X,const bir_func_t *F){
             else if (I->op==BIR_CTZ) {
                 e32_movi(X,X_RCX,32); e32_bsf(X,X_RAX,X_RAX); e32_cmovz(X,X_RAX,X_RCX);
             } else {
-                /* bsr gives the index of the top set bit, so clz is 31 minus
-                 * that, and -1 for a zero input lands the answer on 32. */
+                /* bsr gives the top set bit, so clz is 31 minus it, and the
+                 * -1 for zero lands on 32. */
                 e32_movi(X,X_RCX,0xFFFFFFFFu);
                 e32_bsr(X,X_RAX,X_RAX); e32_cmovz(X,X_RAX,X_RCX);
                 e32_movi(X,X_RCX,31); e32_sub(X,X_RCX,X_RAX);

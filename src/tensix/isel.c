@@ -732,9 +732,7 @@ static void isel_block(uint32_t bir_bi)
             break;
         }
 
-        /* The SFPU is a float vector unit with no integer bit-counting, and
-         * the baby-core path (--rv-elf) is where these belong. Refused here
-         * rather than folded into the zero-move the warp ops fall back on. */
+        /* No integer bit-counting on the SFPU; --rv-elf is where these go */
         case BIR_POPCOUNT: case BIR_CTZ:
         case BIR_CLZ: case BIR_BREV:
             fprintf(stderr, "kath: bit counting not supported on the Tensix "

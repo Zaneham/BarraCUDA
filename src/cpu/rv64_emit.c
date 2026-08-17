@@ -155,10 +155,8 @@ static int32_t slot(rv64_mod_t*V,uint32_t i){ return V->slots[i]; }
 
 /* ---- Bit counting, with no Zbb to lean on ---- */
 
-/* SWAR popcount over the low 32 bits of t0, answer in t0, t1 and t2 gone.
- * Base RV64IMFD has no bit-manip extension, but it does have a multiplier,
- * and the tail of the classic SWAR is exactly a multiply and a shift — the
- * same trade De Bruijn makes, without needing a table in memory. */
+/* SWAR popcount over the low 32 bits of t0. No Zbb, but the multiplier the
+ * SWAR tail needs is there. t0 in and out, t1 and t2 scratch. */
 static void rv_popc32(rv64_mod_t *V)
 {
     e_srli(V,V_T1,V_T0,1);
@@ -174,8 +172,7 @@ static void rv_popc32(rv64_mod_t *V)
     e_srli(V,V_T0,V_T0,24); e_andi(V,V_T0,V_T0,0xFF);
 }
 
-/* Bit reversal is five rounds of the same swap, halving the block size each
- * time: odd/even bits, then pairs, nibbles, bytes, halves. */
+/* Five rounds of the same swap, halving the block each time. */
 static void rv_brev32(rv64_mod_t *V)
 {
     static const struct { int sh; int32_t m; } r[5] = {
@@ -461,14 +458,12 @@ static void rv64_func(rv64_mod_t *V,const bir_func_t *F){
             if (I->op==BIR_POPCOUNT) rv_popc32(V);
             else if (I->op==BIR_BREV) rv_brev32(V);
             else if (I->op==BIR_CTZ){
-                /* popcount(~x & (x-1)) is ctz, and a zero input walks to 32
-                 * on its own rather than needing a guard. */
+                /* popcount(~x & (x-1)) is ctz, and zero walks to 32 unaided */
                 e_addi(V,V_T1,V_T0,-1); e_xori(V,V_T0,V_T0,-1);
                 e_and(V,V_T0,V_T0,V_T1); rv_zext_to(V,V_T0,32);
                 rv_popc32(V);
             } else {
-                /* Smear the top set bit all the way down, then whatever is
-                 * left uncounted above it is the leading-zero count. */
+                /* Smear the top set bit down; what stays uncounted is clz */
                 for (int sh=1; sh<32; sh<<=1){
                     e_srli(V,V_T1,V_T0,sh); e_or(V,V_T0,V_T0,V_T1);
                 }

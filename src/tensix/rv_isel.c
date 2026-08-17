@@ -303,19 +303,8 @@ static int sel_binop(const bir_module_t *M, uint32_t inst_idx,
 }
 
 /* ---- Bit counting ----
- *
- * The baby cores are RV32IM: no Zbb, so no CPOP, CTZ, CLZ or the rest.
- * What they do have is the M multiplier, and the tail of a SWAR popcount
- * is a multiply and a shift, so the count costs one multiply instead of a
- * table lookup. De Bruijn would work for CTZ and takes the same multiply,
- * but it needs a 32-byte table sitting in L1 to index into, and everything
- * here folds onto popcount anyway:
- *   ctz(x) = popcount(~x & (x-1))
- *   clz(x) = 32 - popcount(x smeared right)
- * Both answer 32 for a zero input without a special case, which is the
- * width BIR promises.
- *
- * All of this runs in T0 with T1 and T2 as scratch. */
+ * RV32IM has no Zbb, so everything folds onto a SWAR popcount and the M
+ * multiplier that its tail needs. T0 in, T1 and T2 scratch. */
 
 #define RV_EMIT(e) do { int rc_ = emit(out, (e)); \
                         if (rc_ != BC_OK) return rc_; } while (0)

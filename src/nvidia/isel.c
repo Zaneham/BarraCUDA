@@ -372,10 +372,8 @@ static void is_umulhi(uint32_t idx, const bir_inst_t *I)
     em1((rf == NV_RF_U64) ? NV_MUL_HI_U64 : NV_MUL_HI_U32, d, a, b);
 }
 
-/* popc, clz and brev are all native PTX at both widths. There is no ctz, so
- * it goes through brev first — reversing sends the trailing zeros to the top
- * where clz can count them, and clz already answers the width for a zero
- * input, which is the answer BIR asks for. */
+/* Native PTX at both widths, except ctz, which is brev then clz. Reversing
+ * sends the trailing zeros to the top, and clz answers 32 for zero. */
 static void is_bitcount(uint32_t idx, const bir_inst_t *I)
 {
     int w64 = (rslv_rf(I->operands[0]) == NV_RF_U64);
