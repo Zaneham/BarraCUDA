@@ -153,6 +153,41 @@ static void e_li(rv64_mod_t*V,int d,int32_t v){
 
 static int32_t slot(rv64_mod_t*V,uint32_t i){ return V->slots[i]; }
 
+/* ---- Bit counting, with no Zbb to lean on ---- */
+
+/* SWAR popcount over the low 32 bits of t0. No Zbb, but the multiplier the
+ * SWAR tail needs is there. t0 in and out, t1 and t2 scratch. */
+static void rv_popc32(rv64_mod_t *V)
+{
+    e_srli(V,V_T1,V_T0,1);
+    e_li(V,V_T2,0x55555555); e_and(V,V_T1,V_T1,V_T2);
+    e_sub(V,V_T0,V_T0,V_T1);
+    e_srli(V,V_T1,V_T0,2);
+    e_li(V,V_T2,0x33333333);
+    e_and(V,V_T0,V_T0,V_T2); e_and(V,V_T1,V_T1,V_T2);
+    e_add(V,V_T0,V_T0,V_T1);
+    e_srli(V,V_T1,V_T0,4); e_add(V,V_T0,V_T0,V_T1);
+    e_li(V,V_T2,0x0F0F0F0F); e_and(V,V_T0,V_T0,V_T2);
+    e_li(V,V_T2,0x01010101); e_mul(V,V_T0,V_T0,V_T2);
+    e_srli(V,V_T0,V_T0,24); e_andi(V,V_T0,V_T0,0xFF);
+}
+
+/* Five rounds of the same swap, halving the block each time. */
+static void rv_brev32(rv64_mod_t *V)
+{
+    static const struct { int sh; int32_t m; } r[5] = {
+        { 1, 0x55555555 }, { 2, 0x33333333 }, { 4, 0x0F0F0F0F },
+        { 8, 0x00FF00FF }, { 16, 0x0000FFFF }
+    };
+    for (int i = 0; i < 5; i++) {
+        e_srli(V,V_T1,V_T0,r[i].sh);
+        e_li(V,V_T2,r[i].m);
+        e_and(V,V_T1,V_T1,V_T2); e_and(V,V_T0,V_T0,V_T2);
+        e_slli(V,V_T0,V_T0,r[i].sh);
+        e_or(V,V_T0,V_T0,V_T1);
+    }
+}
+
 /* Slots hang off s0. The catch: ld/sd carry a signed 12-bit offset, so a
  * frame fatter than ~2KB puts the deeper slots out of reach. When that
  * happens we compute the address the long way through t2, which is slower
@@ -411,6 +446,32 @@ static void rv64_func(rv64_mod_t *V,const bir_func_t *F){
         case BIR_SUB: load_val(V,V_T0,I->operands[0]);load_val(V,V_T1,I->operands[1]);e_sub(V,V_T0,V_T0,V_T1);st_slot(V,V_T0,s); break;
         case BIR_MUL: load_val(V,V_T0,I->operands[0]);load_val(V,V_T1,I->operands[1]);e_mul(V,V_T0,V_T0,V_T1);st_slot(V,V_T0,s); break;
         case BIR_UMULHI: load_val(V,V_T0,I->operands[0]);load_val(V,V_T1,I->operands[1]);e_mulhu(V,V_T0,V_T0,V_T1);st_slot(V,V_T0,s); break;
+
+        /* ---- bit counting ---- */
+        case BIR_POPCOUNT: case BIR_CTZ: case BIR_CLZ: case BIR_BREV: {
+            if (int_w(V,val_type(V,I->operands[0]))!=32){
+                fprintf(stderr,"kath: bit counting at a width other than 32 "
+                               "not supported on the RV64 backend\n");
+                V->n_errs++; break;
+            }
+            load_val(V,V_T0,I->operands[0]); rv_zext_to(V,V_T0,32);
+            if (I->op==BIR_POPCOUNT) rv_popc32(V);
+            else if (I->op==BIR_BREV) rv_brev32(V);
+            else if (I->op==BIR_CTZ){
+                /* popcount(~x & (x-1)) is ctz, and zero walks to 32 unaided */
+                e_addi(V,V_T1,V_T0,-1); e_xori(V,V_T0,V_T0,-1);
+                e_and(V,V_T0,V_T0,V_T1); rv_zext_to(V,V_T0,32);
+                rv_popc32(V);
+            } else {
+                /* Smear the top set bit down; what stays uncounted is clz */
+                for (int sh=1; sh<32; sh<<=1){
+                    e_srli(V,V_T1,V_T0,sh); e_or(V,V_T0,V_T0,V_T1);
+                }
+                rv_popc32(V);
+                e_li(V,V_T1,32); e_sub(V,V_T0,V_T1,V_T0);
+            }
+            st_slot(V,V_T0,s); break;
+        }
 
         /* ---- integer bitwise + width-aware shift/divide ---- */
         case BIR_AND: load_val(V,V_T0,I->operands[0]);load_val(V,V_T1,I->operands[1]);e_and(V,V_T0,V_T0,V_T1);st_slot(V,V_T0,s); break;

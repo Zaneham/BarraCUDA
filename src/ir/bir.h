@@ -178,6 +178,13 @@ typedef enum {
        256-bit field arithmetic (Montgomery): mul-lo + mul-hi + carry. */
     BIR_UMULHI,
 
+    /* Bit counting. CTZ and CLZ both answer the operand's width for a zero
+       input, which is what __clz promises and what the backends agree on. */
+    BIR_POPCOUNT,
+    BIR_CTZ,
+    BIR_CLZ,
+    BIR_BREV,
+
     BIR_OP_IMPLEMENTED,
 
     /* Reserved: texture/surface ops */

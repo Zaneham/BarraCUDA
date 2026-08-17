@@ -86,6 +86,7 @@ const amd_enc_entry_t amd_enc_table[AMD_OP_COUNT] = {
     [AMD_V_CNDMASK_B32]      = { AMD_FMT_VOP2, 0x01, "v_cndmask_b32"      },
     [AMD_V_MIN_F32]          = { AMD_FMT_VOP2, 0x0F, "v_min_f32"          },
     [AMD_V_MAX_F32]          = { AMD_FMT_VOP2, 0x10, "v_max_f32"          },
+    [AMD_V_MIN_U32]          = { AMD_FMT_VOP2, 0x13, "v_min_u32"          },
 
     /* VOP1 */
     [AMD_V_MOV_B32]          = { AMD_FMT_VOP1, 0x01, "v_mov_b32"          },
@@ -112,8 +113,12 @@ const amd_enc_entry_t amd_enc_table[AMD_OP_COUNT] = {
     [AMD_V_FRACT_F32]        = { AMD_FMT_VOP1, 0x20, "v_fract_f32"        },
     [AMD_V_NOT_B32]          = { AMD_FMT_VOP1, 0x37, "v_not_b32"          },
     [AMD_V_READFIRSTLANE_B32]= { AMD_FMT_VOP1, 0x02, "v_readfirstlane_b32"},
+    [AMD_V_BFREV_B32]        = { AMD_FMT_VOP1, 0x38, "v_bfrev_b32"        },
+    [AMD_V_FFBH_U32]         = { AMD_FMT_VOP1, 0x39, "v_clz_i32_u32"      },
+    [AMD_V_FFBL_B32]         = { AMD_FMT_VOP1, 0x3A, "v_ctz_i32_b32"      },
 
     /* VOP3 — GFX11: prefix=0x35, 10-bit opcodes */
+    [AMD_V_BCNT_U32_B32]     = { AMD_FMT_VOP3, 0x31E,"v_bcnt_u32_b32"     },
     [AMD_V_MAD_U32_U24]      = { AMD_FMT_VOP3, 0x20B,"v_mad_u32_u24"      },
     [AMD_V_BFE_I32]          = { AMD_FMT_VOP3, 0x211,"v_bfe_i32"          },
     [AMD_V_BFE_U32]          = { AMD_FMT_VOP3, 0x210,"v_bfe_u32"          },
@@ -267,6 +272,7 @@ const amd_enc_entry_t amd_enc_table_gfx10[AMD_OP_COUNT] = {
     [AMD_V_CNDMASK_B32]      = { AMD_FMT_VOP2, 0x00, "v_cndmask_b32"      },
     [AMD_V_MIN_F32]          = { AMD_FMT_VOP2, 0x0F, "v_min_f32"          },
     [AMD_V_MAX_F32]          = { AMD_FMT_VOP2, 0x10, "v_max_f32"          },
+    [AMD_V_MIN_U32]          = { AMD_FMT_VOP2, 0x13, "v_min_u32"          },
 
     /* VOP1 — largely stable between GFX10 and GFX11 */
     [AMD_V_MOV_B32]          = { AMD_FMT_VOP1, 0x01, "v_mov_b32"          },
@@ -292,8 +298,12 @@ const amd_enc_entry_t amd_enc_table_gfx10[AMD_OP_COUNT] = {
     [AMD_V_FRACT_F32]        = { AMD_FMT_VOP1, 0x20, "v_fract_f32"        },
     [AMD_V_NOT_B32]          = { AMD_FMT_VOP1, 0x37, "v_not_b32"          },
     [AMD_V_READFIRSTLANE_B32]= { AMD_FMT_VOP1, 0x02, "v_readfirstlane_b32"},
+    [AMD_V_BFREV_B32]        = { AMD_FMT_VOP1, 0x38, "v_bfrev_b32"        },
+    [AMD_V_FFBH_U32]         = { AMD_FMT_VOP1, 0x39, "v_ffbh_u32"         },
+    [AMD_V_FFBL_B32]         = { AMD_FMT_VOP1, 0x3A, "v_ffbl_b32"         },
 
     /* VOP3 — GFX10: prefix=0x34, 10-bit opcodes all renumbered */
+    [AMD_V_BCNT_U32_B32]     = { AMD_FMT_VOP3, 0x364,"v_bcnt_u32_b32"     },
     [AMD_V_MAD_U32_U24]      = { AMD_FMT_VOP3, 0x1C3,"v_mad_u32_u24"      },
     [AMD_V_BFE_I32]          = { AMD_FMT_VOP3, 0x1C5,"v_bfe_i32"          },
     [AMD_V_BFE_U32]          = { AMD_FMT_VOP3, 0x1C4,"v_bfe_u32"          },
@@ -462,6 +472,7 @@ const amd_enc_entry_t amd_enc_table_gfx9[AMD_OP_COUNT] = {
     [AMD_V_CNDMASK_B32]      = { AMD_FMT_VOP2, 0x00, "v_cndmask_b32"      },
     [AMD_V_MIN_F32]          = { AMD_FMT_VOP2, 0x0A, "v_min_f32"          },
     [AMD_V_MAX_F32]          = { AMD_FMT_VOP2, 0x0B, "v_max_f32"          },
+    [AMD_V_MIN_U32]          = { AMD_FMT_VOP2, 0x0E, "v_min_u32"          },
 
     /* VOP1 — conversions stable, transcendentals renumbered */
     [AMD_V_MOV_B32]          = { AMD_FMT_VOP1, 0x01, "v_mov_b32"          },
@@ -487,8 +498,12 @@ const amd_enc_entry_t amd_enc_table_gfx9[AMD_OP_COUNT] = {
     [AMD_V_FRACT_F32]        = { AMD_FMT_VOP1, 0x1B, "v_fract_f32"        },
     [AMD_V_NOT_B32]          = { AMD_FMT_VOP1, 0x2B, "v_not_b32"          },
     [AMD_V_READFIRSTLANE_B32]= { AMD_FMT_VOP1, 0x02, "v_readfirstlane_b32"},
+    [AMD_V_BFREV_B32]        = { AMD_FMT_VOP1, 0x2C, "v_bfrev_b32"        },
+    [AMD_V_FFBH_U32]         = { AMD_FMT_VOP1, 0x2D, "v_ffbh_u32"         },
+    [AMD_V_FFBL_B32]         = { AMD_FMT_VOP1, 0x2E, "v_ffbl_b32"         },
 
     /* VOP3 — prefix 0x34 (not 0x35), VDST at [15:8] (handled in encode.c) */
+    [AMD_V_BCNT_U32_B32]     = { AMD_FMT_VOP3, 0x28B,"v_bcnt_u32_b32"     },
     [AMD_V_MAD_U32_U24]      = { AMD_FMT_VOP3, 0x1C3,"v_mad_u32_u24"      },
     [AMD_V_BFE_I32]          = { AMD_FMT_VOP3, 0x1C9,"v_bfe_i32"          },
     [AMD_V_BFE_U32]          = { AMD_FMT_VOP3, 0x1C8,"v_bfe_u32"          },

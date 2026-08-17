@@ -347,3 +347,79 @@ static void enc12(void)
     PASS();
 }
 TH_REG("enc", 12, "SMEM encodes on CDNA", enc12)
+
+/* ---- encode: bit counting ---- */
+/* The opcodes below were read back out of llvm-mc for gfx1100, gfx1030 and
+ * gfx900, so if one of these fails either the table drifted or AMD renamed
+ * something again. GFX11 calls ffbl "v_ctz_i32_b32"; same bits either way. */
+
+static void enc13(void)
+{
+    enc_setup(AMD_TARGET_GFX1100);
+    minst_t *mi     = &A->minsts[0];
+    mi->op          = AMD_V_FFBL_B32;
+    mi->num_defs    = 1;
+    mi->num_uses    = 1;
+    mi->operands[0] = vgpr(10);
+    mi->operands[1] = vgpr(11);
+
+    encode_function(A, 0);
+    CHEQX(dw(0), 0x7E14750Bu);
+    PASS();
+}
+TH_REG("enc", 13, "VOP1 encodes ffbl/ctz", enc13)
+
+/* v_bcnt_u32_b32 is VOP3 and the opcode moves with every generation:
+ * 0x31E on GFX11, 0x364 on GFX10, 0x28B back on GFX9. */
+static void enc14(void)
+{
+    enc_setup(AMD_TARGET_GFX1100);
+    minst_t *mi     = &A->minsts[0];
+    mi->op          = AMD_V_BCNT_U32_B32;
+    mi->num_defs    = 1;
+    mi->num_uses    = 2;
+    mi->operands[0] = vgpr(1);
+    mi->operands[1] = vgpr(11);
+    mi->operands[2] = imm(0);
+
+    encode_function(A, 0);
+    CHEQX(dw(0), 0xD71E0001u);
+    CHEQX(dw(1), 0x0001010Bu);
+    PASS();
+}
+TH_REG("enc", 14, "VOP3 encodes v_bcnt_u32_b32", enc14)
+
+static void enc15(void)
+{
+    enc_setup(AMD_TARGET_GFX942);
+    minst_t *mi     = &A->minsts[0];
+    mi->op          = AMD_V_BFREV_B32;
+    mi->num_defs    = 1;
+    mi->num_uses    = 1;
+    mi->operands[0] = vgpr(1);
+    mi->operands[1] = vgpr(11);
+
+    encode_function(A, 0);
+    CHEQX(dw(0), 0x7E02590Bu);
+    PASS();
+}
+TH_REG("enc", 15, "CDNA renumbers v_bfrev_b32", enc15)
+
+/* src0 here is the inline constant 32, which lives at 160 in the operand
+ * map, not a literal dword trailing the instruction. */
+static void enc16(void)
+{
+    enc_setup(AMD_TARGET_GFX1100);
+    minst_t *mi     = &A->minsts[0];
+    mi->op          = AMD_V_MIN_U32;
+    mi->num_defs    = 1;
+    mi->num_uses    = 2;
+    mi->operands[0] = vgpr(0);
+    mi->operands[1] = imm(32);
+    mi->operands[2] = vgpr(10);
+
+    encode_function(A, 0);
+    CHEQX(dw(0), 0x260014A0u);
+    PASS();
+}
+TH_REG("enc", 16, "VOP2 encodes v_min_u32 with inline 32", enc16)

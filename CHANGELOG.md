@@ -54,6 +54,16 @@ Booth — Changelog
   pointed at the wrong source. Four sites fixed
   (Zane Hambly, 2026-08-09)
 
+### Backends
+
+- `__popc`, `__clz`, `__ffs` and `__brev`, and the BIR ops behind them (#165).
+  Both scans answer the operand's width for a zero input. AMD uses
+  `v_bcnt_u32_b32` and the ffbl/ffbh pair, PTX the native popc/clz/brev, and
+  x86-64, RV64 and the Tensix baby cores a SWAR through the multiplier rather
+  than `popcnt`/`tzcnt`, which are SSE4.2 and BMI1. Widths other than 32 are
+  refused by name; `n_errs` was a field nobody read, so both CPU backends were
+  printing a refusal and writing the object anyway (Zane Hambly, 2026-08-18)
+
 ### Build
 
 - #160: vendor Kauri (MIT) as `src/kauri.h`, included from `barracuda.h`,

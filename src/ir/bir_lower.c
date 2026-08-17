@@ -1466,6 +1466,46 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
             return BIR_MAKE_VAL(inst);
         }
 
+        /* __popc / __clz / __ffs / __brev. The ll suffix carries no weight,
+           the operand's own type picks the width. */
+        {
+            static const struct { const char *n; uint16_t op; int ffs; } btab[] = {
+                {"__popc",   BIR_POPCOUNT, 0},
+                {"__popcll", BIR_POPCOUNT, 0},
+                {"__clz",    BIR_CLZ,      0},
+                {"__clzll",  BIR_CLZ,      0},
+                {"__ffs",    BIR_CTZ,      1},
+                {"__ffsll",  BIR_CTZ,      1},
+                {"__brev",   BIR_BREV,     0},
+                {"__brevll", BIR_BREV,     0},
+            };
+            for (int bi = 0; bi < (int)(sizeof btab / sizeof btab[0]); bi++) {
+                if (strcmp(cname, btab[bi].n) != 0) continue;
+                uint32_t an = ND(L, callee_n)->next_sibling;
+                uint32_t a0 = lower_expr(L, an);
+                uint32_t at = ref_type(L, a0);
+                uint32_t t32 = bir_type_int(L->M, 32);
+                uint32_t rt = (btab[bi].op == BIR_BREV) ? at : t32;
+                uint32_t inst = emit(L, btab[bi].op, rt, 1, 0);
+                set_op(L, inst, 0, a0);
+                if (!btab[bi].ffs) return BIR_MAKE_VAL(inst);
+
+                /* ffs is ctz+1, but zero answers 0 rather than width+1 */
+                uint32_t nz = emit(L, BIR_ICMP, bir_type_int(L->M, 1), 2,
+                                   BIR_ICMP_NE);
+                set_op(L, nz, 0, a0);
+                set_op(L, nz, 1, BIR_MAKE_CONST(bir_const_int(L->M, at, 0)));
+                uint32_t inc = emit(L, BIR_ADD, t32, 2, 0);
+                set_op(L, inc, 0, BIR_MAKE_VAL(inst));
+                set_op(L, inc, 1, BIR_MAKE_CONST(bir_const_int(L->M, t32, 1)));
+                uint32_t sel = emit(L, BIR_SELECT, t32, 3, 0);
+                set_op(L, sel, 0, BIR_MAKE_VAL(nz));
+                set_op(L, sel, 1, BIR_MAKE_VAL(inc));
+                set_op(L, sel, 2, BIR_MAKE_CONST(bir_const_int(L->M, t32, 0)));
+                return BIR_MAKE_VAL(sel);
+            }
+        }
+
         /* Warp shuffle: up to 4-arg (mask, val, lane/delta, [width]) or 2..3-arg bare (val, lane/delta, [width]) */
         {
             static const struct { const char *n; uint16_t op; int sync; } stab[] = {

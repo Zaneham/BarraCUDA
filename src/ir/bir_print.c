@@ -191,6 +191,13 @@ static void print_inst(const bir_module_t *M, const bir_inst_t *I,
         print_val(M, I->operands[1], base_inst, out);
         break;
 
+    /* Bit counting: OP TYPE %a */
+    case BIR_POPCOUNT: case BIR_CTZ: case BIR_CLZ: case BIR_BREV:
+        bir_type_str(M, val_type(M, I->operands[0]), tbuf, sizeof(tbuf));
+        fprintf(out, " %s ", tbuf);
+        print_val(M, I->operands[0], base_inst, out);
+        break;
+
     /* Comparison: icmp/fcmp PRED OPERAND_TYPE %a, %b */
     case BIR_ICMP:
     case BIR_FCMP: {

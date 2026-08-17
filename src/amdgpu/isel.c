@@ -2283,6 +2283,35 @@ static void isel_umulhi(uint32_t idx, const bir_inst_t *I)
     emit2(AMD_V_MUL_HI_U32, mop_vreg_v((uint16_t)vr), a, b);
 }
 
+/* Width of an operand, 0 if untraceable. A count is i32 whatever it counted,
+ * so the result type can't answer this. */
+static int operand_width(uint32_t v)
+{
+    if (v == BIR_VAL_NONE || BIR_VAL_IS_CONST(v)) return 0;
+    uint32_t si = BIR_VAL_INDEX(v);
+    return si < S.bir->num_insts ? bir_type_width(S.bir->insts[si].type) : 0;
+}
+
+/* 32-bit only. ffbl and ffbh answer -1 for zero where BIR promises 32, and
+ * -1 is their only result outside 0..31, so an unsigned min fixes it. */
+static void isel_bitcount(uint32_t idx, const bir_inst_t *I)
+{
+    moperand_t a = ensure_vgpr(resolve_val(I->operands[0], 1));
+    uint32_t vr = map_bir_val(idx, 1);
+    moperand_t d = mop_vreg_v((uint16_t)vr);
+
+    if (I->op == BIR_POPCOUNT) {
+        emit2(AMD_V_BCNT_U32_B32, d, a, mop_imm(0));
+    } else if (I->op == BIR_BREV) {
+        emit1(AMD_V_BFREV_B32, d, a);
+    } else {
+        uint32_t rawv = new_vreg(1);
+        moperand_t raw = mop_vreg_v((uint16_t)rawv);
+        emit1(I->op == BIR_CTZ ? AMD_V_FFBL_B32 : AMD_V_FFBH_U32, raw, a);
+        emit2(AMD_V_MIN_U32, d, mop_imm(32), raw);
+    }
+}
+
 static void isel_call(uint32_t idx, const bir_inst_t *I, int div)
 {
     /* s_swappc_b64 needs a PC-relative offset, but we only have a raw BIR
@@ -2655,6 +2684,15 @@ static void isel_function(uint32_t fi)
                     isel_umulhi(idx, I);
                 else
                     isel_refuse("64-bit mul-hi (__umul64hi)");
+                break;
+
+            case BIR_POPCOUNT: case BIR_CTZ:
+            case BIR_CLZ: case BIR_BREV:
+                /* Narrower widths would count the register's padding bits */
+                if (operand_width(I->operands[0]) == 32)
+                    isel_bitcount(idx, I);
+                else
+                    isel_refuse("bit counting at a width other than 32");
                 break;
 
             default:

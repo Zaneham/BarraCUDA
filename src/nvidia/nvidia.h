@@ -42,6 +42,11 @@ typedef enum {
     NV_SHL_B32,  NV_SHL_B64,
     NV_SHR_U32,  NV_SHR_S32,  NV_SHR_U64,
 
+    /* Bit counting. No ctz in PTX, so that one is built from brev + clz. */
+    NV_POPC_B32, NV_POPC_B64,
+    NV_CLZ_B32,  NV_CLZ_B64,
+    NV_BREV_B32, NV_BREV_B64,
+
     /* Comparison — setp */
     NV_SETP_EQ_U32,  NV_SETP_NE_U32,
     NV_SETP_LT_U32,  NV_SETP_LE_U32,
