@@ -162,6 +162,7 @@ typedef enum {
     AMD_V_CNDMASK_B32,
     AMD_V_MIN_F32,
     AMD_V_MAX_F32,
+    AMD_V_MIN_U32,      /* clamps the -1 that ffbl/ffbh answer for zero */
 
     /* -- VOP1: vector one-input -- */
     AMD_V_MOV_B32,
@@ -189,8 +190,12 @@ typedef enum {
     AMD_V_FRACT_F32,
     AMD_V_NOT_B32,
     AMD_V_READFIRSTLANE_B32,
+    AMD_V_FFBL_B32,     /* gfx11 renamed it v_ctz_i32_b32, same encoding */
+    AMD_V_FFBH_U32,     /* gfx11 renamed it v_clz_i32_u32 */
+    AMD_V_BFREV_B32,
 
     /* -- VOP3: vector three-input -- */
+    AMD_V_BCNT_U32_B32, /* popcount(src0) + src1, so pass 0 for a plain count */
     AMD_V_MAD_U32_U24,
     AMD_V_BFE_I32,
     AMD_V_BFE_U32,

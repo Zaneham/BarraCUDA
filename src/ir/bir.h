@@ -178,6 +178,15 @@ typedef enum {
        256-bit field arithmetic (Montgomery): mul-lo + mul-hi + carry. */
     BIR_UMULHI,
 
+    /* Bit counting. The other half of ballot: a mask you can't popcount is
+       just a number. CTZ and CLZ both answer the type's width for a zero
+       input, which is what CUDA's __clz promises and what every backend
+       here is made to agree on. */
+    BIR_POPCOUNT,
+    BIR_CTZ,
+    BIR_CLZ,
+    BIR_BREV,
+
     BIR_OP_IMPLEMENTED,
 
     /* Reserved: texture/surface ops */

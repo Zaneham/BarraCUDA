@@ -302,6 +302,98 @@ static int sel_binop(const bir_module_t *M, uint32_t inst_idx,
     return stres(RV_T0, inst_idx, out);
 }
 
+/* ---- Bit counting ----
+ *
+ * The baby cores are RV32IM: no Zbb, so no CPOP, CTZ, CLZ or the rest.
+ * What they do have is the M multiplier, and the tail of a SWAR popcount
+ * is a multiply and a shift, so the count costs one multiply instead of a
+ * table lookup. De Bruijn would work for CTZ and takes the same multiply,
+ * but it needs a 32-byte table sitting in L1 to index into, and everything
+ * here folds onto popcount anyway:
+ *   ctz(x) = popcount(~x & (x-1))
+ *   clz(x) = 32 - popcount(x smeared right)
+ * Both answer 32 for a zero input without a special case, which is the
+ * width BIR promises.
+ *
+ * All of this runs in T0 with T1 and T2 as scratch. */
+
+#define RV_EMIT(e) do { int rc_ = emit(out, (e)); \
+                        if (rc_ != BC_OK) return rc_; } while (0)
+#define RV_IMM(r,v) do { int rc_ = ldimm32((r), (v), out); \
+                         if (rc_ != BC_OK) return rc_; } while (0)
+
+static int rv_popc32(rv_buf_t *out)
+{
+    RV_EMIT(rv_srli(RV_T1, RV_T0, 1));
+    RV_IMM (RV_T2, 0x55555555);
+    RV_EMIT(rv_and (RV_T1, RV_T1, RV_T2));
+    RV_EMIT(rv_sub (RV_T0, RV_T0, RV_T1));
+    RV_EMIT(rv_srli(RV_T1, RV_T0, 2));
+    RV_IMM (RV_T2, 0x33333333);
+    RV_EMIT(rv_and (RV_T0, RV_T0, RV_T2));
+    RV_EMIT(rv_and (RV_T1, RV_T1, RV_T2));
+    RV_EMIT(rv_add (RV_T0, RV_T0, RV_T1));
+    RV_EMIT(rv_srli(RV_T1, RV_T0, 4));
+    RV_EMIT(rv_add (RV_T0, RV_T0, RV_T1));
+    RV_IMM (RV_T2, 0x0F0F0F0F);
+    RV_EMIT(rv_and (RV_T0, RV_T0, RV_T2));
+    RV_IMM (RV_T2, 0x01010101);
+    RV_EMIT(rv_mul (RV_T0, RV_T0, RV_T2));
+    RV_EMIT(rv_srli(RV_T0, RV_T0, 24));
+    RV_EMIT(rv_andi(RV_T0, RV_T0, 0xFF));
+    return BC_OK;
+}
+
+/* Five rounds of the same swap, halving the block each time. */
+static int rv_brev32(rv_buf_t *out)
+{
+    static const struct { uint8_t sh; int32_t m; } r[5] = {
+        { 1, 0x55555555 }, { 2, 0x33333333 }, { 4, 0x0F0F0F0F },
+        { 8, 0x00FF00FF }, { 16, 0x0000FFFF }
+    };
+    for (int i = 0; i < 5; i++) {
+        RV_EMIT(rv_srli(RV_T1, RV_T0, r[i].sh));
+        RV_IMM (RV_T2, r[i].m);
+        RV_EMIT(rv_and (RV_T1, RV_T1, RV_T2));
+        RV_EMIT(rv_and (RV_T0, RV_T0, RV_T2));
+        RV_EMIT(rv_slli(RV_T0, RV_T0, r[i].sh));
+        RV_EMIT(rv_or  (RV_T0, RV_T0, RV_T1));
+    }
+    return BC_OK;
+}
+
+static int sel_bitcount(const bir_module_t *M, uint32_t inst_idx,
+                        const bir_inst_t *I, rv_buf_t *out)
+{
+    int rc;
+    if ((rc = ldopnd(M, I->operands[0], RV_T0, out)) != BC_OK) return rc;
+
+    switch (I->op) {
+    case BIR_POPCOUNT:
+        if ((rc = rv_popc32(out)) != BC_OK) return rc;
+        break;
+    case BIR_BREV:
+        if ((rc = rv_brev32(out)) != BC_OK) return rc;
+        break;
+    case BIR_CTZ:
+        RV_EMIT(rv_addi(RV_T1, RV_T0, -1));
+        RV_EMIT(rv_xori(RV_T0, RV_T0, -1));
+        RV_EMIT(rv_and (RV_T0, RV_T0, RV_T1));
+        if ((rc = rv_popc32(out)) != BC_OK) return rc;
+        break;
+    default: /* BIR_CLZ */
+        for (uint8_t sh = 1; sh < 32; sh = (uint8_t)(sh << 1)) {
+            RV_EMIT(rv_srli(RV_T1, RV_T0, sh));
+            RV_EMIT(rv_or  (RV_T0, RV_T0, RV_T1));
+        }
+        if ((rc = rv_popc32(out)) != BC_OK) return rc;
+        RV_IMM (RV_T1, 32);
+        RV_EMIT(rv_sub (RV_T0, RV_T1, RV_T0));
+        break;
+    }
+    return stres(RV_T0, inst_idx, out);
+}
+
 /* ---- Integer comparison ----
  *
  * BIR_ICMP's subop encodes the comparison variant. RV32I provides
@@ -1465,6 +1557,12 @@ int rv_isel_func(const bir_module_t *M, uint32_t func_idx,
             case BIR_LSHR:
             case BIR_ASHR:
                 rc = sel_binop(M, idx, I, out);
+                break;
+            case BIR_POPCOUNT:
+            case BIR_CTZ:
+            case BIR_CLZ:
+            case BIR_BREV:
+                rc = sel_bitcount(M, idx, I, out);
                 break;
             case BIR_ICMP:
                 rc = sel_icmp(M, idx, I, out);

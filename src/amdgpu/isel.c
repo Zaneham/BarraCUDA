@@ -2283,6 +2283,39 @@ static void isel_umulhi(uint32_t idx, const bir_inst_t *I)
     emit2(AMD_V_MUL_HI_U32, mop_vreg_v((uint16_t)vr), a, b);
 }
 
+/* Width of an operand, or 0 when it can't be traced back to an instruction.
+ * The bit-counting ops care what they are counting over, and the result type
+ * won't tell them — a count is i32 whatever it counted. */
+static int operand_width(uint32_t v)
+{
+    if (v == BIR_VAL_NONE || BIR_VAL_IS_CONST(v)) return 0;
+    uint32_t si = BIR_VAL_INDEX(v);
+    return si < S.bir->num_insts ? bir_type_width(S.bir->insts[si].type) : 0;
+}
+
+/* popcount / ctz / clz / brev at 32 bits. v_bcnt_u32_b32 adds src1 into the
+ * count, so a bare popcount passes zero. ffbl and ffbh answer -1 where BIR
+ * promises the width, and -1 is the only result they give outside 0..31, so
+ * an unsigned min against 32 corrects it in one instruction rather than a
+ * compare and a cndmask. */
+static void isel_bitcount(uint32_t idx, const bir_inst_t *I)
+{
+    moperand_t a = ensure_vgpr(resolve_val(I->operands[0], 1));
+    uint32_t vr = map_bir_val(idx, 1);
+    moperand_t d = mop_vreg_v((uint16_t)vr);
+
+    if (I->op == BIR_POPCOUNT) {
+        emit2(AMD_V_BCNT_U32_B32, d, a, mop_imm(0));
+    } else if (I->op == BIR_BREV) {
+        emit1(AMD_V_BFREV_B32, d, a);
+    } else {
+        uint32_t rawv = new_vreg(1);
+        moperand_t raw = mop_vreg_v((uint16_t)rawv);
+        emit1(I->op == BIR_CTZ ? AMD_V_FFBL_B32 : AMD_V_FFBH_U32, raw, a);
+        emit2(AMD_V_MIN_U32, d, mop_imm(32), raw);
+    }
+}
+
 static void isel_call(uint32_t idx, const bir_inst_t *I, int div)
 {
     /* s_swappc_b64 needs a PC-relative offset, but we only have a raw BIR
@@ -2655,6 +2688,17 @@ static void isel_function(uint32_t fi)
                     isel_umulhi(idx, I);
                 else
                     isel_refuse("64-bit mul-hi (__umul64hi)");
+                break;
+
+            case BIR_POPCOUNT: case BIR_CTZ:
+            case BIR_CLZ: case BIR_BREV:
+                /* Narrower than 32 would need the count corrected for the
+                 * padding bits sitting in the register, so it is refused
+                 * rather than quietly counted. */
+                if (operand_width(I->operands[0]) == 32)
+                    isel_bitcount(idx, I);
+                else
+                    isel_refuse("bit counting at a width other than 32");
                 break;
 
             default:

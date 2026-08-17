@@ -372,6 +372,30 @@ static void is_umulhi(uint32_t idx, const bir_inst_t *I)
     em1((rf == NV_RF_U64) ? NV_MUL_HI_U64 : NV_MUL_HI_U32, d, a, b);
 }
 
+/* popc, clz and brev are all native PTX at both widths. There is no ctz, so
+ * it goes through brev first — reversing sends the trailing zeros to the top
+ * where clz can count them, and clz already answers the width for a zero
+ * input, which is the answer BIR asks for. */
+static void is_bitcount(uint32_t idx, const bir_inst_t *I)
+{
+    int w64 = (rslv_rf(I->operands[0]) == NV_RF_U64);
+    nv_opnd_t d = map_val(idx, I->type);
+    nv_opnd_t a = rslv(I->operands[0]);
+
+    if (I->op == BIR_POPCOUNT) {
+        em1u(w64 ? NV_POPC_B64 : NV_POPC_B32, d, a);
+    } else if (I->op == BIR_CLZ) {
+        em1u(w64 ? NV_CLZ_B64 : NV_CLZ_B32, d, a);
+    } else if (I->op == BIR_BREV) {
+        em1u(w64 ? NV_BREV_B64 : NV_BREV_B32, d, a);
+    } else {
+        uint8_t rf = w64 ? NV_RF_U64 : NV_RF_U32;
+        nv_opnd_t t = mop_reg(rf, new_vreg(rf));
+        em1u(w64 ? NV_BREV_B64 : NV_BREV_B32, t, a);
+        em1u(w64 ? NV_CLZ_B64 : NV_CLZ_B32, d, t);
+    }
+}
+
 static void is_idiv(uint32_t idx, const bir_inst_t *I)
 {
     nv_opnd_t d = map_val(idx, I->type);
@@ -1125,6 +1149,9 @@ static void isel_blk(uint32_t bir_bi)
             is_imul(idx, I); break;
         case BIR_UMULHI:
             is_umulhi(idx, I); break;
+        case BIR_POPCOUNT: case BIR_CTZ:
+        case BIR_CLZ: case BIR_BREV:
+            is_bitcount(idx, I); break;
         case BIR_SDIV: case BIR_UDIV:
             is_idiv(idx, I); break;
         case BIR_SREM: case BIR_UREM:

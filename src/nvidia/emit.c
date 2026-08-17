@@ -327,6 +327,22 @@ static void em_inst(nv_module_t *nv, const nv_minst_t *I)
         em_opnd(nv, &I->ops[0]); nv_apnd(nv, ", ");
         em_opnd(nv, &I->ops[1]);
         break;
+    /* popc and clz both hand back a .u32 count whatever they counted over */
+    case NV_POPC_B32: case NV_POPC_B64:
+        nv_apnd(nv, "popc%s ", I->op == NV_POPC_B64 ? ".b64" : ".b32");
+        em_opnd(nv, &I->ops[0]); nv_apnd(nv, ", ");
+        em_opnd(nv, &I->ops[1]);
+        break;
+    case NV_CLZ_B32: case NV_CLZ_B64:
+        nv_apnd(nv, "clz%s ", I->op == NV_CLZ_B64 ? ".b64" : ".b32");
+        em_opnd(nv, &I->ops[0]); nv_apnd(nv, ", ");
+        em_opnd(nv, &I->ops[1]);
+        break;
+    case NV_BREV_B32: case NV_BREV_B64:
+        nv_apnd(nv, "brev%s ", I->op == NV_BREV_B64 ? ".b64" : ".b32");
+        em_opnd(nv, &I->ops[0]); nv_apnd(nv, ", ");
+        em_opnd(nv, &I->ops[1]);
+        break;
     case NV_SHL_B32: case NV_SHL_B64:
         nv_apnd(nv, "shl%s ", I->op == NV_SHL_B64 ? ".b64" : ".b32");
         em_opnd(nv, &I->ops[0]); nv_apnd(nv, ", ");

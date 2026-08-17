@@ -43,7 +43,18 @@ Booth — Changelog
   a loop kernel were labelled with the kernel's own name
   (Zane Hambly, 2026-08-11)
 
+- `__popc`, `__clz`, `__ffs` and `__brev`, plus the `ll` spellings, which
+  take their width from the argument rather than the name. `__ballot` has
+  been here a while but nothing could read the mask it handed back, so the
+  prefix-popcount that turns a ballot into a compaction index was out of
+  reach (Zane Hambly, 2026-08-18)
+
 ### Architecture
+
+- BIR gains `popcount`, `ctz`, `clz` and `brev`. Both scans answer the
+  operand's width for a zero input, matching what `__clz(0)` promises, so
+  every backend agrees on the one case hardware disagrees about
+  (Zane Hambly, 2026-08-18)
 
 - BIR arena writers record a `pool_full` bit rather than returning index 0,
   which is a live entry and not a sentinel. A full pool emitted wrong
@@ -53,6 +64,32 @@ Booth — Changelog
   with them, so every line number past the first deleted instruction
   pointed at the wrong source. Four sites fixed
   (Zane Hambly, 2026-08-09)
+
+### Backends
+
+- bit counting lowered on every target that has an answer for it. AMD gets
+  `v_bcnt_u32_b32`, `v_ffbl_b32`, `v_ffbh_u32` and `v_bfrev_b32`, with a
+  `v_min_u32` against 32 to fix up the -1 the two scans return for a zero
+  input — one instruction instead of a compare and a cndmask. PTX has popc,
+  clz and brev natively at both widths and no ctz, so that one goes through
+  brev first (Zane Hambly, 2026-08-18)
+
+- x86-64 and RV64 use SWAR rather than `popcnt`/`tzcnt`, which are SSE4.2
+  and BMI1. A backend whose pitch is that it runs on the laptop you already
+  have should not trade a SIGILL for a shorter kernel. The scans use
+  `bsf`/`bsr` with a zero guard on x86, and on RISC-V everything folds onto
+  popcount: `ctz` is `popcount(~x & (x-1))`, `clz` is 32 minus the popcount
+  of x smeared right (Zane Hambly, 2026-08-18)
+
+- the Tensix baby cores are RV32IM with no Zbb but a multiplier, which is
+  the whole trick — the tail of a SWAR popcount is a multiply and a shift.
+  De Bruijn would cost the same multiply and want 32 bytes of L1 for the
+  table (Zane Hambly, 2026-08-18)
+
+- widths other than 32 are refused by name on AMD, x86-64 and RV64 rather
+  than counted wrong, and the SFPU path points at `--rv-elf`. `n_errs` was
+  a field nobody read, so the two CPU backends printed a refusal and wrote
+  the object anyway (Zane Hambly, 2026-08-18)
 
 ### Build
 

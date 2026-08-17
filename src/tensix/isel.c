@@ -17,6 +17,8 @@ static struct {
     } pred_stack[TT_MAX_PRED_DEPTH];
     uint32_t    pred_depth;
 
+    int         had_error;
+
 } S;
 
 /* ---- Operands ---- */
@@ -730,6 +732,16 @@ static void isel_block(uint32_t bir_bi)
             break;
         }
 
+        /* The SFPU is a float vector unit with no integer bit-counting, and
+         * the baby-core path (--rv-elf) is where these belong. Refused here
+         * rather than folded into the zero-move the warp ops fall back on. */
+        case BIR_POPCOUNT: case BIR_CTZ:
+        case BIR_CLZ: case BIR_BREV:
+            fprintf(stderr, "kath: bit counting not supported on the Tensix "
+                            "SFPU path; use --rv-elf for the baby cores\n");
+            S.had_error = 1;
+            break;
+
         /* ---- Misc ---- */
         case BIR_SELECT:
             isel_select(idx, I);
@@ -825,6 +837,7 @@ int tensix_compile(const bir_module_t *bir, tt_module_t *tt)
         int rc = isel_function(fi);
         if (rc != BC_OK) return rc;
     }
+    if (S.had_error) return BC_ERR_TENSIX;
 
     return BC_OK;
 }

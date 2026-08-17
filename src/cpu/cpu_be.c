@@ -38,6 +38,10 @@ static int x86_isel(const struct bir_module *M, const be_cfg_t *cfg,
     if (cm == NULL) return BE_ENOMEM;
     cpu_init(cm, bir);
     if (cpu_emit(cm) != 0) { free(cm); return BE_EISEL; }
+    /* A refused op leaves a hole in the code, so the object must not be
+     * written — a kernel that quietly computes the wrong thing is worse
+     * than one that never gets built. */
+    if (cm->n_errs != 0) { free(cm); return BE_EISEL; }
     *out_mmod = cm;
     return BE_OK;
 }
@@ -95,6 +99,7 @@ static int rv_isel(const struct bir_module *M, const be_cfg_t *cfg,
     if (vm == NULL) return BE_ENOMEM;
     rv64_init(vm, bir);
     if (rv64_emit(vm) != 0) { free(vm); return BE_EISEL; }
+    if (vm->n_errs != 0) { free(vm); return BE_EISEL; }
     *out_mmod = vm;
     return BE_OK;
 }

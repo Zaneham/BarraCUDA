@@ -35,6 +35,53 @@ static void st_slot(cpu_mod_t *X,int r,int32_t o){ rexw(X,r,X_RBP);eb(X,0x89);mo
 static void mov_imm(cpu_mod_t *X,int r,int64_t v){ rexw(X,0,r);eb(X,0xC7);modrm(X,3,0,r);ei32(X,(int32_t)v); }
 static int32_t slot(cpu_mod_t *X,uint32_t i){ return X->slots[i]; }
 
+/* ---- 32-bit operand forms ---- */
+
+/* No REX, so every write clears the upper half of the register for free,
+ * which is what the bit-counting ops want after a 64-bit slot load. Only
+ * RAX/RCX go through here and both are low-8, so no REX.B either. */
+static void e32_movrr(cpu_mod_t *X,int d,int s){ eb(X,0x89);modrm(X,3,s,d); }
+static void e32_movi(cpu_mod_t *X,int r,uint32_t v){ eb(X,(uint8_t)(0xB8+r));ei32(X,(int32_t)v); }
+static void e32_shr(cpu_mod_t *X,int r,int n){ eb(X,0xC1);modrm(X,3,5,r);eb(X,(uint8_t)n); }
+static void e32_shl(cpu_mod_t *X,int r,int n){ eb(X,0xC1);modrm(X,3,4,r);eb(X,(uint8_t)n); }
+static void e32_andi(cpu_mod_t *X,int r,uint32_t v){ eb(X,0x81);modrm(X,3,4,r);ei32(X,(int32_t)v); }
+static void e32_add(cpu_mod_t *X,int d,int s){ eb(X,0x01);modrm(X,3,s,d); }
+static void e32_sub(cpu_mod_t *X,int d,int s){ eb(X,0x29);modrm(X,3,s,d); }
+static void e32_or(cpu_mod_t *X,int d,int s){ eb(X,0x09);modrm(X,3,s,d); }
+static void e32_imuli(cpu_mod_t *X,int d,int s,uint32_t v){ eb(X,0x69);modrm(X,3,d,s);ei32(X,(int32_t)v); }
+static void e32_bsf(cpu_mod_t *X,int d,int s){ eb(X,0x0F);eb(X,0xBC);modrm(X,3,d,s); }
+static void e32_bsr(cpu_mod_t *X,int d,int s){ eb(X,0x0F);eb(X,0xBD);modrm(X,3,d,s); }
+static void e32_cmovz(cpu_mod_t *X,int d,int s){ eb(X,0x0F);eb(X,0x44);modrm(X,3,d,s); }
+static void e32_bswap(cpu_mod_t *X,int r){ eb(X,0x0F);eb(X,(uint8_t)(0xC8+r)); }
+
+/* Bit counting with nothing newer than a 486 assumed. popcnt and tzcnt would
+ * be two bytes each, but they are SSE4.2 and BMI1, and a backend whose whole
+ * pitch is "runs on the laptop you already have" should not hand out a SIGILL
+ * to make a kernel shorter. So: SWAR for the counts, bsf/bsr with a zero
+ * guard for the scans. Operand arrives in EAX, answer leaves in EAX. */
+static void x86_popcount(cpu_mod_t *X)
+{
+    e32_movrr(X,X_RCX,X_RAX); e32_shr(X,X_RCX,1);
+    e32_andi(X,X_RCX,0x55555555u); e32_sub(X,X_RAX,X_RCX);
+    e32_movrr(X,X_RCX,X_RAX); e32_andi(X,X_RAX,0x33333333u);
+    e32_shr(X,X_RCX,2); e32_andi(X,X_RCX,0x33333333u);
+    e32_add(X,X_RAX,X_RCX);
+    e32_movrr(X,X_RCX,X_RAX); e32_shr(X,X_RCX,4); e32_add(X,X_RAX,X_RCX);
+    e32_andi(X,X_RAX,0x0F0F0F0Fu);
+    e32_imuli(X,X_RAX,X_RAX,0x01010101u); e32_shr(X,X_RAX,24);
+}
+
+static void x86_brev(cpu_mod_t *X)
+{
+    static const uint32_t m[3] = { 0x55555555u, 0x33333333u, 0x0F0F0F0Fu };
+    for (int i = 0; i < 3; i++) {
+        int n = 1 << i;
+        e32_movrr(X,X_RCX,X_RAX); e32_shr(X,X_RCX,n); e32_andi(X,X_RCX,m[i]);
+        e32_andi(X,X_RAX,m[i]); e32_shl(X,X_RAX,n); e32_or(X,X_RAX,X_RCX);
+    }
+    e32_bswap(X,X_RAX);
+}
+
 /* Width of an integer result, in the only two sizes that matter to the
  * shifters and the divider: 64 for an i64, 32 for everything narrower.
  * Pointers and the rest fall through to 64, which is what they are. The
@@ -404,6 +451,30 @@ static void cpu_func(cpu_mod_t *X,const bir_func_t *F){
         case BIR_MUL: load_val(X,X_RAX,I->operands[0]);load_val(X,X_RCX,I->operands[1]);eb(X,0x48);eb(X,0x0F);eb(X,0xAF);modrm(X,3,X_RAX,X_RCX);st_slot(X,X_RAX,s);break;
         /* mul-hi: one-operand widening mul (48 F7 /4) puts high 64 in RDX */
         case BIR_UMULHI: load_val(X,X_RAX,I->operands[0]);load_val(X,X_RCX,I->operands[1]);eb(X,0x48);eb(X,0xF7);modrm(X,3,4,X_RCX);st_slot(X,X_RDX,s);break;
+
+        /* ---- Bit counting ---- */
+        case BIR_POPCOUNT: case BIR_CTZ: case BIR_CLZ: case BIR_BREV: {
+            if (int_w(X,val_type_x(X,I->operands[0])) != 32) {
+                fprintf(stderr,"kath: bit counting at a width other than 32 "
+                               "not supported on the x86-64 backend\n");
+                X->n_errs++; break;
+            }
+            load_val(X,X_RAX,I->operands[0]);
+            e32_movrr(X,X_RAX,X_RAX);   /* drop whatever the slot's top half held */
+            if (I->op==BIR_POPCOUNT) x86_popcount(X);
+            else if (I->op==BIR_BREV) x86_brev(X);
+            else if (I->op==BIR_CTZ) {
+                e32_movi(X,X_RCX,32); e32_bsf(X,X_RAX,X_RAX); e32_cmovz(X,X_RAX,X_RCX);
+            } else {
+                /* bsr gives the index of the top set bit, so clz is 31 minus
+                 * that, and -1 for a zero input lands the answer on 32. */
+                e32_movi(X,X_RCX,0xFFFFFFFFu);
+                e32_bsr(X,X_RAX,X_RAX); e32_cmovz(X,X_RAX,X_RCX);
+                e32_movi(X,X_RCX,31); e32_sub(X,X_RCX,X_RAX);
+                e32_movrr(X,X_RAX,X_RCX);
+            }
+            st_slot(X,X_RAX,s); break;
+        }
 
         /* ---- integer bitwise (width-agnostic, plain 64-bit) ---- */
         case BIR_AND: load_val(X,X_RAX,I->operands[0]);load_val(X,X_RCX,I->operands[1]);rexw(X,X_RCX,X_RAX);eb(X,0x21);modrm(X,3,X_RCX,X_RAX);st_slot(X,X_RAX,s);break;
