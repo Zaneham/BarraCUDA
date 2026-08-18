@@ -71,6 +71,12 @@ Booth — Changelog
   and max out while BIR has one opcode for each and NVIDIA reads it unsigned
   where AMD reads it signed (Zane Hambly, 2026-08-18)
 
+### Documentation
+
+- How to write and build an OCaml kernel, what the subset holds and what it
+  does not, and OCaml and LFortran named as the optional dependencies they are
+  (Zane Hambly, 2026-08-18)
+
 ### Architecture
 
 - A run-side contract in `src/exec`, a variant flag with no target now errors,

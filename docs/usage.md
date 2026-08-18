@@ -12,6 +12,15 @@ make
 
 - A C99 compiler (gcc, clang, whatever you've got)
 
+Nothing else is needed to build or use Booth. Two frontends take their input
+from another compiler, and you only need that compiler if you want that
+frontend:
+
+- Fortran kernels need [LFortran](https://lfortran.org/) to produce the CUDA
+  source Booth then compiles. See [Fortran](#fortran).
+- OCaml kernels need [OCaml](https://ocaml.org/) 5.x and dune to type-check
+  them and write the `.cmt` Booth reads. See [OCaml](#ocaml).
+
 ## Command reference
 
 The compiled binary is `kath` (after Kathleen Booth); the project is Booth. They differ on purpose, since a `booth` already lives in the Linux HA stack and you may have both on your PATH.
@@ -193,6 +202,83 @@ no FPU, so float has to go through a soft-float runtime, which is in progress.
 
 If something breaks and you cannot tell whether it is an LFortran gap or a
 Booth one, raise it here and it will get sorted out from this side.
+
+## OCaml
+
+Booth compiles GPU kernels written as ordinary OCaml functions. `ocamlc` does
+the type checking, `kcomp` reads the `.cmt` it leaves behind and lowers it to
+BIR, and from there it is the same pipeline CUDA and Triton use.
+
+The kernel language is a module, `Kernel`, whose types are abstract. Writing an
+`int` where an `i32` belongs, or reading a shared array as if it were global, is
+a type error before any of Booth's code runs.
+
+```ocaml
+open Kernel
+
+let vadd (a : f32 garray) (b : f32 garray) (c : f32 garray) (n : i32) =
+  let i = block_id () * block_dim () + thread_id () in
+  if i < n then set c i (get a i +. get b i)
+```
+
+### Building a kernel
+
+Kernel sources live in `src/ocaml/` and are listed in the `kernels` library in
+`src/ocaml/dune`. Nothing links against that library; it exists so `ocamlc`
+type-checks each file and writes the `.cmt`.
+
+```bash
+cd src/ocaml && opam exec -- dune build
+./_build/default/kcomp.exe _build/default/.kernels.objs/byte/vadd_k.cmt -o vadd.bir
+cd ../.. && ./kath --bir-in --nvidia-ptx src/ocaml/vadd.bir -o vadd.ptx
+```
+
+`kcomp` refuses anything outside the subset and says where:
+
+```
+vadd_k.ml:7:15: this statement is not in the kernel subset
+```
+
+Nothing is written when it refuses.
+
+### What the subset holds
+
+`i32` and `f32`; `'a garray` in global memory and `'a sarray` per block; the
+twelve thread-geometry builtins (`thread_id`, `block_id`, `block_dim`,
+`grid_dim`, each with `_y` and `_z` forms); integer arithmetic including `/`
+and `mod`; float arithmetic including `/.`; the bitwise and shift operators;
+both comparison families, with `<.` and friends for floats; `to_f32` and
+`to_i32`; `sqrtf`, `fabsf`, `floorf`, `ceilf`, `exp2f`, `log2f`, `sinf`,
+`cosf`, `rsqf`, `rcpf`, `fminf`, `fmaxf`; `if` and `if`/`else`; counted `loop`;
+`barrier`; and atomic `add`, `sub`, `and`, `or`, `xor` and `xchg`.
+
+Accumulators are ordinary `ref` cells. They become one stack slot each and
+mem2reg promotes them, so the frontend never emits a phi node.
+
+A function marked `let[@device]` is a device function rather than a kernel. Its
+body is an expression, it takes up to five arguments, and Booth inlines it for
+the backends that have no calling convention.
+
+```ocaml
+let[@device] expf (x : f32) = exp2f (x *. float 1.4426950408889634)
+```
+
+`float 1.5` and `int 3` are how literals are written, since the types are
+abstract. Both take a literal, not an expression.
+
+### Limitations
+
+- No `while` and no early exit. `loop` is counted and steps by one.
+- No `f64`. Everything is single precision.
+- No atomic `min` or `max`. BIR carries one opcode for each and the NVIDIA and
+  AMD backends read it with opposite signedness, so it has no single meaning to
+  offer until the IR can say which is meant. (this is something I am working on)
+- No warp shuffles or ballots yet.
+- A device function may not recurse, and neither may a kernel.
+
+This is not OCaml running on a GPU. It is OCaml as the language you write the
+kernel in. There is no GC, no closure at runtime, no exception and no
+polymorphism on the device. CUDA C is not C either so it does track (gpu's are weird)..
 
 ## MLIR
 
