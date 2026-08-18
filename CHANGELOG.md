@@ -43,6 +43,15 @@ Booth — Changelog
   a loop kernel were labelled with the kernel's own name
   (Zane Hambly, 2026-08-11)
 
+- `kath --bir-in` reads BIR text and skips the frontend entirely, so a compiler
+  outside this tree can target Booth without linking against it. `src/build/`
+  parses and builds modules, `src/ocaml/` emits them from OCaml, and `kcomp`
+  lowers an ordinary OCaml function from its .cmt, leaving ocamlc to do the
+  type checking and refusing anything outside the kernel subset by source
+  location. Immediates parse as well as print, so a module holding a constant
+  reads back. The PTX from an OCaml-written vadd runs on an RTX 4060 Ti
+  (Zane Hambly, 2026-08-18)
+
 ### Architecture
 
 - BIR arena writers record a `pool_full` bit rather than returning index 0,

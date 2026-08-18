@@ -162,6 +162,7 @@ tdf_flag_out.txt
 
 # per-host object trees
 /build/
+/src/ocaml/_build/
 
 # Where the CMake package job stages an install and builds the example
 # consumer. Same paths locally if you follow examples/cmake/CMakeLists.txt.

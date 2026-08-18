@@ -1,0 +1,28 @@
+; The BIR emitter is a plain library with no dependencies, because the
+; interface to Booth is a text file and a process.
+(library
+ (name bir)
+ (modules bir))
+
+; The kernel language. Kernels are checked against this by ocamlc.
+(library
+ (name kernel)
+ (modules kernel))
+
+; Kernel sources. Nothing links against them; the build exists so ocamlc
+; type-checks each one and leaves the .cmt that kcomp reads.
+(library
+ (name kernels)
+ (wrapped false)
+ (modules vadd_k scale_k)
+ (libraries kernel))
+
+(executable
+ (name kcomp)
+ (modules kcomp)
+ (libraries bir compiler-libs.common))
+
+(executable
+ (name vadd)
+ (modules vadd)
+ (libraries bir))

@@ -18,6 +18,7 @@
 #include "intel.h"
 #include "triton.h"
 #include "mlir/mlir_fe.h"
+#include "bir_parse.h"
 #include "mlir/mlir_lower.h"
 #include "tdf.h"
 #include "rv_buf.h"
@@ -297,6 +298,7 @@ int main(int argc, char *argv[])
     int mode_hip = 0;           /* HIP frontend: see HIP NOTES below */
     int mode_triton = 0;        /* Triton frontend: see TRITON NOTES below */
     int mode_mlir = 0;          /* MLIR frontend: see MLIR NOTES below */
+    int mode_bir_in = 0;        /* BIR text in: see BIR NOTES below */
     int no_mem2reg = 0;
     int no_cfold = 0;
     int no_dce = 0;
@@ -325,6 +327,8 @@ int main(int argc, char *argv[])
             mode_sema = 1;
         else if (strcmp(argv[i], "--ir") == 0)
             mode_ir = 1;
+        else if (strcmp(argv[i], "--bir-in") == 0)
+            mode_bir_in = 1;
         else if (strcmp(argv[i], "--tdf") == 0)
             mode_tdf = 1;
         else if (strcmp(argv[i], "--tdf-fission") == 0)
@@ -448,6 +452,38 @@ int main(int argc, char *argv[])
     uint32_t src_len = 0;
     if (read_file(file, source_buf, BC_MAX_SOURCE, &src_len) != BC_OK)
         return 1;
+
+    /* ---- BIR NOTES ----------------------------------------------------
+     * BIR text in, object out. src/build/bir_parse.c reads what
+     * bir_print.c wrote, so a compiler outside this tree can target Booth
+     * without linking against it. --ir reprints the parsed module, which
+     * round-trips against the input. */
+    if (mode_bir_in) {
+        bb_t *B = bir_parse((const char *)source_buf, file);
+        if (B == NULL) return 1;
+
+        if (bb_full(B)) {
+            fprintf(stderr, "%s: too large for the module pools\n", file);
+            bb_free(B);
+            return 1;
+        }
+
+        backend_cfg_t cfg = {0};
+        cfg.no_mem2reg = no_mem2reg;
+        cfg.no_cfold   = no_cfold;
+        cfg.no_dce     = no_dce;
+        cfg.no_sched   = no_sched;
+        cfg.no_sroa    = no_sroa;
+        cfg.mode_ir    = mode_ir;
+        cfg.mode_tdf   = mode_tdf;
+        cfg.mode_tdf_fission = mode_tdf_fission;
+        cfg.output_file      = output_file;
+
+        int brc = (run_bir_backends((bir_module_t *)bb_module(B), &cfg) == BC_OK)
+                  ? 0 : 1;
+        bb_free(B);
+        return brc;
+    }
 
     /* ---- MLIR NOTES ---------------------------------------------------
      * MLIR arrives already structured, so there is no lexer, parser or
