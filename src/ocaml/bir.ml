@@ -222,6 +222,10 @@ let alloca t ty = def t (Printf.sprintf "alloca %s" (ty_str ty))
 let shared_alloc t ty = def t (Printf.sprintf "shared_alloc %s" (ty_str ty))
 let barrier t = emit t "barrier"
 
+let atomic t op ty ptr v =
+  def t (Printf.sprintf "atomic_%s relaxed %s %s, %s"
+           op (ty_str ty) (vstr ptr) (vstr v))
+
 let gep t ty base idx =
   def t (Printf.sprintf "gep %s, %s, %s" (ty_str ty) (vstr base) (vstr idx))
 

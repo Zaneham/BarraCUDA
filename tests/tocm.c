@@ -94,7 +94,7 @@ static void ocm05(void)
 {
     static const char *const ks[] = { "vadd_k", "scale_k", "reduce_k",
                                      "clamp_k", "ops_k", "tile_k", "rng_k",
-                                     "ints_k", NULL };
+                                     "ints_k", "atom_k", NULL };
     char cmd[512];
 
     if (!have_kcomp()) SKIP("kcomp not built");
@@ -216,3 +216,18 @@ static void ocm11(void)
     CHNE(strstr(got, "gep ptr<global, f32>"), NULL);
 }
 TH_REG("ocm", 11, "arrays carry their own element type", ocm11)
+
+/* Atomics carry the element type too, and min and max stay out of reach
+ * while BIR has one opcode for each and the backends disagree on its sign. */
+static void ocm12(void)
+{
+    if (!have_kcomp()) SKIP("kcomp not built");
+    check_kernel("atom_k");
+    if (nfail) return;
+    CHNE(strstr(got, "atomic_add relaxed i32"), NULL);
+    CHNE(strstr(got, "atomic_add relaxed f32"), NULL);
+    CHNE(strstr(got, "atomic_xchg relaxed i32"), NULL);
+    CHEQ(strstr(got, "atomic_max"), NULL);
+    CHEQ(strstr(got, "atomic_min"), NULL);
+}
+TH_REG("ocm", 12, "atomics lower, min and max stay out", ocm12)

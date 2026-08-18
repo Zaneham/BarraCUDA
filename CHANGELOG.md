@@ -67,6 +67,10 @@ Booth — Changelog
   than assuming f32, so an integer array is usable and not merely declarable
   (Zane Hambly, 2026-08-18)
 
+- Atomic add, sub, and, or, xor and xchg reach the kernel language, leaving min
+  and max out while BIR has one opcode for each and NVIDIA reads it unsigned
+  where AMD reads it signed (Zane Hambly, 2026-08-18)
+
 ### Architecture
 
 - A run-side contract in `src/exec`, a variant flag with no target now errors,

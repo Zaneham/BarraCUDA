@@ -457,6 +457,33 @@ static int parse_inst(P *p, long long dest)
 
     if (!strcmp(op, "barrier")) { bb_barr(p->B); goto done; }
 
+    /* atomic_OP ORDER TYPE %ptr, %val */
+    {
+        static const struct { const char *n; int a; } atoms[] = {
+            {"atomic_add",BB_A_ADD},{"atomic_sub",BB_A_SUB},
+            {"atomic_and",BB_A_AND},{"atomic_or",BB_A_OR},
+            {"atomic_xor",BB_A_XOR},{"atomic_xchg",BB_A_XCHG},
+            {NULL,0}
+        };
+        static const char *const orders[] = {
+            "relaxed", "acquire", "release", "acq_rel", "seq_cst", NULL
+        };
+        for (int i = 0; atoms[i].n; i++) {
+            if (strcmp(op, atoms[i].n)) continue;
+            int ord = -1;
+            for (int k = 0; orders[k] != NULL; k++)
+                if (is_ident(L, orders[k])) { ord = k; break; }
+            if (ord < 0) { lx_err(L, "expected a memory ordering"); return -1; }
+            lx_next(L);
+            uint32_t t = parse_type(p);
+            bb_val ptr = read_operand(p, t);
+            if (!expect(L, T_COMMA, "expected ',' after the address")) return -1;
+            bb_val val = read_operand(p, t);
+            r = bb_atom(p->B, atoms[i].a, ord, t, ptr, val);
+            goto done;
+        }
+    }
+
     if (!strcmp(op, "shared_alloc")) {
         r = bb_shal(p->B, parse_type(p));
         goto done;

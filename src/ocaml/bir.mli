@@ -96,6 +96,10 @@ val shared_alloc : t -> ty -> value
 
 val barrier : t -> unit
 
+val atomic : t -> string -> ty -> value -> value -> value
+(** Relaxed only for now. Named rather than enumerated because min and max
+    have no settled signedness in BIR and must not be reachable. *)
+
 val gep   : t -> ty -> value -> value -> value
 val load  : t -> ty -> value -> value
 val store : t -> ty -> value -> value -> unit

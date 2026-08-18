@@ -184,6 +184,19 @@ and apply c loc f args =
     let p = Bir.gep c.m pty base i in
     Bir.load c.m (elem loc pty) p
 
+  | ("Kernel.atomic_add" | "Kernel.atomic_sub" | "Kernel.atomic_and"
+    | "Kernel.atomic_or" | "Kernel.atomic_xor" | "Kernel.atomic_xchg") as an,
+    [arr; idx; v] ->
+    let base = expr c arr in
+    let i = expr c idx in
+    let pty = ty_of arr.exp_loc arr.exp_type in
+    stamp c loc;
+    let p = Bir.gep c.m pty base i in
+    let x = expr c v in
+    stamp c loc;
+    let op = String.sub an 14 (String.length an - 14) in
+    Bir.atomic c.m op (elem loc pty) p x
+
   | "Stdlib.!", [r] ->
     (match cell c loc r with
      | (p, ty) -> stamp c loc; Bir.load c.m ty p)
@@ -389,6 +402,9 @@ and effect_ c loc f args =
     Bir.store c.m (elem loc pty) value p
 
   | "Kernel.barrier", [_] -> stamp c loc; Bir.barrier c.m
+
+  (* An atomic returns the old value and the caller often does not want it. *)
+  | "Stdlib.ignore", [x] -> ignore (expr c x)
 
   | "Kernel.loop", [lo; hi; body] -> lower_loop c loc lo hi body
 

@@ -49,6 +49,13 @@ let sget _ _ = device ()
 let sset _ _ _ = device ()
 let barrier () = device ()
 
+let atomic_add  _ _ _ = device ()
+let atomic_sub  _ _ _ = device ()
+let atomic_and  _ _ _ = device ()
+let atomic_or   _ _ _ = device ()
+let atomic_xor  _ _ _ = device ()
+let atomic_xchg _ _ _ = device ()
+
 let ( + ) _ _ = device ()
 let ( - ) _ _ = device ()
 let ( * ) _ _ = device ()

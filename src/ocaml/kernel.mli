@@ -91,6 +91,18 @@ val shared : int -> 'a sarray
 val sget : 'a sarray -> i32 -> 'a
 val sset : 'a sarray -> i32 -> 'a -> unit
 
+(** Read, modify and write one element without another thread getting in
+    between, returning what was there before. Relaxed ordering, as CUDA's
+    atomics are. There is deliberately no atomic min or max: BIR has a single
+    opcode for each and the NVIDIA and AMD backends read it with opposite
+    signedness, so it has no one meaning to offer. *)
+val atomic_add  : 'a garray -> i32 -> 'a -> 'a
+val atomic_sub  : 'a garray -> i32 -> 'a -> 'a
+val atomic_and  : i32 garray -> i32 -> i32 -> i32
+val atomic_or   : i32 garray -> i32 -> i32 -> i32
+val atomic_xor  : i32 garray -> i32 -> i32 -> i32
+val atomic_xchg : 'a garray -> i32 -> 'a -> 'a
+
 val barrier : unit -> unit
 (** Every thread in the block arrives before any leaves. Reaching one from
     inside a branch that not all threads take is undefined, as it is in CUDA. *)

@@ -280,6 +280,22 @@ bb_val bb_shal(bb_t *B, uint32_t ty)
     return emit(B, BIR_SHARED_ALLOC, 0, ty, NULL, 0);
 }
 
+/* No min or max here on purpose: BIR carries one opcode for each and the
+ * backends disagree on its signedness, so the operation has no single
+ * meaning to expose yet. */
+static const uint16_t atom_tab[] = {
+    BIR_ATOMIC_ADD, BIR_ATOMIC_SUB, BIR_ATOMIC_AND,
+    BIR_ATOMIC_OR,  BIR_ATOMIC_XOR, BIR_ATOMIC_XCHG
+};
+
+bb_val bb_atom(bb_t *B, int op, int order, uint32_t ty, bb_val p, bb_val v)
+{
+    if (op < 0 || op >= (int)(sizeof atom_tab / sizeof atom_tab[0]))
+        return BB_NONE;
+    uint32_t o[2] = { BIR_MAKE_VAL(p), BIR_MAKE_VAL(v) };
+    return emit(B, atom_tab[op], (uint8_t)order, ty, o, 2);
+}
+
 void bb_barr(bb_t *B)
 {
     emit(B, BIR_BARRIER, 0, bb_void(B), NULL, 0);

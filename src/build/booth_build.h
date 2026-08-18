@@ -98,6 +98,12 @@ bb_val bb_alca  (bb_t *B, uint32_t ty);
 bb_val bb_shal  (bb_t *B, uint32_t ty);
 void   bb_barr  (bb_t *B);
 
+/* Read, modify, write, returning the old value. Ordering mirrors
+   bir_order_t; min and max are deliberately absent, see bb_atom. */
+enum bb_order { BB_RELAXED, BB_ACQUIRE, BB_RELEASE, BB_ACQ_REL, BB_SEQ_CST };
+enum bb_atom  { BB_A_ADD, BB_A_SUB, BB_A_AND, BB_A_OR, BB_A_XOR, BB_A_XCHG };
+bb_val bb_atom  (bb_t *B, int op, int order, uint32_t ty, bb_val p, bb_val v);
+
 bb_val bb_gep   (bb_t *B, uint32_t ty, bb_val base, bb_val idx);
 bb_val bb_load  (bb_t *B, uint32_t ty, bb_val addr);
 void   bb_store (bb_t *B, bb_val v, bb_val addr);
