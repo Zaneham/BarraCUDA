@@ -81,3 +81,34 @@ static void rpi02(void)
     PASS();
 }
 TH_REG("rpi", 2, "a variant flag alone is not a target", rpi02)
+
+/* The BIR lexer read integers with strtol, and long is 32 bits on Windows, so
+ * any constant above INT32_MAX saturated to 2147483647 without a word. A hash
+ * multiplier came back as a different number and the kernel still ran. */
+static void rpi03(void)
+{
+    static const char *const mod =
+        "; Booth IR\n"
+        "\n"
+        "func @big(ptr<global, i32> %0, i32 %1) __global__ {\n"
+        "entry:\n"
+        "    %2 = thread_id.x\n"
+        "    %3 = mul i32 %2, 2222261027\n"
+        "    %4 = gep ptr<global, i32>, %0, %2\n"
+        "    store i32 %3, %4\n"
+        "    ret void\n"
+        "}\n";
+    char cmd[512];
+
+    FILE *f = fopen("build/rpi03.bir", "w");
+    CHNE(f, NULL);
+    fputs(mod, f);
+    fclose(f);
+
+    snprintf(cmd, sizeof cmd, "%s --bir-in --ir --no-cfold build/rpi03.bir", BC_BIN);
+    CHEQ(th_run(cmd, obuf, (int)sizeof obuf), 0);
+    CHNE(strstr(obuf, "2222261027"), NULL);
+    CHEQ(strstr(obuf, "2147483647"), NULL);
+    PASS();
+}
+TH_REG("rpi", 3, "a constant above INT32_MAX is not clamped", rpi03)

@@ -1,0 +1,121 @@
+; Booth IR
+
+func @hash(i32 %0) __device__ {
+entry:
+    %1 = lshr i32 %0, 16  ; line 7
+    %2 = xor i32 %0, %1  ; line 7
+    %3 = mul i32 %2, 2246822507  ; line 8
+    %4 = lshr i32 %3, 13  ; line 9
+    %5 = xor i32 %3, %4  ; line 9
+    %6 = mul i32 %5, 3266489909  ; line 10
+    %7 = lshr i32 %6, 16  ; line 11
+    %8 = xor i32 %6, %7  ; line 11
+    ret i32 %8  ; line 11
+}
+
+func @unif(i32 %0) __device__ {
+entry:
+    %1 = lshr i32 %0, 8  ; line 14
+    %2 = and i32 %1, 8388607  ; line 14
+    %3 = sitofp i32 %2 to f32  ; line 14
+    %4 = fdiv f32 %3, 8388608  ; line 14
+    ret f32 %4  ; line 14
+}
+
+func @expf(f32 %0) __device__ {
+entry:
+    %1 = fmul f32 %0, 1.44269504  ; line 16
+    %2 = exp2 %1  ; line 16
+    ret f32 %2  ; line 16
+}
+
+func @normal(i32 %0) __device__ {
+entry:
+    %1 = mul i32 %0, 2  ; line 19
+    %2 = call i32 @hash(%1)  ; line 19
+    %3 = call f32 @unif(%2)  ; line 19
+    %4 = mul i32 %0, 2  ; line 20
+    %5 = add i32 %4, 1  ; line 20
+    %6 = call i32 @hash(%5)  ; line 20
+    %7 = call f32 @unif(%6)  ; line 20
+    %8 = fmax %3 1e-07  ; line 21
+    %9 = log2 %8  ; line 21
+    %10 = fmul f32 %9, 0.69314718  ; line 21
+    %11 = fmul f32 -2, %10  ; line 22
+    %12 = sqrt %11  ; line 22
+    %13 = fmul f32 6.2831853, %7  ; line 22
+    %14 = fmul f32 %13, 0.159154943  ; line 22
+    %15 = cos %14  ; line 22
+    %16 = fmul f32 %12, %15  ; line 22
+    ret f32 %16  ; line 22
+}
+
+func @draws(ptr<global, f32> %0, i32 %1, i32 %2) __global__ {
+entry:
+    %3 = block_id.x  ; line 25
+    %4 = block_dim.x  ; line 25
+    %5 = mul i32 %3, %4  ; line 25
+    %6 = thread_id.x  ; line 25
+    %7 = add i32 %5, %6  ; line 25
+    %8 = icmp slt i32 %7, %1  ; line 26
+    br_cond %8, if.then, if.end merge if.end  ; line 26
+
+if.then:
+    %10 = alloca ptr<private, f32>  ; line 27
+    store f32 0, %10  ; line 27
+    %12 = alloca ptr<private, i32>  ; line 28
+    store i32 0, %12  ; line 28
+    br loop.cond.1  ; line 28
+
+loop.cond.1:
+    %15 = load i32, %12  ; line 28
+    %16 = icmp slt i32 %15, %2  ; line 28
+    br_cond %16, loop.body.1, loop.end.1 merge loop.end.1  ; line 28
+
+loop.body.1:
+    %18 = alloca ptr<private, f32>  ; line 29
+    store f32 1, %18  ; line 29
+    %20 = alloca ptr<private, i32>  ; line 30
+    store i32 0, %20  ; line 30
+    br loop.cond.2  ; line 30
+
+loop.cond.2:
+    %23 = load i32, %20  ; line 30
+    %24 = icmp slt i32 %23, %2  ; line 30
+    br_cond %24, loop.body.2, loop.end.2 merge loop.end.2  ; line 30
+
+loop.body.2:
+    %26 = load f32, %18  ; line 31
+    %27 = mul i32 %7, %2  ; line 31
+    %28 = add i32 %27, %15  ; line 31
+    %29 = mul i32 %28, %2  ; line 31
+    %30 = add i32 %29, %23  ; line 31
+    %31 = call f32 @normal(%30)  ; line 31
+    %32 = fmul f32 %31, 0.01  ; line 31
+    %33 = call f32 @expf(%32)  ; line 31
+    %34 = fmul f32 %26, %33  ; line 31
+    store f32 %34, %18  ; line 31
+    %36 = add i32 %23, 1  ; line 30
+    store i32 %36, %20  ; line 30
+    br loop.cond.2  ; line 30
+
+loop.end.2:
+    %39 = load f32, %10  ; line 32
+    %40 = load f32, %18  ; line 32
+    %41 = fadd f32 %39, %40  ; line 32
+    store f32 %41, %10  ; line 32
+    %43 = add i32 %15, 1  ; line 28
+    store i32 %43, %12  ; line 28
+    br loop.cond.1  ; line 28
+
+loop.end.1:
+    %46 = gep ptr<global, f32>, %0, %7  ; line 33
+    %47 = load f32, %10  ; line 33
+    %48 = sitofp i32 %2 to f32  ; line 33
+    %49 = fdiv f32 %47, %48  ; line 33
+    store f32 %49, %46  ; line 33
+    br if.end  ; line 33
+
+if.end:
+    ret void  ; line 33
+}

@@ -18,6 +18,7 @@ struct bb {
     uint32_t      cur;    /* block being filled, or BB_NONE */
     uint32_t      line;   /* source line stamped on each instruction emitted */
     uint32_t      nblk;   /* blocks reserved in the open function */
+    uint32_t      finst;  /* first instruction of the open function */
 };
 
 /* ---- Lifecycle ---- */
@@ -54,6 +55,8 @@ uint32_t bb_void(bb_t *B)                     { return bir_type_void(B->M); }
 uint32_t bb_int (bb_t *B, int bits)           { return bir_type_int(B->M, bits); }
 uint32_t bb_flt (bb_t *B, int bits)           { return bir_type_float(B->M, bits); }
 uint32_t bb_ptr (bb_t *B, uint32_t p, int as) { return bir_type_ptr(B->M, p, as); }
+uint32_t bb_arr (bb_t *B, uint32_t e, uint32_t n) { return bir_type_array(B->M, e, n); }
+uint32_t bb_vec (bb_t *B, uint32_t e, uint32_t n) { return bir_type_vector(B->M, e, n); }
 
 /* ---- Emission ---- */
 
@@ -118,8 +121,9 @@ int bb_func(bb_t *B, const char *name, uint32_t ret,
     F->num_params  = (uint16_t)nparams;
     F->cuda_flags  = kernel ? CUDA_GLOBAL : CUDA_DEVICE;
 
-    B->func = f;
-    B->nblk = 0;
+    B->func  = f;
+    B->nblk  = 0;
+    B->finst = M->num_insts;
     return 0;
 }
 
@@ -129,7 +133,10 @@ void bb_fend(bb_t *B)
     bir_module_t *M = B->M;
     bir_func_t *F = &M->funcs[B->func];
     F->num_blocks  = (uint16_t)(M->num_blocks - F->first_block);
-    F->total_insts = M->num_insts;
+    /* Per function, as bir.h says and as mem2reg's compaction assumes. The
+     * module-wide count here moved the wrong number of instructions and
+     * spliced one function's body into the next. */
+    F->total_insts = M->num_insts - B->finst;
     B->func = BB_NONE;
 }
 
@@ -194,6 +201,90 @@ bb_val bb_icmp(bb_t *B, int pred, bb_val a, bb_val b)
     return emit(B, BIR_ICMP, (uint8_t)pred, bb_int(B, 1), o, 2);
 }
 
+bb_val bb_fcmp(bb_t *B, int pred, bb_val a, bb_val b)
+{
+    uint32_t o[2] = { BIR_MAKE_VAL(a), BIR_MAKE_VAL(b) };
+    return emit(B, BIR_FCMP, (uint8_t)pred, bb_int(B, 1), o, 2);
+}
+
+/* Indexed by the enums in booth_build.h, so a gap here is a compile error
+ * rather than a silently wrong opcode. */
+static const uint16_t op2_tab[] = {
+    BIR_ADD, BIR_SUB, BIR_MUL, BIR_SDIV, BIR_UDIV, BIR_SREM, BIR_UREM,
+    BIR_FADD, BIR_FSUB, BIR_FMUL, BIR_FDIV, BIR_FREM,
+    BIR_AND, BIR_OR, BIR_XOR, BIR_SHL, BIR_LSHR, BIR_ASHR
+};
+
+static const uint16_t fn_tab[] = {
+    BIR_SQRT, BIR_RSQ, BIR_RCP, BIR_EXP2, BIR_LOG2, BIR_SIN, BIR_COS,
+    BIR_FABS, BIR_FLOOR, BIR_CEIL, BIR_FTRUNC, BIR_RNDNE,
+    BIR_FMAX, BIR_FMIN
+};
+
+static const uint16_t cvt_tab[] = {
+    BIR_TRUNC, BIR_ZEXT, BIR_SEXT, BIR_FPTRUNC, BIR_FPEXT,
+    BIR_FPTOSI, BIR_FPTOUI, BIR_SITOFP, BIR_UITOFP, BIR_BITCAST
+};
+
+#define NELEM(a) ((int)(sizeof (a) / sizeof (a)[0]))
+
+bb_val bb_op(bb_t *B, int op, uint32_t ty, bb_val a, bb_val b)
+{
+    if (op < 0 || op >= NELEM(op2_tab)) return BB_NONE;
+    return bin(B, op2_tab[op], ty, a, b);
+}
+
+bb_val bb_fn1(bb_t *B, int fn, uint32_t ty, bb_val a)
+{
+    if (fn < 0 || fn >= NELEM(fn_tab)) return BB_NONE;
+    uint32_t o[1] = { BIR_MAKE_VAL(a) };
+    return emit(B, fn_tab[fn], 0, ty, o, 1);
+}
+
+bb_val bb_fn2(bb_t *B, int fn, uint32_t ty, bb_val a, bb_val b)
+{
+    if (fn < 0 || fn >= NELEM(fn_tab)) return BB_NONE;
+    return bin(B, fn_tab[fn], ty, a, b);
+}
+
+bb_val bb_cvt(bb_t *B, int c, uint32_t dst, bb_val a)
+{
+    if (c < 0 || c >= NELEM(cvt_tab)) return BB_NONE;
+    uint32_t o[1] = { BIR_MAKE_VAL(a) };
+    return emit(B, cvt_tab[c], 0, dst, o, 1);
+}
+
+bb_val bb_sel(bb_t *B, uint32_t ty, bb_val c, bb_val t, bb_val f)
+{
+    uint32_t o[3] = { BIR_MAKE_VAL(c), BIR_MAKE_VAL(t), BIR_MAKE_VAL(f) };
+    return emit(B, BIR_SELECT, 0, ty, o, 3);
+}
+
+uint32_t bb_tyof(const bb_t *B, bb_val v)
+{
+    if (B == NULL || v == BB_NONE) return 0;
+    if (BIR_VAL_IS_CONST(v)) {
+        uint32_t i = v & ~BIR_VAL_CONST_BIT;
+        return (i < B->M->num_consts) ? B->M->consts[i].type : 0;
+    }
+    return (v < B->M->num_insts) ? B->M->insts[v].type : 0;
+}
+
+bb_val bb_alca(bb_t *B, uint32_t ty)
+{
+    return emit(B, BIR_ALLOCA, 0, ty, NULL, 0);
+}
+
+bb_val bb_shal(bb_t *B, uint32_t ty)
+{
+    return emit(B, BIR_SHARED_ALLOC, 0, ty, NULL, 0);
+}
+
+void bb_barr(bb_t *B)
+{
+    emit(B, BIR_BARRIER, 0, bb_void(B), NULL, 0);
+}
+
 bb_val bb_gep(bb_t *B, uint32_t ty, bb_val base, bb_val idx)
 {
     uint32_t o[2] = { BIR_MAKE_VAL(base), BIR_MAKE_VAL(idx) };
@@ -225,6 +316,36 @@ void bb_brif(bb_t *B, bb_val c, uint32_t t, uint32_t f, uint32_t merge)
 }
 
 void bb_ret(bb_t *B) { emit(B, BIR_RET, 0, bb_void(B), NULL, 0); }
+
+/* The printed type comes from the operand, so the instruction itself is void
+ * and ty is only what an immediate operand would be typed as. */
+void bb_retv(bb_t *B, uint32_t ty, bb_val v)
+{
+    (void)ty;
+    uint32_t o[1] = { BIR_MAKE_VAL(v) };
+    emit(B, BIR_RET, 0, bb_void(B), o, 1);
+}
+
+int bb_ffind(const bb_t *B, const char *name)
+{
+    if (B == NULL || name == NULL) return -1;
+    const bir_module_t *M = B->M;
+    for (uint32_t i = 0; i < M->num_funcs; i++) {
+        if (M->funcs[i].name < M->string_len &&
+            strcmp(&M->strings[M->funcs[i].name], name) == 0)
+            return (int)i;
+    }
+    return -1;
+}
+
+bb_val bb_call(bb_t *B, uint32_t ty, int fidx, const bb_val *args, int nargs)
+{
+    if (fidx < 0 || nargs < 0 || nargs > BB_MAX_ARGS) return BB_NONE;
+    uint32_t o[BB_MAX_ARGS + 1];
+    o[0] = (uint32_t)fidx;
+    for (int i = 0; i < nargs; i++) o[i + 1] = BIR_MAKE_VAL(args[i]);
+    return emit(B, BIR_CALL, 0, ty, o, (uint8_t)(nargs + 1));
+}
 
 /* ---- Output ---- */
 

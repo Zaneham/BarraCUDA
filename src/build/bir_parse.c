@@ -20,15 +20,18 @@ typedef enum {
     T_INT,              /* decimal, possibly negative */
     T_FLOAT,            /* what %g writes: 2.5, 0.125, 1e+06 */
     T_LBRACE, T_RBRACE, T_LPAREN, T_RPAREN, T_LT, T_GT,
+    T_LBRACK, T_RBRACK,
     T_COMMA, T_COLON, T_EQUALS
 } tok_kind;
 
 typedef struct {
     tok_kind kind;
     char     text[NAME_MAX_LEN];
-    long     num;
-    double   fnum;
-    uint32_t line;
+    /* long long, because long is 32 bits on Windows and strtol quietly
+       saturates a hash constant like 0x846ca68b to INT32_MAX. */
+    long long num;
+    double    fnum;
+    uint32_t  line;
 } tok_t;
 
 typedef struct {
@@ -81,6 +84,8 @@ static void lx_next(lex_t *L)
     case '>': L->p++; t->kind = T_GT;     return;
     case ',': L->p++; t->kind = T_COMMA;  return;
     case ':': L->p++; t->kind = T_COLON;  return;
+    case '[': L->p++; t->kind = T_LBRACK; return;
+    case ']': L->p++; t->kind = T_RBRACK; return;
     case '=': L->p++; t->kind = T_EQUALS; return;
     default: break;
     }
@@ -92,7 +97,7 @@ static void lx_next(lex_t *L)
         t->text[n] = '\0';
         if (c == '%') {
             t->kind = T_VAL;
-            t->num = strtol(t->text, NULL, 10);
+            t->num = strtoll(t->text, NULL, 10);
         } else {
             t->kind = T_GLOBAL;
         }
@@ -103,8 +108,8 @@ static void lx_next(lex_t *L)
         /* strtod reaches further than strtol exactly when the text is a
          * decimal or exponent form, which is how the two are told apart. */
         char *ie = NULL, *fe = NULL;
-        long   iv = strtol(L->p, &ie, 10);
-        double fv = strtod(L->p, &fe);
+        long long iv = strtoll(L->p, &ie, 10);
+        double    fv = strtod(L->p, &fe);
         if (fe > ie) { t->kind = T_FLOAT; t->fnum = fv; L->p = fe; }
         else         { t->kind = T_INT;   t->num  = iv; L->p = ie; }
         return;
@@ -164,14 +169,14 @@ typedef struct {
  * survives a file that nests on purpose. */
 #define TYPE_MAX_DEPTH 16
 
-static void vmap_set(P *p, long local, bb_val v)
+static void vmap_set(P *p, long long local, bb_val v)
 {
     if (local < 0 || local >= VMAP_MAX) { lx_err(&p->L, "value number out of range"); return; }
     if ((uint32_t)local >= p->nv) p->nv = (uint32_t)local + 1;
     p->vmap[local] = v;
 }
 
-static bb_val vmap_get(P *p, long local)
+static bb_val vmap_get(P *p, long long local)
 {
     if (local < 0 || (uint32_t)local >= p->nv) {
         lx_err(&p->L, "reference to an undefined value");
@@ -196,6 +201,22 @@ static uint32_t parse_type(P *p)
     lex_t *L = &p->L;
 
     if (is_ident(L, "void")) { lx_next(L); return bb_void(p->B); }
+
+    /* [N x T] and <N x T>, which is what a shared_alloc points at. */
+    if (L->cur.kind == T_LBRACK || L->cur.kind == T_LT) {
+        int vec = (L->cur.kind == T_LT);
+        lx_next(L);
+        if (L->cur.kind != T_INT) { lx_err(L, "expected a count"); return 0; }
+        uint32_t n = (uint32_t)L->cur.num;
+        lx_next(L);
+        if (!eat_ident(L, "x")) { lx_err(L, "expected 'x' in an array type"); return 0; }
+        if (p->depth >= TYPE_MAX_DEPTH) { lx_err(L, "type nested too deeply"); return 0; }
+        p->depth++;
+        uint32_t e = parse_type(p);
+        p->depth--;
+        if (!expect(L, vec ? T_GT : T_RBRACK, "expected the closing bracket")) return 0;
+        return vec ? bb_vec(p->B, e, n) : bb_arr(p->B, e, n);
+    }
 
     if (is_ident(L, "ptr")) {
         lx_next(L);
@@ -243,6 +264,9 @@ static int cmp_pred(const char *s)
         { "sgt", BB_SGT }, { "sge", BB_SGE },
         { "ult", BB_ULT }, { "ule", BB_ULE },
         { "ugt", BB_UGT }, { "uge", BB_UGE },
+        { "oeq", BB_OEQ }, { "one", BB_ONE },
+        { "olt", BB_OLT }, { "ole", BB_OLE },
+        { "ogt", BB_OGT }, { "oge", BB_OGE },
         { NULL, 0 }
     };
     for (int i = 0; tab[i].n != NULL; i++)
@@ -265,7 +289,7 @@ static bb_val read_operand(P *p, uint32_t ty)
     lex_t *L = &p->L;
 
     if (L->cur.kind == T_VAL) {
-        long n = L->cur.num;
+        long long n = L->cur.num;
         lx_next(L);
         return vmap_get(p, n);
     }
@@ -273,7 +297,7 @@ static bb_val read_operand(P *p, uint32_t ty)
     if (L->cur.kind == T_INT || L->cur.kind == T_FLOAT) {
         int isf = (L->cur.kind == T_FLOAT);
         double fv = isf ? L->cur.fnum : (double)L->cur.num;
-        long   iv = isf ? (long)L->cur.fnum : L->cur.num;
+        long long iv = isf ? (long long)L->cur.fnum : L->cur.num;
         lx_next(L);
         /* %g drops the point on a whole float, so the type decides, not the text. */
         return bb_isflt(p->B, ty) ? bb_cf(p->B, ty, fv) : bb_ci(p->B, ty, iv);
@@ -299,7 +323,7 @@ static void take_line_comment(P *p)
 }
 
 /* Returns 0 on success. `dest` is the %N being defined, or -1 for void. */
-static int parse_inst(P *p, long dest)
+static int parse_inst(P *p, long long dest)
 {
     lex_t *L = &p->L;
     if (L->cur.kind != T_IDENT) { lx_err(L, "expected an opcode"); return -1; }
@@ -326,8 +350,14 @@ static int parse_inst(P *p, long dest)
 
     /* Binary: OP TYPE %a, %b */
     {
-        struct { const char *n; int kind; } bins[] = {
-            {"add",0},{"sub",1},{"mul",2},{"fadd",3},{"fsub",4},{"fmul",5},{NULL,0}
+        static const struct { const char *n; int kind; } bins[] = {
+            {"add",BB_ADD},{"sub",BB_SUB},{"mul",BB_MUL},
+            {"sdiv",BB_SDIV},{"udiv",BB_UDIV},{"srem",BB_SREM},{"urem",BB_UREM},
+            {"fadd",BB_FADD},{"fsub",BB_FSUB},{"fmul",BB_FMUL},
+            {"fdiv",BB_FDIV},{"frem",BB_FREM},
+            {"and",BB_AND},{"or",BB_OR},{"xor",BB_XOR},
+            {"shl",BB_SHL},{"lshr",BB_LSHR},{"ashr",BB_ASHR},
+            {NULL,0}
         };
         for (int i = 0; bins[i].n; i++) {
             if (strcmp(op, bins[i].n)) continue;
@@ -335,20 +365,73 @@ static int parse_inst(P *p, long dest)
             bb_val a = read_operand(p, t);
             if (!expect(L, T_COMMA, "expected ',' between operands")) return -1;
             bb_val b = read_operand(p, t);
-            switch (bins[i].kind) {
-            case 0: r = bb_add (p->B, t, a, b); break;
-            case 1: r = bb_sub (p->B, t, a, b); break;
-            case 2: r = bb_mul (p->B, t, a, b); break;
-            case 3: r = bb_fadd(p->B, t, a, b); break;
-            case 4: r = bb_fsub(p->B, t, a, b); break;
-            default:r = bb_fmul(p->B, t, a, b); break;
+            r = bb_op(p->B, bins[i].kind, t, a, b);
+            goto done;
+        }
+    }
+
+    /* Intrinsics print no type, so the operand carries it: sqrt %a, fmin %a %b */
+    {
+        static const struct { const char *n; int fn; int arity; } fns[] = {
+            {"sqrt",BB_SQRT,1},{"rsq",BB_RSQ,1},{"rcp",BB_RCP,1},
+            {"exp2",BB_EXP2,1},{"log2",BB_LOG2,1},{"sin",BB_SIN,1},{"cos",BB_COS,1},
+            {"fabs",BB_FABS,1},{"floor",BB_FLOOR,1},{"ceil",BB_CEIL,1},
+            {"ftrunc",BB_FTRUNC,1},{"rndne",BB_RNDNE,1},
+            {"fmax",BB_FMAX,2},{"fmin",BB_FMIN,2},
+            {NULL,0,0}
+        };
+        for (int i = 0; fns[i].n; i++) {
+            if (strcmp(op, fns[i].n)) continue;
+            uint32_t ft = bb_flt(p->B, 32);
+            bb_val a = read_operand(p, ft);
+            uint32_t t = bb_tyof(p->B, a);
+            if (t == 0) t = ft;
+            if (fns[i].arity == 1) {
+                r = bb_fn1(p->B, fns[i].fn, t, a);
+            } else {
+                if (L->cur.kind == T_COMMA) lx_next(L);   /* printed without one */
+                bb_val b = read_operand(p, t);
+                r = bb_fn2(p->B, fns[i].fn, t, a, b);
             }
             goto done;
         }
     }
 
-    /* icmp PRED TYPE %a, %b */
-    if (!strcmp(op, "icmp")) {
+    /* Conversions: OP SRCTYPE %v to DSTTYPE */
+    {
+        static const struct { const char *n; int c; } cvts[] = {
+            {"trunc",BB_TRUNC},{"zext",BB_ZEXT},{"sext",BB_SEXT},
+            {"fptrunc",BB_FPTRUNC},{"fpext",BB_FPEXT},
+            {"fptosi",BB_FPTOSI},{"fptoui",BB_FPTOUI},
+            {"sitofp",BB_SITOFP},{"uitofp",BB_UITOFP},{"bitcast",BB_BITCAST},
+            {NULL,0}
+        };
+        for (int i = 0; cvts[i].n; i++) {
+            if (strcmp(op, cvts[i].n)) continue;
+            uint32_t src = parse_type(p);
+            bb_val a = read_operand(p, src);
+            if (!eat_ident(L, "to")) { lx_err(L, "expected 'to' in a conversion"); return -1; }
+            uint32_t dst = parse_type(p);
+            r = bb_cvt(p->B, cvts[i].c, dst, a);
+            goto done;
+        }
+    }
+
+    /* select TYPE %cond, %true, %false */
+    if (!strcmp(op, "select")) {
+        uint32_t t = parse_type(p);
+        bb_val cnd = read_operand(p, bb_int(p->B, 1));
+        if (!expect(L, T_COMMA, "expected ',' after the condition")) return -1;
+        bb_val tv = read_operand(p, t);
+        if (!expect(L, T_COMMA, "expected ',' between the arms")) return -1;
+        bb_val fv = read_operand(p, t);
+        r = bb_sel(p->B, t, cnd, tv, fv);
+        goto done;
+    }
+
+    /* icmp/fcmp PRED TYPE %a, %b */
+    if (!strcmp(op, "icmp") || !strcmp(op, "fcmp")) {
+        int isf = (op[0] == 'f');
         if (L->cur.kind != T_IDENT) { lx_err(L, "expected a predicate"); return -1; }
         int pred = cmp_pred(L->cur.text);
         if (pred < 0) { lx_err(L, "unknown comparison predicate"); return -1; }
@@ -357,7 +440,7 @@ static int parse_inst(P *p, long dest)
         bb_val a = read_operand(p, ct);
         if (!expect(L, T_COMMA, "expected ',' between operands")) return -1;
         bb_val b = read_operand(p, ct);
-        r = bb_icmp(p->B, pred, a, b);
+        r = isf ? bb_fcmp(p->B, pred, a, b) : bb_icmp(p->B, pred, a, b);
         goto done;
     }
 
@@ -369,6 +452,19 @@ static int parse_inst(P *p, long dest)
         if (!expect(L, T_COMMA, "expected ',' before gep index")) return -1;
         bb_val idx = read_operand(p, bb_int(p->B, 32));
         r = bb_gep(p->B, t, base, idx);
+        goto done;
+    }
+
+    if (!strcmp(op, "barrier")) { bb_barr(p->B); goto done; }
+
+    if (!strcmp(op, "shared_alloc")) {
+        r = bb_shal(p->B, parse_type(p));
+        goto done;
+    }
+
+    /* alloca TYPE, where TYPE is the pointer it yields */
+    if (!strcmp(op, "alloca")) {
+        r = bb_alca(p->B, parse_type(p));
         goto done;
     }
 
@@ -419,8 +515,30 @@ static int parse_inst(P *p, long dest)
     }
 
     if (!strcmp(op, "ret")) {
-        eat_ident(L, "void");
-        bb_ret(p->B);
+        if (eat_ident(L, "void")) { bb_ret(p->B); goto done; }
+        uint32_t rt = parse_type(p);
+        bb_val rv = read_operand(p, rt);
+        bb_retv(p->B, rt, rv);
+        goto done;
+    }
+
+    /* call TYPE @name(%a, %b) */
+    if (!strcmp(op, "call")) {
+        uint32_t rt = parse_type(p);
+        if (L->cur.kind != T_GLOBAL) { lx_err(L, "expected @name after call"); return -1; }
+        int fidx = bb_ffind(p->B, L->cur.text);
+        if (fidx < 0) { lx_err(L, "call to an unknown function"); return -1; }
+        lx_next(L);
+        if (!expect(L, T_LPAREN, "expected '(' after the callee")) return -1;
+        bb_val argv[BB_MAX_ARGS];
+        int argc = 0;
+        while (L->cur.kind != T_RPAREN && L->cur.kind != T_EOF && !L->err) {
+            if (argc >= BB_MAX_ARGS) { lx_err(L, "too many call arguments"); return -1; }
+            argv[argc++] = read_operand(p, rt);
+            if (L->cur.kind == T_COMMA) lx_next(L);
+        }
+        if (!expect(L, T_RPAREN, "expected ')' closing the arguments")) return -1;
+        r = bb_call(p->B, rt, fidx, argv, argc);
         goto done;
     }
 
@@ -470,7 +588,7 @@ static int parse_func(P *p, const char *body_start)
     if (!expect(L, T_LPAREN, "expected '(' after function name")) return -1;
 
     uint32_t ptypes[32];
-    long     pnums[32];
+    long long pnums[32];
     int np = 0;
     while (L->cur.kind != T_RPAREN && L->cur.kind != T_EOF && !L->err) {
         if (np >= 32) { lx_err(L, "too many parameters"); return -1; }
@@ -526,7 +644,7 @@ static int parse_func(P *p, const char *body_start)
             }
         }
 
-        long dest = -1;
+        long long dest = -1;
         if (L->cur.kind == T_VAL) {
             dest = L->cur.num;
             lx_next(L);

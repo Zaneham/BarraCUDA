@@ -155,6 +155,47 @@ static void bir05(void)
 }
 TH_REG("bir", 5, "a deeply nested type is refused, not a crash", bir05)
 
+/* What a loop and an accumulator lower to before mem2reg gets them. */
+static const char *const mem_mod =
+    "; Booth IR\n"
+    "\n"
+    "func @m(ptr<global, f32> %0, i32 %1) __global__ {\n"
+    "entry:\n"
+    "    %2 = alloca ptr<private, f32>\n"
+    "    store f32 0.5, %2\n"
+    "    %4 = load f32, %2\n"
+    "    %5 = fcmp olt f32 %4, 1\n"
+    "    br_cond %5, t, e merge e\n"
+    "\n"
+    "t:\n"
+    "    store f32 %4, %0\n"
+    "    br e\n"
+    "\n"
+    "e:\n"
+    "    ret void\n"
+    "}";
+
+static void bir07(void)
+{
+    char cmd[512];
+
+    CHNE(write_tmp(mem_mod), 0);
+    snprintf(cmd, sizeof cmd,
+             "%s --bir-in --ir --no-mem2reg --no-cfold --no-dce --no-sroa %s",
+             BC_BIN, TMP);
+    CHEQ(th_run(cmd, bbuf, (int)sizeof bbuf), 0);
+    trim(bbuf);
+    CHNE(strstr(bbuf, "alloca ptr<private, f32>"), NULL);
+    CHNE(strstr(bbuf, "fcmp olt f32 %4, 1"), NULL);
+
+    /* And mem2reg still promotes it, which is why the frontend emits no phi. */
+    snprintf(cmd, sizeof cmd, "%s --bir-in --ir %s", BC_BIN, TMP);
+    CHEQ(th_run(cmd, abuf, (int)sizeof abuf), 0);
+    CHEQ(strstr(abuf, "alloca"), NULL);
+    PASS();
+}
+TH_REG("bir", 7, "alloca and fcmp read back, mem2reg promotes", bir07)
+
 /* The path the OCaml emitter actually takes. */
 static void bir06(void)
 {

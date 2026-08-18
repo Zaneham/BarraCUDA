@@ -1,0 +1,36 @@
+; Booth IR
+
+func @clamp(ptr<global, f32> %0, ptr<global, f32> %1, i32 %2) __global__ {
+entry:
+    %3 = block_id.x  ; line 6
+    %4 = block_dim.x  ; line 6
+    %5 = mul i32 %3, %4  ; line 6
+    %6 = thread_id.x  ; line 6
+    %7 = add i32 %5, %6  ; line 6
+    %8 = icmp slt i32 %7, %2  ; line 7
+    br_cond %8, if.then, if.end merge if.end  ; line 7
+
+if.then:
+    %10 = gep ptr<global, f32>, %0, %7  ; line 8
+    %11 = load f32, %10  ; line 8
+    %12 = fcmp olt f32 %11, 0  ; line 8
+    br_cond %12, if.then.1, if.else.1 merge if.end.1  ; line 8
+
+if.then.1:
+    %14 = gep ptr<global, f32>, %1, %7  ; line 8
+    store f32 0, %14  ; line 8
+    br if.end.1  ; line 8
+
+if.else.1:
+    %17 = gep ptr<global, f32>, %1, %7  ; line 8
+    %18 = gep ptr<global, f32>, %0, %7  ; line 8
+    %19 = load f32, %18  ; line 8
+    store f32 %19, %17  ; line 8
+    br if.end.1  ; line 8
+
+if.end.1:
+    br if.end  ; line 8
+
+if.end:
+    ret void  ; line 8
+}

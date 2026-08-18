@@ -1,0 +1,35 @@
+; Booth IR
+
+func @ops(ptr<global, f32> %0, ptr<global, f32> %1, i32 %2, i32 %3) __global__ {
+entry:
+    %4 = block_id.x  ; line 7
+    %5 = block_dim.x  ; line 7
+    %6 = mul i32 %4, %5  ; line 7
+    %7 = thread_id.x  ; line 7
+    %8 = add i32 %6, %7  ; line 7
+    %9 = icmp slt i32 %8, %3  ; line 8
+    br_cond %9, if.then, if.end merge if.end  ; line 8
+
+if.then:
+    %11 = sdiv i32 %8, %2  ; line 9
+    %12 = srem i32 %8, %2  ; line 10
+    %13 = xor i32 %11, %12  ; line 11
+    %14 = sitofp i32 %13 to f32  ; line 11
+    %15 = gep ptr<global, f32>, %0, %8  ; line 12
+    %16 = load f32, %15  ; line 12
+    %17 = fabs %16  ; line 13
+    %18 = sqrt %17  ; line 13
+    %19 = fdiv f32 %16, %14  ; line 13
+    %20 = exp2 %19  ; line 13
+    %21 = fadd f32 %18, %20  ; line 13
+    %22 = fmax %16 1  ; line 13
+    %23 = log2 %22  ; line 13
+    %24 = fsub f32 %21, %23  ; line 13
+    %25 = gep ptr<global, f32>, %1, %8  ; line 14
+    %26 = fmin %24 1000000  ; line 14
+    store f32 %26, %25  ; line 14
+    br if.end  ; line 14
+
+if.end:
+    ret void  ; line 14
+}

@@ -1,0 +1,32 @@
+; Booth IR
+
+func @tile(ptr<global, f32> %0, ptr<global, f32> %1, i32 %2) __global__ {
+entry:
+    %3 = shared_alloc ptr<shared, [256 x f32]>  ; line 7
+    %4 = block_id.x  ; line 8
+    %5 = block_dim.x  ; line 8
+    %6 = mul i32 %4, %5  ; line 8
+    %7 = thread_id.x  ; line 8
+    %8 = add i32 %6, %7  ; line 8
+    %9 = thread_id.x  ; line 9
+    %10 = icmp slt i32 %8, %2  ; line 10
+    br_cond %10, if.then, if.end merge if.end  ; line 10
+
+if.then:
+    %12 = gep ptr<shared, f32>, %3, %9  ; line 11
+    %13 = gep ptr<global, f32>, %0, %8  ; line 11
+    %14 = load f32, %13  ; line 11
+    store f32 %14, %12  ; line 11
+    barrier  ; line 12
+    %17 = gep ptr<global, f32>, %1, %8  ; line 13
+    %18 = block_dim.x  ; line 13
+    %19 = sub i32 %18, %9  ; line 13
+    %20 = sub i32 %19, 1  ; line 13
+    %21 = gep ptr<shared, f32>, %3, %20  ; line 13
+    %22 = load f32, %21  ; line 13
+    store f32 %22, %17  ; line 13
+    br if.end  ; line 13
+
+if.end:
+    ret void  ; line 13
+}

@@ -52,6 +52,14 @@ Booth — Changelog
   reads back. The PTX from an OCaml-written vadd runs on an RTX 4060 Ti
   (Zane Hambly, 2026-08-18)
 
+- The kernel language grows device functions, shared memory, loops, division
+  and the transcendentals, enough to price an Asian option on the GPU, which
+  turned up four bugs now fixed: sin and cos took turns rather than radians,
+  float constants printed to six digits, the BIR lexer clamped integers above
+  INT32_MAX because long is 32 bits on Windows, and a function's total_insts
+  was the module count rather than its own, so mem2reg moved one body over the
+  next (Zane Hambly, 2026-08-18)
+
 ### Architecture
 
 - A run-side contract in `src/exec`, a variant flag with no target now errors,

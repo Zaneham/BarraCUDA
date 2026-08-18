@@ -7,18 +7,22 @@ type ty =
   | Int of int
   | Float of int
   | Ptr of addrspace * ty
+  | Arr of int * ty
 
 type value = V of int | Imm of string
-type block = B of { name : string; mutable body : string list }
+type block = B of { name : string; mutable body : string list;
+                    mutable opened : bool }
 
 type dim = X | Y | Z
 type pred = Eq | Ne | Slt | Sle | Sgt | Sge | Ult | Ule | Ugt | Uge
+          | Oeq | One | Olt | Ole | Ogt | Oge
 
 type func = {
   fname   : string;
   fparams : ty list;
   kernel  : bool;
-  mutable blocks : block list;   (* reverse order while building *)
+  mutable blocks : block list;   (* reverse creation order, for the fill check *)
+  mutable order  : block list;   (* reverse order of first opening *)
 }
 
 type t = {
@@ -42,11 +46,14 @@ let rec ty_str = function
   | Int n -> Printf.sprintf "i%d" n
   | Float n -> Printf.sprintf "f%d" n
   | Ptr (a, inner) -> Printf.sprintf "ptr<%s, %s>" (addrspace_str a) (ty_str inner)
+  | Arr (n, e) -> Printf.sprintf "[%d x %s]" n (ty_str e)
 
 let pred_str = function
   | Eq -> "eq" | Ne -> "ne"
   | Slt -> "slt" | Sle -> "sle" | Sgt -> "sgt" | Sge -> "sge"
   | Ult -> "ult" | Ule -> "ule" | Ugt -> "ugt" | Uge -> "uge"
+  | Oeq -> "oeq" | One -> "one"
+  | Olt -> "olt" | Ole -> "ole" | Ogt -> "ogt" | Oge -> "oge"
 
 let dim_str = function X -> "x" | Y -> "y" | Z -> "z"
 
@@ -57,7 +64,22 @@ let vstr = function
 (* Immediates are operands, so no instruction and no value number. Printed
    the way bir_print.c writes them, which is %d and %g. *)
 let const_int n = Imm (string_of_int n)
-let const_float f = Imm (Printf.sprintf "%g" f)
+
+(* Nine digits, which is what a float32 needs to read back as itself, and
+   OCaml writes e+006 on Windows where C writes e+06, so the exponent is
+   trimmed to the C99 minimum or the text depends on the host. *)
+let trim_exp s =
+  match String.index_opt s 'e' with
+  | None -> s
+  | Some i ->
+    let n = String.length s in
+    let j = if i + 1 < n && (s.[i + 1] = '+' || s.[i + 1] = '-') then i + 2 else i + 1 in
+    let d = n - j in
+    let k = ref 0 in
+    while !k < d - 2 && s.[j + !k] = '0' do incr k done;
+    String.sub s 0 j ^ String.sub s (j + !k) (d - !k)
+
+let const_float f = Imm (trim_exp (Printf.sprintf "%.9g" f))
 
 (* ---- Emission ---- *)
 
@@ -91,7 +113,7 @@ let line t n = t.src <- n
 
 let func t name ~params ~kernel =
   if t.cur <> None then fail "a function is already open";
-  let f = { fname = name; fparams = params; kernel; blocks = [] } in
+  let f = { fname = name; fparams = params; kernel; blocks = []; order = [] } in
   t.cur <- Some f;
   t.next <- 0;
   (* Numbered first, so signature and body agree. *)
@@ -101,19 +123,33 @@ let block t name =
   match t.cur with
   | None -> fail "no function is open"
   | Some f ->
-    let b = B { name; body = [] } in
+    let b = B { name; body = []; opened = false } in
     f.blocks <- b :: f.blocks;
     b
 
+(* Blocks print in the order they are first opened, not the order they are
+   reserved, because bir_print numbers instructions by position and the numbers
+   here are handed out as they are emitted. *)
 let entry t b =
-  if t.cur = None then fail "no function is open";
-  t.here <- Some b
+  match t.cur with
+  | None -> fail "no function is open"
+  | Some f ->
+    (match b with
+     | B bb ->
+       if not bb.opened then begin
+         bb.opened <- true;
+         f.order <- b :: f.order
+       end);
+    t.here <- Some b
 
 let finish t =
   match t.cur with
   | None -> fail "no function is open"
   | Some f ->
-    f.blocks <- List.rev f.blocks;
+    List.iter
+      (fun (B b) -> if not b.opened then fail ("block " ^ b.name ^ " was never filled"))
+      f.blocks;
+    f.blocks <- List.rev f.order;
     t.funcs <- f :: t.funcs;
     t.cur <- None;
     t.here <- None
@@ -135,9 +171,56 @@ let fadd = bin "fadd"
 let fsub = bin "fsub"
 let fmul = bin "fmul"
 
-let icmp t p ty a b =
-  def t (Printf.sprintf "icmp %s %s %s, %s"
-           (pred_str p) (ty_str ty) (vstr a) (vstr b))
+let sdiv = bin "sdiv"
+let udiv = bin "udiv"
+let srem = bin "srem"
+let urem = bin "urem"
+let fdiv = bin "fdiv"
+let frem = bin "frem"
+let band = bin "and"
+let bor  = bin "or"
+let bxor = bin "xor"
+let shl  = bin "shl"
+let lshr = bin "lshr"
+let ashr = bin "ashr"
+
+(* Intrinsics carry no type in the text. the operand gives it. *)
+let fn1 op t a = def t (Printf.sprintf "%s %s" op (vstr a))
+let fn2 op t a b = def t (Printf.sprintf "%s %s %s" op (vstr a) (vstr b))
+
+let sqrt  = fn1 "sqrt"
+let rsq   = fn1 "rsq"
+let rcp   = fn1 "rcp"
+let exp2  = fn1 "exp2"
+let log2  = fn1 "log2"
+let sin   = fn1 "sin"
+let cos   = fn1 "cos"
+let fabs  = fn1 "fabs"
+let floor = fn1 "floor"
+let ceil  = fn1 "ceil"
+let fmax  = fn2 "fmax"
+let fmin  = fn2 "fmin"
+
+let cvt op t ~src a ~dst =
+  def t (Printf.sprintf "%s %s %s to %s" op (ty_str src) (vstr a) (ty_str dst))
+
+let sitofp = cvt "sitofp"
+let fptosi = cvt "fptosi"
+
+let select t ty c a b =
+  def t (Printf.sprintf "select %s %s, %s, %s"
+           (ty_str ty) (vstr c) (vstr a) (vstr b))
+
+let cmp op t p ty a b =
+  def t (Printf.sprintf "%s %s %s %s, %s"
+           op (pred_str p) (ty_str ty) (vstr a) (vstr b))
+
+let icmp = cmp "icmp"
+let fcmp = cmp "fcmp"
+
+let alloca t ty = def t (Printf.sprintf "alloca %s" (ty_str ty))
+let shared_alloc t ty = def t (Printf.sprintf "shared_alloc %s" (ty_str ty))
+let barrier t = emit t "barrier"
 
 let gep t ty base idx =
   def t (Printf.sprintf "gep %s, %s, %s" (ty_str ty) (vstr base) (vstr idx))
@@ -157,6 +240,11 @@ let br_cond t c bt bf ~merge =
             (vstr c) (bname bt) (bname bf) (bname merge))
 
 let ret t = emit t "ret void"
+let retv t ty v = emit t (Printf.sprintf "ret %s %s" (ty_str ty) (vstr v))
+
+let call t ty name args =
+  def t (Printf.sprintf "call %s @%s(%s)" (ty_str ty) name
+           (String.concat ", " (List.map vstr args)))
 
 (* ---- Output ---- *)
 

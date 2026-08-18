@@ -1,7 +1,7 @@
 (* vadd, the kernel examples/cmake/vadd.cu compiles, written in OCaml.
  *
  *   vadd out.bir            write the BIR
- *   vadd out.bir out.o      and compile it for the CPU backend
+ *   vadd out.bir out.o      and compile it for the CPU backend work
  *)
 
 let kath = try Sys.getenv "KATH" with Not_found -> "./kath"
