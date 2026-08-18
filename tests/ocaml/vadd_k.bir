@@ -1,0 +1,25 @@
+; Booth IR
+
+func @vadd(ptr<global, f32> %0, ptr<global, f32> %1, ptr<global, f32> %2, i32 %3) __global__ {
+entry:
+    %4 = block_id.x  ; line 7
+    %5 = block_dim.x  ; line 7
+    %6 = mul i32 %4, %5  ; line 7
+    %7 = thread_id.x  ; line 7
+    %8 = add i32 %6, %7  ; line 7
+    %9 = icmp slt i32 %8, %3  ; line 8
+    br_cond %9, if.then, if.end merge if.end  ; line 8
+
+if.then:
+    %11 = gep ptr<global, f32>, %2, %8  ; line 8
+    %12 = gep ptr<global, f32>, %0, %8  ; line 8
+    %13 = load f32, %12  ; line 8
+    %14 = gep ptr<global, f32>, %1, %8  ; line 8
+    %15 = load f32, %14  ; line 8
+    %16 = fadd f32 %13, %15  ; line 8
+    store f32 %16, %11  ; line 8
+    br if.end  ; line 8
+
+if.end:
+    ret void  ; line 8
+}

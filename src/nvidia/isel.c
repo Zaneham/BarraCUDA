@@ -1062,7 +1062,9 @@ static void is_math(uint32_t idx, const bir_inst_t *I)
 {
     uint8_t rf = bir_rfile(I->type);
     nv_opnd_t d = map_val(idx, I->type);
-    nv_opnd_t a = rslv(I->operands[0]);
+    /* The approx units take a register, so a folded constant argument has to
+     * be moved into one first. ptxas rejects ex2.approx.f32 %f, <imm>. */
+    nv_opnd_t a = mat_const(I->operands[0], rf);
 
     uint16_t op;
     switch (I->op) {

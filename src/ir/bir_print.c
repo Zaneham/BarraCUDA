@@ -6,12 +6,19 @@
 
 /* ---- Type Strings ---- */
 
+/* A pointee used to print through a non-recursive helper, so ptr to an array
+ * came out as ptr<shared, type_7> and nothing could read it back. Depth is
+ * bounded because the recursion walks a table an input file can shape. */
+#define TYPE_STR_DEPTH 4
+
 static int print_simple_type(const bir_module_t *M, uint32_t tidx,
-                             char *buf, int size)
+                             char *buf, int size, int depth)
 {
     if (tidx >= M->num_types)
         return snprintf(buf, (size_t)size, "???");
     const bir_type_t *t = &M->types[tidx];
+    char inner[80];
+
     switch (t->kind) {
     case BIR_TYPE_VOID:  return snprintf(buf, (size_t)size, "void");
     case BIR_TYPE_INT:   return snprintf(buf, (size_t)size, "i%u", t->width);
@@ -21,9 +28,25 @@ static int print_simple_type(const bir_module_t *M, uint32_t tidx,
         return snprintf(buf, (size_t)size, "f64");
     case BIR_TYPE_BFLOAT:
         return snprintf(buf, (size_t)size, "bf16");
+
     case BIR_TYPE_PTR:
-        return snprintf(buf, (size_t)size, "ptr<%s>",
-                        bir_addrspace_name(t->addrspace));
+        if (depth <= 0)
+            return snprintf(buf, (size_t)size, "ptr<%s>",
+                            bir_addrspace_name(t->addrspace));
+        print_simple_type(M, t->inner, inner, (int)sizeof inner, depth - 1);
+        return snprintf(buf, (size_t)size, "ptr<%s, %s>",
+                        bir_addrspace_name(t->addrspace), inner);
+
+    case BIR_TYPE_ARRAY:
+        if (depth <= 0) return snprintf(buf, (size_t)size, "type_%u", tidx);
+        print_simple_type(M, t->inner, inner, (int)sizeof inner, depth - 1);
+        return snprintf(buf, (size_t)size, "[%u x %s]", t->count, inner);
+
+    case BIR_TYPE_VECTOR:
+        if (depth <= 0) return snprintf(buf, (size_t)size, "type_%u", tidx);
+        print_simple_type(M, t->inner, inner, (int)sizeof inner, depth - 1);
+        return snprintf(buf, (size_t)size, "<%u x %s>", t->width, inner);
+
     default:
         return snprintf(buf, (size_t)size, "type_%u", tidx);
     }
@@ -42,19 +65,19 @@ int bir_type_str(const bir_module_t *M, uint32_t tidx, char *buf, int size)
     case BIR_TYPE_INT:
     case BIR_TYPE_FLOAT:
     case BIR_TYPE_BFLOAT:
-        return print_simple_type(M, tidx, buf, size);
+        return print_simple_type(M, tidx, buf, size, TYPE_STR_DEPTH);
 
     case BIR_TYPE_PTR:
-        print_simple_type(M, t->inner, inner, sizeof(inner));
+        print_simple_type(M, t->inner, inner, sizeof(inner), TYPE_STR_DEPTH);
         return snprintf(buf, (size_t)size, "ptr<%s, %s>",
                         bir_addrspace_name(t->addrspace), inner);
 
     case BIR_TYPE_ARRAY:
-        print_simple_type(M, t->inner, inner, sizeof(inner));
+        print_simple_type(M, t->inner, inner, sizeof(inner), TYPE_STR_DEPTH);
         return snprintf(buf, (size_t)size, "[%u x %s]", t->count, inner);
 
     case BIR_TYPE_VECTOR:
-        print_simple_type(M, t->inner, inner, sizeof(inner));
+        print_simple_type(M, t->inner, inner, sizeof(inner), TYPE_STR_DEPTH);
         return snprintf(buf, (size_t)size, "<%u x %s>", t->width, inner);
 
     case BIR_TYPE_STRUCT:
@@ -62,19 +85,19 @@ int bir_type_str(const bir_module_t *M, uint32_t tidx, char *buf, int size)
         for (uint16_t i = 0; i < t->num_fields && pos < size - 1; i++) {
             if (i > 0) pos += snprintf(buf+pos, (size_t)(size-pos), ", ");
             print_simple_type(M, M->type_fields[t->count + i],
-                              inner, sizeof(inner));
+                              inner, sizeof(inner), TYPE_STR_DEPTH);
             pos += snprintf(buf+pos, (size_t)(size-pos), "%s", inner);
         }
         pos += snprintf(buf+pos, (size_t)(size-pos), "}");
         return pos;
 
     case BIR_TYPE_FUNC:
-        print_simple_type(M, t->inner, inner, sizeof(inner));
+        print_simple_type(M, t->inner, inner, sizeof(inner), TYPE_STR_DEPTH);
         pos = snprintf(buf, (size_t)size, "(");
         for (uint16_t i = 0; i < t->num_fields && pos < size - 1; i++) {
             if (i > 0) pos += snprintf(buf+pos, (size_t)(size-pos), ", ");
             print_simple_type(M, M->type_fields[t->count + i],
-                              inner, sizeof(inner));
+                              inner, sizeof(inner), TYPE_STR_DEPTH);
             pos += snprintf(buf+pos, (size_t)(size-pos), "%s", inner);
         }
         pos += snprintf(buf+pos, (size_t)(size-pos), ") -> %s", inner);
@@ -100,7 +123,8 @@ static void print_val(const bir_module_t *M, uint32_t ref,
         const bir_const_t *c = &M->consts[ci];
         switch (c->kind) {
         case BIR_CONST_INT:   fprintf(out, "%lld", (long long)c->d.ival); break;
-        case BIR_CONST_FLOAT: fprintf(out, "%g", c->d.fval); break;
+        case BIR_CONST_FLOAT: /* 9 digits is what a float32 needs to read back as itself. */
+                              fprintf(out, "%.9g", c->d.fval); break;
         case BIR_CONST_BYTES: fprintf(out, "bytes[%u@%u]",
                                        c->d.bytes.len, c->d.bytes.off); break;
         case BIR_CONST_NULL:  fprintf(out, "null"); break;
@@ -524,7 +548,8 @@ void bir_print_module(const bir_module_t *M, FILE *out)
                 const bir_const_t *c = &M->consts[ci];
                 switch (c->kind) {
                 case BIR_CONST_INT:   fprintf(out, "%lld", (long long)c->d.ival); break;
-                case BIR_CONST_FLOAT: fprintf(out, "%g", c->d.fval); break;
+                case BIR_CONST_FLOAT: /* 9 digits is what a float32 needs to read back as itself. */
+                              fprintf(out, "%.9g", c->d.fval); break;
                 case BIR_CONST_NULL:  fprintf(out, "null"); break;
                 case BIR_CONST_ZERO:  fprintf(out, "zeroinit"); break;
                 case BIR_CONST_BYTES: {

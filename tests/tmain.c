@@ -104,6 +104,7 @@ static const tfam_t fam_order[] = {
 
     { "tri", "ttriton.c",   "Triton frontend",          2 },
     { "mlr", "tmlir.c",     "MLIR reader",              2 },
+    { "bir", "tbir.c",      "BIR text frontend",        2 },
 
     { "sfp", "tsoft_fp.c",  "soft float",               2 },
     { "spr", "tsysprint.c", "SYSPRINT",                 2 },
@@ -114,6 +115,7 @@ static const tfam_t fam_order[] = {
     { "wsz", "twarpsize.c", "warp size",                2 },
 
     { "ord", "tordr.c",     "harness ordering",         2 },
+    { "ocm", "tocm.c",      "OCaml frontend",           2 },
     { "rpi", "trpi.c",      "shipped-bug regressions",  2 },
 };
 

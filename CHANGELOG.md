@@ -43,7 +43,44 @@ Booth — Changelog
   a loop kernel were labelled with the kernel's own name
   (Zane Hambly, 2026-08-11)
 
+- `kath --bir-in` reads BIR text and skips the frontend entirely, so a compiler
+  outside this tree can target Booth without linking against it. `src/build/`
+  parses and builds modules, `src/ocaml/` emits them from OCaml, and `kcomp`
+  lowers an ordinary OCaml function from its .cmt, leaving ocamlc to do the
+  type checking and refusing anything outside the kernel subset by source
+  location. Immediates parse as well as print, so a module holding a constant
+  reads back. The PTX from an OCaml-written vadd runs on an RTX 4060 Ti
+  (Zane Hambly, 2026-08-18)
+
+- The kernel language grows device functions, shared memory, loops, division
+  and the transcendentals, enough to price an Asian option on the GPU, which
+  turned up four bugs now fixed: sin and cos took turns rather than radians,
+  float constants printed to six digits, the BIR lexer clamped integers above
+  INT32_MAX because long is 32 bits on Windows, and a function's total_insts
+  was the module count rather than its own, so mem2reg moved one body over the
+  next (Zane Hambly, 2026-08-18)
+
+- The Asian pricer takes its model parameters as arguments and reduces across
+  the block on device (Zane Hambly, 2026-08-18)
+
+- `get`, `set`, `sget` and `sset` take the element type from the array rather
+  than assuming f32, so an integer array is usable and not merely declarable
+  (Zane Hambly, 2026-08-18)
+
+- Atomic add, sub, and, or, xor and xchg reach the kernel language, leaving min
+  and max out while BIR has one opcode for each and NVIDIA reads it unsigned
+  where AMD reads it signed (Zane Hambly, 2026-08-18)
+
+### Documentation
+
+- How to write and build an OCaml kernel, what the subset holds and what it
+  does not, and OCaml and LFortran named as the optional dependencies they are
+  (Zane Hambly, 2026-08-18)
+
 ### Architecture
+
+- A run-side contract in `src/exec`, a variant flag with no target now errors,
+  and `parse_type` no longer recurses off the stack (Zane Hambly, 2026-08-18)
 
 - BIR arena writers record a `pool_full` bit rather than returning index 0,
   which is a live entry and not a sentinel. A full pool emitted wrong

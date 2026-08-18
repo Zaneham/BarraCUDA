@@ -1,0 +1,29 @@
+; Booth IR
+
+func @tally(ptr<global, f32> %0, ptr<global, i32> %1, i32 %2) __global__ {
+entry:
+    %3 = block_id.x  ; line 7
+    %4 = block_dim.x  ; line 7
+    %5 = mul i32 %3, %4  ; line 7
+    %6 = thread_id.x  ; line 7
+    %7 = add i32 %5, %6  ; line 7
+    %8 = icmp slt i32 %7, %2  ; line 8
+    br_cond %8, if.then, if.end merge if.end  ; line 8
+
+if.then:
+    %10 = gep ptr<global, i32>, %1, 0  ; line 9
+    %11 = atomic_add relaxed i32 %10, 1  ; line 9
+    %12 = gep ptr<global, f32>, %0, 0  ; line 10
+    %13 = atomic_add relaxed f32 %12, 0.5  ; line 10
+    %14 = gep ptr<global, i32>, %1, 1  ; line 11
+    %15 = atomic_xor relaxed i32 %14, %7  ; line 11
+    %16 = gep ptr<global, i32>, %1, 2  ; line 12
+    %17 = atomic_xchg relaxed i32 %16, %7  ; line 12
+    %18 = gep ptr<global, f32>, %0, %7  ; line 13
+    %19 = sitofp i32 %17 to f32  ; line 13
+    store f32 %19, %18  ; line 13
+    br if.end  ; line 13
+
+if.end:
+    ret void  ; line 13
+}
