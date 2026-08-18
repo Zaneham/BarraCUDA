@@ -51,3 +51,33 @@ static void rpi01(void)
     PASS();
 }
 TH_REG("rpi", 1, "#160 line numbers survive DCE", rpi01)
+
+/* Every backend lists its variant flags next to its on-switch, so a variant on
+ * its own was accepted, switched nothing on, and fell through to the AST dump
+ * the driver uses when no mode is set. kath printed a parse tree and exited 0
+ * having compiled nothing, under whatever -o you asked for. */
+static void rpi02(void)
+{
+    static const char *const variants[] = {
+        "--bkhit", "--gfx942", "--snap", "--ssa-ra", NULL
+    };
+    char cmd[512];
+
+    for (int i = 0; variants[i] != NULL; i++) {
+        snprintf(cmd, sizeof cmd, "%s %s examples/cmake/vadd.cu -o build/rpi02.out",
+                 BC_BIN, variants[i]);
+        CHNE(th_run(cmd, obuf, (int)sizeof obuf), 0);
+    }
+
+    /* The same flags alongside their target still work. */
+    snprintf(cmd, sizeof cmd,
+             "%s --nvidia-ptx --bkhit examples/cmake/vadd.cu -o build/rpi02.ptx",
+             BC_BIN);
+    CHEQ(th_run(cmd, obuf, (int)sizeof obuf), 0);
+
+    /* And a bare run still prints the tree, which is what the default is for. */
+    snprintf(cmd, sizeof cmd, "%s examples/cmake/vadd.cu", BC_BIN);
+    CHEQ(th_run(cmd, obuf, (int)sizeof obuf), 0);
+    PASS();
+}
+TH_REG("rpi", 2, "a variant flag alone is not a target", rpi02)

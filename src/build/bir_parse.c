@@ -156,7 +156,13 @@ typedef struct {
     char     blk_name[512][NAME_MAX_LEN];
     uint32_t blk_idx[512];
     uint32_t nblk;
+
+    uint32_t depth;         /* ptr<> nesting, so the type walk cannot recurse away */
 } P;
+
+/* Deeper than anything a real module holds, and shallow enough that the stack
+ * survives a file that nests on purpose. */
+#define TYPE_MAX_DEPTH 16
 
 static void vmap_set(P *p, long local, bb_val v)
 {
@@ -202,7 +208,13 @@ static uint32_t parse_type(P *p)
         else if (eat_ident(L, "generic"))  as = BB_AS_GENERIC;
         else { lx_err(L, "unknown address space"); return 0; }
         if (!expect(L, T_COMMA, "expected ',' in ptr type")) return 0;
+        if (p->depth >= TYPE_MAX_DEPTH) {
+            lx_err(L, "pointer type nested too deeply");
+            return 0;
+        }
+        p->depth++;
         uint32_t inner = parse_type(p);
+        p->depth--;
         if (!expect(L, T_GT, "expected '>' closing ptr type")) return 0;
         return bb_ptr(p->B, inner, as);
     }
@@ -460,7 +472,7 @@ static int parse_func(P *p, const char *body_start)
     uint32_t ptypes[32];
     long     pnums[32];
     int np = 0;
-    while (L->cur.kind != T_RPAREN && L->cur.kind != T_EOF) {
+    while (L->cur.kind != T_RPAREN && L->cur.kind != T_EOF && !L->err) {
         if (np >= 32) { lx_err(L, "too many parameters"); return -1; }
         ptypes[np] = parse_type(p);
         if (L->cur.kind != T_VAL) { lx_err(L, "expected %N after parameter type"); return -1; }

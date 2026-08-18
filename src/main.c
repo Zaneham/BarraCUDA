@@ -305,6 +305,7 @@ int main(int argc, char *argv[])
     int no_sroa = 0;
     int no_sched = 0;
     int no_pp = 0;
+    const char *be_arg = NULL;  /* first flag a backend claimed */
     td_chip_t tt_chip = TD_CHIP_BH;
 
     /* Collect -I and -D options for preprocessor */
@@ -397,7 +398,11 @@ int main(int argc, char *argv[])
                                       (i + 1 < argc) ? argv[i + 1] : NULL,
                                       &used_next);
             if (taken < 0) return 1;
-            if (taken > 0) { i += used_next; continue; }
+            if (taken > 0) {
+                if (be_arg == NULL) be_arg = argv[i];
+                i += used_next;
+                continue;
+            }
 
             fprintf(stderr, "unknown option: %s\n", argv[i]);
             usage(argv[0]);
@@ -407,6 +412,13 @@ int main(int argc, char *argv[])
 
     if (!file) {
         usage(argv[0]);
+        return 1;
+    }
+
+    /* A variant flag like --gfx942 with no target would otherwise fall through
+     * to the AST dump below and exit 0 having compiled nothing. */
+    if (be_arg != NULL && be_num_on() == 0u) {
+        fprintf(stderr, "%s does not select a target on its own\n", be_arg);
         return 1;
     }
 

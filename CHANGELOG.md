@@ -54,6 +54,9 @@ Booth — Changelog
 
 ### Architecture
 
+- A run-side contract in `src/exec`, a variant flag with no target now errors,
+  and `parse_type` no longer recurses off the stack (Zane Hambly, 2026-08-18)
+
 - BIR arena writers record a `pool_full` bit rather than returning index 0,
   which is a live entry and not a sentinel. A full pool emitted wrong
   immediates under exit 0; `bir_pchk` now refuses (Zane Hambly, 2026-08-11)
