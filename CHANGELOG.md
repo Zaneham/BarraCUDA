@@ -60,6 +60,9 @@ Booth — Changelog
   was the module count rather than its own, so mem2reg moved one body over the
   next (Zane Hambly, 2026-08-18)
 
+- The Asian pricer takes its model parameters as arguments and reduces across
+  the block on device (Zane Hambly, 2026-08-18)
+
 ### Architecture
 
 - A run-side contract in `src/exec`, a variant flag with no target now errors,

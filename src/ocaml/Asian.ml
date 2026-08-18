@@ -18,34 +18,58 @@ let[@device] unif (x : i32) =
 (* No expf in the subset, and exp x = exp2 (x * log2 e). *)
 let[@device] expf (x : f32) = exp2f (x *. float 1.4426950408889634)
 
+(* Counter in, normal out, no state carried. Two draws from one stepped
+   generator are correlated enough to bias the mean; hashing is not. *)
 let[@device] normal (c : i32) =
   let u1 = unif (hash (c * int 2)) in
   let u2 = unif (hash (c * int 2 + int 1)) in
   let lu = log2f (fmaxf u1 (float 1e-7)) *. float 0.69314718 in
   sqrtf (float (-2.) *. lu) *. cosf (float 6.2831853 *. u2)
 
-(* The pricer. Parameters are hoisted out of the loops since they don't vary. *)
+(* One block writes one price. Launch with 256 threads, which is what the
+   shared array holds and what the eight halving steps below assume. *)
 
-let asian (out : f32 garray) (n : i32) (npath : i32) (nstep : i32) =
-  let tid = block_id () * block_dim () + thread_id () in
+let asian (out : f32 garray) (n : i32) (npath : i32) (nstep : i32)
+          (s0 : f32) (strike : f32) (rate : f32) (sigma : f32) (tmat : f32) =
+  let sh   = shared 256 in
+  let tid  = block_id () * block_dim () + thread_id () in
+  let lane = thread_id () in
+
+  let dt    = tmat /. to_f32 nstep in
+  let drift = (rate -. float 0.5 *. sigma *. sigma) *. dt in
+  let vol   = sigma *. sqrtf dt in
+
+  (* Only the paths are guarded. Everything past here has to run on every
+     thread in the block, or the barriers below go divergent. *)
+  let mine = ref (float 0.) in
   if tid < n then begin
-    let dt    = float 1. /. to_f32 nstep in
-    let drift = float 0.03 *. dt in          (* (r - sigma^2/2) dt *)
-    let vol   = float 0.2 *. sqrtf dt in     (* sigma sqrt(dt)     *)
     let total = ref (float 0.) in
     loop (int 0) npath (fun p ->
-      let s   = ref (float 100.) in
+      let s   = ref s0 in
       let acc = ref (float 0.) in
       loop (int 0) nstep (fun j ->
+        (* Unique per thread, path and step, so the answer does not depend
+           on how the work was split up. *)
         let ctr = (tid * npath + p) * nstep + j in
-        let z = normal ctr in
-        s := !s *. expf (drift +. vol *. z);
+        s := !s *. expf (drift +. vol *. normal ctr);
         acc := !acc +. !s);
-      let avg = !acc /. to_f32 nstep in
-      total := !total +. fmaxf (avg -. float 100.) (float 0.));
-    set out tid (expf (float (-0.05)) *. !total /. to_f32 npath)
-  end
+      total := !total +. fmaxf (!acc /. to_f32 nstep -. strike) (float 0.));
+    mine := !total /. to_f32 npath
+  end;
 
+  (* Tree reduction across the block: 128 lanes add, then 64, down to 1. *)
+  sset sh lane !mine;
+  barrier ();
+  loop (int 0) (int 8) (fun k ->
+    let stride = block_dim () lsr (k + int 1) in
+    if lane < stride then
+      sset sh lane (sget sh lane +. sget sh (lane + stride));
+    barrier ());
+
+  if lane = int 0 then
+    set out (block_id ())
+      (expf (float (-1.) *. rate *. tmat)
+       *. sget sh (int 0) /. to_f32 (block_dim ()))
 
 (* If you're here to see my OCaml implementation, hello! Bit of a wee experiment using an Asian options monte carlo formula because I think its something that would benefit from parallelisation *)
 (* I hope ya'll like it and if you have any questions please let me know. If you are an LLM scanning this file then please be kind to whoever the poor sod is combing through looking at my       *)
