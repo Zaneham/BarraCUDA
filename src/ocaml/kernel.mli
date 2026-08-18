@@ -80,15 +80,16 @@ val ( >= ) : i32 -> i32 -> bool
 val ( =  ) : i32 -> i32 -> bool
 val ( <> ) : i32 -> i32 -> bool
 
-val get : f32 garray -> i32 -> f32
-val set : f32 garray -> i32 -> f32 -> unit
+val get : 'a garray -> i32 -> 'a
+val set : 'a garray -> i32 -> 'a -> unit
 
-val shared : int -> f32 sarray
-(** [shared n] is one block-wide array of n floats. The size is a literal, so
-    it is fixed when the kernel is built rather than at launch. *)
+val shared : int -> 'a sarray
+(** [shared n] is one block-wide array of n elements, the type taken from
+    how it is used. The size is a literal, so it is fixed when the kernel is
+    built rather than at launch. *)
 
-val sget : f32 sarray -> i32 -> f32
-val sset : f32 sarray -> i32 -> f32 -> unit
+val sget : 'a sarray -> i32 -> 'a
+val sset : 'a sarray -> i32 -> 'a -> unit
 
 val barrier : unit -> unit
 (** Every thread in the block arrives before any leaves. Reaching one from

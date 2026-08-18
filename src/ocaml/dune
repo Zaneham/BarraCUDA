@@ -14,7 +14,7 @@
 (library
  (name kernels)
  (wrapped false)
- (modules vadd_k scale_k reduce_k clamp_k ops_k tile_k rng_k Asian)
+ (modules vadd_k scale_k reduce_k clamp_k ops_k tile_k rng_k ints_k Asian)
  (libraries kernel))
 
 (executable

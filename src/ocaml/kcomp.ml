@@ -19,6 +19,7 @@ let rec ty_of loc t =
      | "Kernel.i32", [] -> Bir.Int 32
      | "Kernel.f32", [] -> Bir.Float 32
      | "Kernel.garray", [e] -> Bir.Ptr (Bir.Global, ty_of loc e)
+     | "Kernel.sarray", [e] -> Bir.Ptr (Bir.Shared, ty_of loc e)
      | n, _ -> reject loc "type %s is not in the kernel subset" n)
   | _ -> reject loc "this type is not in the kernel subset"
 
@@ -178,10 +179,10 @@ and apply c loc f args =
   | "Kernel.sget", [arr; idx] ->
     let base = sbase c loc arr in
     let i = expr c idx in
+    let pty = ty_of arr.exp_loc arr.exp_type in
     stamp c loc;
-    let pty = Bir.Ptr (Bir.Shared, f32) in
     let p = Bir.gep c.m pty base i in
-    Bir.load c.m f32 p
+    Bir.load c.m (elem loc pty) p
 
   | "Stdlib.!", [r] ->
     (match cell c loc r with
@@ -276,9 +277,10 @@ and bound c e =
      | [n] ->
        (match n.exp_desc with
         | Texp_constant (Asttypes.Const_int k) when k > 0 ->
+          (* The element type comes from how the array is used, not from here. *)
+          let ety = elem e.exp_loc (ty_of e.exp_loc e.exp_type) in
           stamp c e.exp_loc;
-          let f32 = Bir.Float 32 in
-          Shared (Bir.shared_alloc c.m (Bir.Ptr (Bir.Shared, Bir.Arr (k, f32))))
+          Shared (Bir.shared_alloc c.m (Bir.Ptr (Bir.Shared, Bir.Arr (k, ety))))
         | _ -> reject n.exp_loc "shared takes a positive literal size")
      | _ -> reject e.exp_loc "shared takes one argument")
   | _ -> Val (expr c e)
@@ -379,12 +381,12 @@ and effect_ c loc f args =
   | "Kernel.sset", [arr; idx; v] ->
     let base = sbase c loc arr in
     let i = expr c idx in
+    let pty = ty_of arr.exp_loc arr.exp_type in
     stamp c loc;
-    let pty = Bir.Ptr (Bir.Shared, Bir.Float 32) in
     let p = Bir.gep c.m pty base i in
     let value = expr c v in
     stamp c loc;
-    Bir.store c.m (Bir.Float 32) value p
+    Bir.store c.m (elem loc pty) value p
 
   | "Kernel.barrier", [_] -> stamp c loc; Bir.barrier c.m
 

@@ -93,7 +93,8 @@ TH_REG("ocm", 4, "if/else lowers with an fcmp", ocm04)
 static void ocm05(void)
 {
     static const char *const ks[] = { "vadd_k", "scale_k", "reduce_k",
-                                     "clamp_k", "ops_k", "tile_k", "rng_k", NULL };
+                                     "clamp_k", "ops_k", "tile_k", "rng_k",
+                                     "ints_k", NULL };
     char cmd[512];
 
     if (!have_kcomp()) SKIP("kcomp not built");
@@ -201,3 +202,17 @@ static void ocm10(void)
     }
 }
 TH_REG("ocm", 10, "device functions reach every backend", ocm10)
+
+/* get and set take the element type from the array. They were pinned to f32,
+ * so an integer array could be declared and passed but never read. */
+static void ocm11(void)
+{
+    if (!have_kcomp()) SKIP("kcomp not built");
+    check_kernel("ints_k");
+    if (nfail) return;
+    CHNE(strstr(got, "shared_alloc ptr<shared, [64 x i32]>"), NULL);
+    CHNE(strstr(got, "gep ptr<shared, i32>"), NULL);
+    CHNE(strstr(got, "gep ptr<global, i32>"), NULL);
+    CHNE(strstr(got, "gep ptr<global, f32>"), NULL);
+}
+TH_REG("ocm", 11, "arrays carry their own element type", ocm11)

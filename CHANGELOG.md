@@ -63,6 +63,10 @@ Booth — Changelog
 - The Asian pricer takes its model parameters as arguments and reduces across
   the block on device (Zane Hambly, 2026-08-18)
 
+- `get`, `set`, `sget` and `sset` take the element type from the array rather
+  than assuming f32, so an integer array is usable and not merely declarable
+  (Zane Hambly, 2026-08-18)
+
 ### Architecture
 
 - A run-side contract in `src/exec`, a variant flag with no target now errors,

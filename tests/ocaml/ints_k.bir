@@ -1,0 +1,47 @@
+; Booth IR
+
+func @ints(ptr<global, i32> %0, ptr<global, i32> %1, ptr<global, f32> %2, i32 %3) __global__ {
+entry:
+    %4 = shared_alloc ptr<shared, [64 x i32]>  ; line 7
+    %5 = block_id.x  ; line 8
+    %6 = block_dim.x  ; line 8
+    %7 = mul i32 %5, %6  ; line 8
+    %8 = thread_id.x  ; line 8
+    %9 = add i32 %7, %8  ; line 8
+    %10 = thread_id.x  ; line 9
+    %11 = gep ptr<shared, i32>, %4, %10  ; line 10
+    store i32 0, %11  ; line 10
+    barrier  ; line 11
+    %14 = icmp slt i32 %9, %3  ; line 12
+    br_cond %14, if.then, if.end merge if.end  ; line 12
+
+if.then:
+    %16 = gep ptr<global, i32>, %0, %9  ; line 13
+    %17 = load i32, %16  ; line 13
+    %18 = add i32 %17, 1  ; line 13
+    %19 = gep ptr<shared, i32>, %4, %10  ; line 14
+    store i32 %18, %19  ; line 14
+    %21 = gep ptr<global, i32>, %1, %9  ; line 15
+    store i32 %18, %21  ; line 15
+    %23 = gep ptr<global, f32>, %2, %9  ; line 16
+    %24 = sitofp i32 %18 to f32  ; line 16
+    %25 = fmul f32 %24, 0.5  ; line 16
+    store f32 %25, %23  ; line 16
+    br if.end  ; line 16
+
+if.end:
+    barrier  ; line 18
+    %29 = icmp eq i32 %10, 0  ; line 19
+    br_cond %29, if.then.1, if.end.1 merge if.end.1  ; line 19
+
+if.then.1:
+    %31 = block_id.x  ; line 19
+    %32 = gep ptr<global, i32>, %1, %31  ; line 19
+    %33 = gep ptr<shared, i32>, %4, 0  ; line 19
+    %34 = load i32, %33  ; line 19
+    store i32 %34, %32  ; line 19
+    br if.end.1  ; line 19
+
+if.end.1:
+    ret void  ; line 19
+}
