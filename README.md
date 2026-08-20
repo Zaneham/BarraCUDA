@@ -1,8 +1,8 @@
 <p align="center">
   <img src="Booth_logo.png" alt="Booth logo" width="400">
+  <br>
+  <h1>Booth</h1>
 </p>
-
-# Booth
 
 **Booth** is an open-source CUDA, HIP and Triton compiler targeting multiple GPU architectures, either natively by emitting machine code or as close as we can possibly get. Now with distinctly less fish.
 
