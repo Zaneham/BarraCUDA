@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="Booth_logo.png" alt="Booth logo" width="400">
+</p>
+
 # Booth
 
 **Booth** is an open-source CUDA, HIP and Triton compiler targeting multiple GPU architectures, either natively by emitting machine code or as close as we can possibly get. Now with distinctly less fish.
@@ -103,6 +107,7 @@ Based in New Zealand, where it's already tomorrow and the GPUs are just as confu
 - **Low Level** for the Zero to Hero C course and the YouTube channel. That's where I learnt C.
 - **Abe Kornelis** for being an amazing teacher. His work on the [z390 Portable Mainframe Assembler](https://github.com/z390development/z390) project is well worth your time.
 - To the people who've sent messages of kindness and critique, thank you from a forever student and a happy hobbyist.
+- **Lola**, my sister, for the logo :-)
 - My Granny, Grandad, Nana and Baka. Love you x
 
 *He aha te mea nui o te ao. He tāngata, he tāngata, he tāngata.*
