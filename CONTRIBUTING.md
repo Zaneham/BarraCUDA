@@ -215,9 +215,7 @@ A note on the Makefile: header dependencies aren't auto-tracked. If you change a
 
 ## Branching & Pull Requests
 
-Ongoing work happens on feature branches off `master`. The currently active long-running branch is `triton-apple-mega` (Triton frontend, shape inference, SYSPRINT and adjacent work). Pull requests merge into `master` via **squash merge** so the main branch history stays readable: one squashed commit per landed feature, rather than the full back-and-forth of the development branch.
-
-For external contributors: fork the repo, make a branch off `master`, send a PR. Multiple small PRs are easier to land than one large PR. If you're working on something speculative, mark the PR as a draft and we can discuss the approach before it's review-ready.
+fork the repo, make a branch off `master`, send a PR. Multiple small PRs are easier to land than one large PR. If you're working on something speculative, mark the PR as a draft and we can discuss the approach before it's review-ready.
 
 Commits before PR merge can have any history shape you like: squash, rebase, merge commits, all fine. The squash at merge time flattens it all down. Write the commit message you want to see in `master`'s log.
 
@@ -235,8 +233,7 @@ tests, and so on). Follow the existing shape:
 
 Lead with the PR number where there is one, keep numbered entries in ascending
 order, and credit yourself with the date the work landed. The rest of the file
-is organised by date, so entries carry one too. Credit reviewers and bug
-reporters as well where they shaped the change.
+is organised by date, so entries carry one too. Credit reviewers and bug reporters as well where they shaped the change.
 
 At release time these entries get gathered into the prose summary that heads
 each dated section, so write them as if someone else will read them cold.
