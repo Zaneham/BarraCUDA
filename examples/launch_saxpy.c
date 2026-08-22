@@ -7,7 +7,7 @@
  *         ./launch_saxpy test.hsaco
  */
 
-#include "bc_runtime.h"
+#include "booth/bc_runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>

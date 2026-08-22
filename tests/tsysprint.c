@@ -1,7 +1,7 @@
 /* tsysprint.c -- tests for the SYSPRINT runtime. */
 
 #include "tharns.h"
-#include "sysprint.h"
+#include "booth/sysprint.h"
 #include <string.h>
 
 static uint8_t buf_storage[8192];

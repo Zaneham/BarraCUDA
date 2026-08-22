@@ -23,7 +23,7 @@ CFLAGS  = -std=c99 -MMD -MP -Wall -Wextra -pedantic -O2 \
           -Wdouble-promotion -Wswitch-enum -Wwrite-strings \
           -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fPIE $(CF_PROT) \
           $(GCC_ONLY) \
-          -Isrc -Isrc/fe -Isrc/ir -Isrc/tdf -Isrc/backend -Isrc/amdgpu -Isrc/tensix -Isrc/nvidia -Isrc/metal -Isrc/intel -Isrc/triton -Isrc/cpu -Isrc/runtime -Isrc/build \
+          -Isrc -Isrc/fe -Isrc/ir -Isrc/tdf -Isrc/backend -Isrc/amdgpu -Isrc/tensix -Isrc/nvidia -Isrc/metal -Isrc/intel -Isrc/triton -Isrc/cpu -Isrc/build -Iruntime/include \
           $(COVFLAGS)
 LDFLAGS = -pie
 LIBS    = -lm
@@ -45,10 +45,11 @@ UNAME_S := $(shell uname -s 2>/dev/null)
 # toolchain rather than a stale tree. One object dir per host, no collision.
 OBJDIR  := build/$(UNAME_S)
 
-HOSTRT   = $(OBJDIR)/src/nvidia/nv_rt.o $(OBJDIR)/src/runtime/lf_gpu.o
+HOSTRT   = $(OBJDIR)/runtime/host/cuda/nv_rt.o \
+           $(OBJDIR)/runtime/host/cuda/lf_gpu.o
 DL_LIB   =
 ifeq ($(UNAME_S),Linux)
-  HOSTRT += $(OBJDIR)/src/runtime/bc_runtime.o
+  HOSTRT += $(OBJDIR)/runtime/host/hsa/bc_runtime.o
   DL_LIB  = -ldl
 endif
 
@@ -58,7 +59,7 @@ endif
 # links one runtime or the other depending on the target.
 ALT_RT =
 ifeq ($(UNAME_S),Linux)
-  ALT_RT = $(OBJDIR)/src/runtime/lf_gpu_hsa.o
+  ALT_RT = $(OBJDIR)/runtime/host/hsa/lf_gpu_hsa.o
 endif
 
 SOURCES = src/main.c src/kauri_impl.c \
@@ -132,8 +133,8 @@ $(OBJDIR)/%.o: %.c
 
 # ---- Test Suite ----
 TCFLAGS = -std=c99 -MMD -MP -D_POSIX_C_SOURCE=200809L -Wall -Wextra -O0 -g \
-          -Isrc -Isrc/fe -Isrc/ir -Isrc/tdf -Isrc/backend -Isrc/amdgpu -Isrc/tensix -Isrc/nvidia -Isrc/metal -Isrc/intel -Isrc/triton -Isrc/cpu -Isrc/runtime -Isrc/build \
-          -Isrc/mlir -Iruntime $(COVFLAGS)
+          -Isrc -Isrc/fe -Isrc/ir -Isrc/tdf -Isrc/backend -Isrc/amdgpu -Isrc/tensix -Isrc/nvidia -Isrc/metal -Isrc/intel -Isrc/triton -Isrc/cpu -Isrc/build \
+          -Isrc/mlir -Iruntime/include $(COVFLAGS)
 TSRC    = tests/tmain.c tests/tsmoke.c tests/tcomp.c tests/tenc.c \
           tests/ttabs.c tests/ttypes.c tests/terrs.c tests/tphase.c \
           tests/tdce.c \
@@ -166,10 +167,10 @@ TOBJS   = $(TSRC:%.c=$(OBJDIR)/%.o)
 COBJS   = $(OBJDIR)/src/kauri_impl.o $(OBJDIR)/src/ir/bir.o $(OBJDIR)/src/ir/bir_print.o $(OBJDIR)/src/ir/bir_lower.o $(OBJDIR)/src/ir/bir_mem2reg.o $(OBJDIR)/src/ir/bir_cfold.o $(OBJDIR)/src/ir/bir_dce.o $(OBJDIR)/src/ir/bir_struct.o $(OBJDIR)/src/ir/bir_insert.o $(OBJDIR)/src/ir/bir_sroa.o $(OBJDIR)/src/ir/bir_inline.o \
           $(OBJDIR)/src/tdf/tdf.o $(OBJDIR)/src/tdf/tdf_lower.o $(OBJDIR)/src/tdf/tdf_fission.o $(OBJDIR)/src/tdf/tdf_place.o $(OBJDIR)/src/tdf/tdf_noc.o \
           $(OBJDIR)/src/tensix/rv_enc.o $(OBJDIR)/src/tensix/rv_buf.o $(OBJDIR)/src/tensix/rv_elf.o $(OBJDIR)/src/tensix/rv_isel.o $(OBJDIR)/src/tensix/noc.o $(OBJDIR)/src/tensix/emit.o \
-          $(OBJDIR)/runtime/soft_fp.o $(OBJDIR)/runtime/sysprint.o \
+          $(OBJDIR)/runtime/device/soft_fp.o $(OBJDIR)/runtime/host/sysprint.o \
           $(OBJDIR)/src/amdgpu/amd_rplan.o $(OBJDIR)/src/amdgpu/encode.o $(OBJDIR)/src/amdgpu/enc_tab.o $(OBJDIR)/src/amdgpu/isel.o $(OBJDIR)/src/amdgpu/emit.o $(OBJDIR)/src/amdgpu/ra_ssa.o $(OBJDIR)/src/amdgpu/sched.o $(OBJDIR)/src/amdgpu/verify.o \
           $(OBJDIR)/src/fe/bc_err.o $(OBJDIR)/src/fe/lexer.o $(OBJDIR)/src/fe/parser.o $(OBJDIR)/src/fe/preproc.o $(OBJDIR)/src/fe/sema.o \
-          $(OBJDIR)/src/runtime/bc_abend.o $(HOSTRT) \
+          $(OBJDIR)/runtime/host/bc_abend.o $(HOSTRT) \
           $(OBJDIR)/src/backend/backends.o \
           $(OBJDIR)/src/amdgpu/amd_be.o $(OBJDIR)/src/nvidia/nv_be.o \
           $(OBJDIR)/src/tensix/tensix_be.o $(OBJDIR)/src/cpu/cpu_be.o \
@@ -204,7 +205,7 @@ $(OBJDIR)/tests/%.o: tests/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(TCFLAGS) -c $< -o $@
 
-$(OBJDIR)/src/runtime/%.o: src/runtime/%.c
+$(OBJDIR)/runtime/host/%.o: runtime/host/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(TCFLAGS) -c $< -o $@
 
@@ -217,7 +218,7 @@ $(OBJDIR)/src/nvidia/nv_rt.o: src/nvidia/nv_rt.c
 # Target-side runtime (soft-float, etc). Built with host gcc here
 # so we can host-test the IEEE math; Booth will compile the
 # same .c files separately when generating kernel ELFs.
-$(OBJDIR)/runtime/%.o: runtime/%.c
+$(OBJDIR)/runtime/device/%.o: runtime/device/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(TCFLAGS) -c $< -o $@
 

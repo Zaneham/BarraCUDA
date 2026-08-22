@@ -1,4 +1,4 @@
-#include "soft_fp.h"
+#include "booth/soft_fp.h"
 #include "soft_fp_internal.h"
 
 /* IEEE-754 fp32 soft-float; libgcc-named entry points for lowered float code.

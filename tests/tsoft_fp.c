@@ -10,8 +10,8 @@
  * removing the SKIPs is the regression-proof migration path. */
 
 #include "tharns.h"
-#include "soft_fp.h"
-#include "soft_fp_internal.h"
+#include "booth/soft_fp.h"
+#include "../runtime/device/soft_fp_internal.h"
 #include <math.h>
 #include <string.h>
 

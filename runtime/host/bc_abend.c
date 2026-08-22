@@ -27,8 +27,8 @@
 #include <windows.h>
 #endif
 
-#include "bc_runtime.h"
-#include "bc_abend.h"
+#include "booth/bc_runtime.h"
+#include "booth/bc_abend.h"
 #include <string.h>
 #include <time.h>
 #include <inttypes.h>

@@ -6,7 +6,7 @@
  * completes. Single-thread emit keeps the demo small; the
  * per-thread concurrent-atomicAdd path is also supported. */
 
-#include "sysprint_device.h"
+#include "booth/sysprint_device.h"
 #include "sysprint_classes.h"
 
 __global__ void sp_demo(bc_sp_buf_t *sp, float *c,

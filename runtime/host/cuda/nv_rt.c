@@ -8,7 +8,7 @@
  * dances. You just... call a function. Revolutionary concept, really.
  * Almost makes you forget they won't show you the source code. */
 
-#include "nv_rt.h"
+#include "booth/nv_rt.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

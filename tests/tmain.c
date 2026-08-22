@@ -2,7 +2,7 @@
  * Runs tests in a sensible order, prints dots, judges silently. */
 
 #include "tharns.h"
-#include "bc_abend.h"
+#include "booth/bc_abend.h"
 #include "bc_err.h"
 
 /* ---- Storage ---- */
