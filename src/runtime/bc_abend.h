@@ -136,6 +136,9 @@ int  ab_dump(const ab_ctx_t *A, FILE *out);
 int  ab_slod(ab_ctx_t *A, const uint8_t *elf, uint32_t elf_sz);
 
 /* ABEND code to human-readable string. */
+typedef const char *(*ab_msg_fn)(uint16_t code);
+void ab_set_msg_lookup(ab_msg_fn fn);
+
 const char *ab_mstr(uint16_t code);
 
 #endif /* BARRACUDA_BC_ABEND_H */
