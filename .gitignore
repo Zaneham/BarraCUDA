@@ -148,6 +148,12 @@ CLAUDE.md
 /e2e_rv.elf
 /a_compute.bin
 /a_compute.ttinsn
+/nul_compute.bin
+/nul_compute.elf
+/nul_compute.ttinsn
+/nul_reader.elf
+/nul_writer.elf
+/tests/ocean/out/
 
 # gcov instrumentation and the reports make coverage builds from it
 *.gcda
