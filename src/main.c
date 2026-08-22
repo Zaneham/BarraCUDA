@@ -234,6 +234,7 @@ static void usage(const char *prog)
         "                only for now; soft-float runtime not yet linked.\n"
         "  --no-mem2reg  Skip mem2reg optimization pass\n"
         "  --no-cfold    Skip constant folding\n"
+        "  --no-sroa     Skip scalar replacement of aggregates\n"
         "  --no-dce      Skip dead code elimination\n"
         "  --no-sched    Skip instruction scheduling\n"
         "  --sema        Run semantic analysis and dump types\n"
@@ -265,7 +266,7 @@ static void usage(const char *prog)
         "                backend (--cpu, --amdgpu-bin, --nvidia-ptx). tl.dot matmul runs.\n"
         "  --cpu         x86-64 host backend; emits a normal object you can link and run\n"
         "  --rv64        RV64IMFD backend; emits a Linux ELF object (run under qemu-riscv64)\n"
-        "  --metal       Compile to Apple Metal Shading Language (stub)\n"
+        "  --metal       Compile to Apple Metal Shading Language\n"
         "  --intel-spirv Compile to SPIR-V for Intel Arc Xe (stub)\n"
         "  --xe-lpg      Target Xe-LPG (Arc / integrated)\n"
         "  --xe-hpg      Target Xe-HPG (Alchemist, Battlemage) [default]\n"
@@ -551,13 +552,11 @@ int main(int argc, char *argv[])
     /* ---- TRITON NOTES -------------------------------------------------
      * The Triton frontend is a parallel input path that does not share
      * the C99 preprocessor or lexer. When --triton is on, we route the
-     * source through src/triton/ instead of through src/fe/. For now
-     * the Triton frontend stops at the lexer; --lex dumps the token
-     * stream and the program exits without going any further down the
-     * pipeline, because the parser, sema, and lowering passes are
-     * still stubs. The downstream backends do not need to know any of
-     * this is happening: once tn_lower starts producing BIR, the same
-     * BIR consumers we use for CUDA and HIP will accept it without
+     * source through src/triton/ instead of through src/fe/. --lex dumps
+     * the token stream and stops there; otherwise it runs the whole way
+     * through parse, sema and lowering. The downstream backends do not
+     * need to know any of this is happening: tn_lower hands them the same
+     * BIR the CUDA and HIP consumers already accept, without
      * comment. */
     if (mode_triton) {
         static tn_lex_t   tn_lex_state;
