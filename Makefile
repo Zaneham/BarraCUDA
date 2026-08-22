@@ -122,7 +122,14 @@ MLOBJECTS = $(VSOURCES:%.c=$(OBJDIR)/%.o) \
 $(MLOBJECTS): CFLAGS := $(VCFLAGS)
 TARGET  = kath
 
-all: $(TARGET) $(ALT_RT)
+# Host programs that link a vendor driver at run time: the examples and the
+# NVIDIA harness. Compiled but never linked here, so they keep meeting the
+# strict flags without libhsa or libcuda having to be present. Neither is a
+# trunner test; both carry their own main and want real hardware.
+EXAMPLE_SRC = $(wildcard examples/*.c)
+HOSTCHK     = $(OBJDIR)/tests/tnv_rt.o               $(patsubst examples/%.c,$(OBJDIR)/examples/%.o,$(EXAMPLE_SRC))
+
+all: $(TARGET) $(ALT_RT) $(HOSTCHK)
 
 $(TARGET): $(OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
@@ -209,9 +216,9 @@ $(OBJDIR)/runtime/host/%.o: runtime/host/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(TCFLAGS) -c $< -o $@
 
-# Explicit, so it beats the generic %.o rule: nv_rt needs the POSIX visibility
-# TCFLAGS carries, and its neighbours in src/nvidia are compiler files that don't.
-$(OBJDIR)/src/nvidia/nv_rt.o: src/nvidia/nv_rt.c
+hostchk: $(HOSTCHK)
+
+$(OBJDIR)/examples/%.o: examples/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(TCFLAGS) -c $< -o $@
 
@@ -307,4 +314,4 @@ clean:
 # linked in and the build silently disagrees with the source.
 -include $(OBJECTS:.o=.d) $(TOBJS:.o=.d) $(HOSTRT:.o=.d)
 
-.PHONY: all clean test repro mutate mutate-discover install uninstall coverage
+.PHONY: all clean test repro mutate mutate-discover install uninstall coverage hostchk
