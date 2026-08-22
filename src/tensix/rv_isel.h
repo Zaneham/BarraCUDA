@@ -4,7 +4,6 @@
 #include "barracuda.h"
 #include "bir.h"
 #include "rv_buf.h"
-#include "tdf.h"     /* for BC_ERR_TDF */
 
 /*
  * BIR -> RV32IM instruction selection for the Tenstorrent baby cores.

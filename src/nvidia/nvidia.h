@@ -7,7 +7,6 @@
  * NVIDIA hardware is not lost on us. Think of it as returning a library
  * book — to a library that charges admission and checks your bag. */
 
-#define BC_ERR_NVIDIA  -8
 
 /* ---- PTX Opcodes ---- */
 /* Tags for the text emitter, not real machine opcodes. PTX is already

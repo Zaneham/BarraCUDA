@@ -8,7 +8,6 @@
  * the Metal toolchain compiles that to AIR at load time. Does not emit AIR
  * or AGX bytecode directly. */
 
-#define BC_ERR_METAL    -8
 
 /* ---- Limits ---- */
 

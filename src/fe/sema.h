@@ -20,7 +20,6 @@
 #define SEMA_MAX_STRUCTS  128
 #define SEMA_MAX_FIELDS   16
 
-#define BC_ERR_SEMA       -6
 
 /* ---- Type System ---- */
 
@@ -91,7 +90,7 @@ typedef struct {
 
 /* ---- Context ---- */
 
-typedef struct {
+typedef struct sema_ctx_s {
     const parser_t  *P;
     const char      *src;
 

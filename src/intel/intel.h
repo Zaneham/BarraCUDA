@@ -18,7 +18,6 @@
  * that were not strictly meant to leak, and would buy us essentially
  * nothing that the driver was not already going to do on our behalf. */
 
-#define BC_ERR_INTEL    -9
 
 typedef enum {
     INTEL_TARGET_XE_LPG = 0,   /* Arc / integrated (Meteor Lake etc) */

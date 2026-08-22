@@ -2,10 +2,10 @@
 #define BARRACUDA_BIR_LOWER_H
 
 #include "bir.h"
-#include "parser.h"
-#include "sema.h"
 
-#define BC_ERR_LOWER -5
+struct parser_s;
+struct sema_ctx_s;
+
 
 /*
  * Lower AST to BIR. Device-side functions only.
@@ -14,8 +14,8 @@
  * sema may be NULL (fallback: everything treated as signed).
  * out_errs/out_nerrs: if non-NULL, receives lowering errors for display.
  */
-int bir_lower(const parser_t *P, uint32_t ast_root, bir_module_t *M,
-              const sema_ctx_t *sema,
+int bir_lower(const struct parser_s *P, uint32_t ast_root, bir_module_t *M,
+              const struct sema_ctx_s *sema,
               bc_error_t *out_errs, int *out_nerrs);
 
 #endif /* BARRACUDA_BIR_LOWER_H */

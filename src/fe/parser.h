@@ -4,7 +4,7 @@
 #include "ast.h"
 #include "token.h"
 
-typedef struct {
+typedef struct parser_s {
     const token_t  *tokens;
     uint32_t        num_tokens;
     uint32_t        pos;
