@@ -33,6 +33,9 @@ jobs:
                 notes would understand
                 (Your Name)
 
+          One entry per change, not one per file. A reorganisation and the
+          fixes that came with it is one line, not six.
+
           Small changes such as typo fixes or comment tidying do not need an
           entry. Apply the "no-changelog-needed" label to skip this check.
           ------------------------------------------------------------------
