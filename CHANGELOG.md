@@ -3,6 +3,39 @@ Booth — Changelog
 
 ## Unreleased
 
+### Runtime
+
+- the runtime is split by where it runs rather than by vendor. Host launchers
+  live under `runtime/host/{hsa,cuda}`, the Tensix soft-float under
+  `runtime/device`, and everything a consumer includes under
+  `runtime/include/booth`, so `#include "booth/nv_rt.h"` rather than reaching
+  into `src/`. `src/` is the compiler now (Zane Hambly, 2026-08-23)
+
+- abend text comes from a lookup the host registers, not from a direct call
+  into the compiler frontend. Unregistered, the runtime answers from its own
+  table, which is what lets it ship without `bc_err.o`
+  (Zane Hambly, 2026-08-23)
+
+### Build
+
+- `BC_ERR_*` codes all live in `barracuda.h` and no longer collide. `-5` had
+  been doing the work of `VERIFY`, `PREPROC` and `LOWER` at once, `-6` of
+  `AMDGPU` and `SEMA`, `-8` of `METAL` and `NVIDIA`. `PREPROC`, `LOWER`,
+  `SEMA` and `NVIDIA` have new values (Zane Hambly, 2026-08-23)
+
+- the examples and the NVIDIA harness are compiled on every build. Neither had
+  a Makefile rule, which is how the `--triton --cpu` gate stayed broken so
+  long, and `tests/tnv_rt.c` was not even tracked (Zane Hambly, 2026-08-23)
+
+- `tdf` and `tensix` no longer include each other, and `bir_lower.h` no longer
+  drags the frontend in behind it, so an AMD or NVIDIA build stops pulling a
+  Tensix header (Zane Hambly, 2026-08-23)
+
+- `--help` no longer calls `--metal` a stub; it is 838 lines of lowering and
+  `--intel-spirv` is the 52-line one. `--no-sroa` is listed
+  (Zane Hambly, 2026-08-23)
+
+
 ### Frontend
 
 - `kath --mlir` reads MLIR text, no LLVM in the path. Čertík's pure-C
