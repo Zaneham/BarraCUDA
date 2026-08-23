@@ -307,8 +307,11 @@ coverage:
 
 clean:
 	rm -rf $(OBJDIR) $(COVDIR)
-	rm -f $(TARGET) $(TARGET).exe trunner trunner.exe
+	rm -f $(TARGET) $(TARGET).exe trunner trunner.exe tnv_rt tnv_rt.exe
 	rm -rf coverage.txt coverage-html
+	rm -f *.hsaco *.ptx *.spv *.metal *.elf *.bin *.ttinsn *.o
+	rm -f *_host.cpp *_reader.cpp *_writer.cpp *_compute.cpp
+	rm -rf tests/ocean/out
 
 # Header deps from -MMD. Without these a header edit leaves stale objects
 # linked in and the build silently disagrees with the source.
