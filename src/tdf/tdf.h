@@ -3,7 +3,7 @@
 
 #include "barracuda.h"
 #include "bir.h"
-#include "rv_buf.h"     /* rv_buf_t, for the CB-arc emitter */
+struct rv_buf_s;
 
 /*
  * Tile DataFlow IR.
@@ -29,7 +29,6 @@
 #define TD_BAD_ID       0xFFFFu /* returned by builders on overflow     */
 
 /* TDF-layer error code, parallel to BC_ERR_TRITON in triton.h. */
-#define BC_ERR_TDF      -11
 
 /* ---- Wormhole L1 placement constants ----
  *
@@ -355,8 +354,8 @@ int       td_place_l1(td_mod_t *M);
  */
 uint64_t  td_noc_addr(uint8_t x, uint8_t y, uint64_t local);
 int       td_noc_orchestrate(td_mod_t *M);
-int       td_emit_cb_arc(td_mod_t *M, const td_arc_t *a, rv_buf_t *code);
-int       td_emit_dma_loop(rv_buf_t *code, int is_write,
+int       td_emit_cb_arc(td_mod_t *M, const td_arc_t *a, struct rv_buf_s *code);
+int       td_emit_dma_loop(struct rv_buf_s *code, int is_write,
                            uint32_t dram_arg_slot, uint32_t ntiles_arg_slot,
                            uint32_t l1_buf, uint32_t depth,
                            uint32_t dram_mid, uint32_t l1_mid,

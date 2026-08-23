@@ -1,7 +1,7 @@
 /* sysprint.c -- structured kernel output routing.
  * Class table and sink registry are file-scope singletons, one set per process. */
 
-#include "sysprint.h"
+#include "booth/sysprint.h"
 
 #include <string.h>
 #include <stdarg.h>

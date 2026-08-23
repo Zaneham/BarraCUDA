@@ -2,6 +2,8 @@
  * Runs tests in a sensible order, prints dots, judges silently. */
 
 #include "tharns.h"
+#include "booth/bc_abend.h"
+#include "bc_err.h"
 
 /* ---- Storage ---- */
 
@@ -269,6 +271,8 @@ static void usage(void)
 
 int main(int argc, char *argv[])
 {
+    ab_set_msg_lookup(ab_afmt);
+
     const char *filter_fam  = NULL;
     const char *filter_test = NULL;
     int list_mode = 0;

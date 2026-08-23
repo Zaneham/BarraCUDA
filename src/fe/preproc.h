@@ -11,7 +11,6 @@
  * Output: single expanded source buffer ready for lexer.
  */
 
-#define BC_ERR_PREPROC      -5
 
 #define PP_MAX_MACROS       2048
 #define PP_MAX_PARAMS       16

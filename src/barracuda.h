@@ -45,6 +45,16 @@
 #define BC_ERR_PARSE       -3
 #define BC_ERR_OVERFLOW    -4
 #define BC_ERR_VERIFY      -5
+#define BC_ERR_AMDGPU      -6
+#define BC_ERR_TENSIX      -7
+#define BC_ERR_METAL       -8
+#define BC_ERR_INTEL       -9
+#define BC_ERR_TRITON      -10
+#define BC_ERR_TDF         -11
+#define BC_ERR_PREPROC     -12
+#define BC_ERR_LOWER       -13
+#define BC_ERR_SEMA        -14
+#define BC_ERR_NVIDIA      -15
 
 typedef struct {
     uint32_t line;

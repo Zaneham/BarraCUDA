@@ -5,8 +5,8 @@
  * Kernels are PTX on disk, so we resolve the path at load time rather than
  * lean on the static registrar the CUDA runtime links in. */
 
-#include "lf_gpu.h"
-#include "nv_rt.h"
+#include "booth/lf_gpu.h"
+#include "booth/nv_rt.h"
 
 #include <stdio.h>
 #include <stdlib.h>

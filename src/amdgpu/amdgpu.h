@@ -12,7 +12,6 @@
  * Built with the quiet confidence of someone who reads ISA manuals for fun.
  */
 
-#define BC_ERR_AMDGPU   -6
 
 /* ---- Target Constants ---- */
 

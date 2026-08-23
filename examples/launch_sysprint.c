@@ -14,8 +14,8 @@
  * the kernel as part of the kernarg block, dispatch, drain on
  * return. */
 
-#include "bc_runtime.h"
-#include "sysprint.h"
+#include "booth/bc_runtime.h"
+#include "booth/sysprint.h"
 #include "sysprint_classes.h"
 
 #include <stdio.h>

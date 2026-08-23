@@ -5,8 +5,8 @@
  * diagnostic machinery is pure C and testable anywhere. */
 
 #include "tharns.h"
-#include "bc_runtime.h"
-#include "bc_abend.h"
+#include "booth/bc_runtime.h"
+#include "booth/bc_abend.h"
 #include "bc_err.h"
 #include <string.h>
 #include <stdlib.h>

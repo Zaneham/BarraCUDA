@@ -1,4 +1,6 @@
 #include "bir_lower.h"
+#include "parser.h"
+#include "sema.h"
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>

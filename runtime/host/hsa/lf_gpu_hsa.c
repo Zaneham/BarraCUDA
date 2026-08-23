@@ -15,8 +15,8 @@
  * offloads through here and comes back with the right answer.
  */
 
-#include "lf_gpu.h"
-#include "bc_runtime.h"
+#include "booth/lf_gpu.h"
+#include "booth/bc_runtime.h"
 
 #include <stdio.h>
 #include <stdlib.h>

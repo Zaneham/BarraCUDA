@@ -27,9 +27,8 @@
 #include <windows.h>
 #endif
 
-#include "bc_runtime.h"
-#include "bc_abend.h"
-#include "../fe/bc_err.h"
+#include "booth/bc_runtime.h"
+#include "booth/bc_abend.h"
 #include <string.h>
 #include <time.h>
 #include <inttypes.h>
@@ -55,13 +54,22 @@ static const struct { uint16_t code; const char *name; const char *desc; } ab_co
     { 0,       NULL,   NULL                          }
 };
 
+static ab_msg_fn g_msg_lookup;
+
+void ab_set_msg_lookup(ab_msg_fn fn)
+{
+    g_msg_lookup = fn;
+}
+
 const char *ab_mstr(uint16_t code)
 {
-    /* Delegate to bc_err.c's ab_afmt() which checks translations first,
-     * then compiled-in defaults. Our local ab_codes[] is the fallback
-     * for codes that bc_err.c doesn't know about — belt and braces. */
-    const char *xlat = ab_afmt(code);
-    if (xlat) return xlat;
+    /* A host that wants localised text registers a lookup; the compiler
+     * passes bc_err.c's ab_afmt. Unregistered, the local table answers,
+     * which is what lets the runtime ship without the frontend. */
+    if (g_msg_lookup) {
+        const char *xlat = g_msg_lookup(code);
+        if (xlat) return xlat;
+    }
     for (int i = 0; ab_codes[i].name; i++)
         if (ab_codes[i].code == code) return ab_codes[i].desc;
     return "UNKNOWN FAULT";

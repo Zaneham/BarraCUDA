@@ -8,7 +8,6 @@
  * execution, no branches, and a register that contains 0.8373.
  * ISA from sfpi-binutils + corsix.org. */
 
-#define BC_ERR_TENSIX   -7
 
 /* ---- Target Constants ---- */
 

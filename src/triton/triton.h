@@ -14,7 +14,6 @@
  * decorators other than @triton.jit, and almost none of the standard
  * library. */
 
-#define BC_ERR_TRITON   -10
 
 /* ---- Limits ----
  * Fixed pools, no malloc on the hot path. Sized like the C99

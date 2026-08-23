@@ -110,7 +110,6 @@ __pycache__/
 /tests/test_scratch_runner.hip
 /tests/test_scrmini_runner.hip
 /tests/test_struct_load.cu
-/tests/tnv_rt.c
 
 # Editor cruft
 *.swp

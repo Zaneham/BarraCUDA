@@ -3,8 +3,8 @@
 
 #ifdef __linux__
 
-#include "bc_runtime.h"
-#include "bc_abend.h"
+#include "booth/bc_runtime.h"
+#include "booth/bc_abend.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -739,7 +739,7 @@ int bc_dispatch(bc_device_t *dev, const bc_kernel_t *kern,
 
 /* Non-Linux stubs */
 
-#include "bc_runtime.h"
+#include "booth/bc_runtime.h"
 #include <stdio.h>
 #include <string.h>
 

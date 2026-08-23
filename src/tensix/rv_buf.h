@@ -15,7 +15,7 @@
 
 #define RV_BUF_MAX_WORDS  4096    /* 16 KiB of instruction storage */
 
-typedef struct {
+typedef struct rv_buf_s {
     uint32_t words[RV_BUF_MAX_WORDS];
     uint32_t n;                     /* count of words written */
 } rv_buf_t;
