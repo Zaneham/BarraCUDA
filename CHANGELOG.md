@@ -38,6 +38,11 @@ Booth — Changelog
 
 ### Frontend
 
+- llama.cpp's ggml-cuda preprocesses, all 67 files; `#pragma once` is
+  honoured, variadic and multi-line macro invocations expand, and an
+  expansion too big for the output buffer is E053 rather than an
+  unterminated buffer the lexer reads past (Zane Hambly, 2026-09-03)
+
 - `kath --mlir` reads MLIR text, no LLVM in the path. Čertík's pure-C
   reader vendored under `src/mlir/vendor` (mlir 826b69c9, corec a160199d),
   reached only through `src/mlir/mlir_fe.c` (Zane Hambly, 2026-08-11)

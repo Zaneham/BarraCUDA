@@ -48,7 +48,8 @@ static const char *bc_dflt[BC_EID_MAX] = {
     /* E050 */ "#include: cannot read '%s'",
     /* E051 */ "unknown directive: #%s",
     /* E052 */ "unterminated #if/#ifdef (missing %d #endif)",
-    /* E053-E069 */ NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+    /* E053 */ "preprocessor output overflow (max %d bytes)",
+    /* E054-E069 */ NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
 
     /* ---- Sema ---- */
     /* E070 */ "arrow on non-pointer",

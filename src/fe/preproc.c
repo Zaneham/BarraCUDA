@@ -82,18 +82,64 @@ static int pp_is_ident_char(char c)
     return pp_is_ident_start(c) || (c >= '0' && c <= '9');
 }
 
+/* Comments are gone before macros are seen, everywhere except here: a body was
+ * kept whole, so '#define S 5 // why' commented out every line that used S, and
+ * a joined invocation would lose everything after a // on its first line.
+ * A block comment left open is not this function's business. */
+static uint32_t stripc(char *s, uint32_t n)
+{
+    uint32_t r = 0, w = 0;
+    while (r < n) {
+        if (s[r] == '"' || s[r] == '\'') {
+            char q = s[r];
+            s[w++] = s[r++];
+            while (r < n && s[r] != q) {
+                if (s[r] == '\\' && r + 1 < n) s[w++] = s[r++];
+                s[w++] = s[r++];
+            }
+            if (r < n) s[w++] = s[r++];
+            continue;
+        }
+        if (s[r] == '/' && r + 1 < n && s[r+1] == '/') break;
+        if (s[r] == '/' && r + 1 < n && s[r+1] == '*') {
+            uint32_t e = r + 2;
+            while (e + 1 < n && !(s[e] == '*' && s[e+1] == '/')) e++;
+            if (e + 1 >= n) break;
+            s[w++] = ' ';
+            r = e + 2;
+            continue;
+        }
+        s[w++] = s[r++];
+    }
+    return w;
+}
+
 /* ---- Output helpers ---- */
+
+/* One byte of out_max is held back so the buffer can always be terminated;
+ * the lexer reads until NUL and a full buffer used to run it into whatever
+ * static followed. */
+static int pp_room(preproc_t *pp, uint32_t need)
+{
+    if (pp->out_len + need < pp->out_max) return 1;
+    if (!pp->ovflw) {
+        pp->ovflw = 1;
+        pp_error(pp, BC_E053, pp->out_max);
+    }
+    return 0;
+}
 
 static void pp_emit_char(preproc_t *pp, char c)
 {
-    if (pp->out_len < pp->out_max)
+    if (pp_room(pp, 1))
         pp->out[pp->out_len++] = c;
 }
 
 static void pp_emit_str(preproc_t *pp, const char *s, uint32_t len)
 {
-    for (uint32_t i = 0; i < len && pp->out_len < pp->out_max; i++)
-        pp->out[pp->out_len++] = s[i];
+    if (!pp_room(pp, len)) return;
+    memcpy(pp->out + pp->out_len, s, len);
+    pp->out_len += len;
 }
 
 /* ---- String pool ---- */
@@ -127,16 +173,25 @@ static int pp_define_macro(preproc_t *pp, const char *name, uint32_t name_len,
                            const char *body, uint32_t body_len,
                            int num_params,
                            const char params[][BC_MAX_IDENT],
-                           const uint32_t param_lens[])
+                           const uint32_t param_lens[],
+                           int varia)
 {
     /* Check for redefinition — replace body if exists */
     pp_macro_t *existing = pp_find_macro(pp, name, name_len);
     if (existing) {
+        /* A header seen twice redefines every macro in it identically. The
+         * pool has no free list, so storing that again is pure waste. */
+        if (existing->body_len == body_len &&
+            existing->num_params == (int16_t)num_params &&
+            existing->varia == (uint8_t)(varia != 0) &&
+            memcmp(pp->pool + existing->body_off, body, body_len) == 0)
+            return BC_OK;
         existing->body_off = pool_add(pp, body, body_len);
         existing->body_len = (uint16_t)body_len;
         existing->num_params = (int16_t)num_params;
+        existing->varia = (uint8_t)(varia != 0);
         for (int i = 0; i < num_params && i < PP_MAX_PARAMS; i++) {
-            existing->param_off[i] = (uint16_t)pool_add(pp, params[i], param_lens[i]);
+            existing->param_off[i] = pool_add(pp, params[i], param_lens[i]);
             existing->param_len[i] = (uint8_t)param_lens[i];
         }
         return BC_OK;
@@ -153,9 +208,10 @@ static int pp_define_macro(preproc_t *pp, const char *name, uint32_t name_len,
     m->body_off = pool_add(pp, body, body_len);
     m->body_len = (uint16_t)body_len;
     m->num_params = (int16_t)num_params;
+    m->varia = (uint8_t)(varia != 0);
 
     for (int i = 0; i < num_params && i < PP_MAX_PARAMS; i++) {
-        m->param_off[i] = (uint16_t)pool_add(pp, params[i], param_lens[i]);
+        m->param_off[i] = pool_add(pp, params[i], param_lens[i]);
         m->param_len[i] = (uint8_t)param_lens[i];
     }
     return BC_OK;
@@ -626,6 +682,20 @@ static int64_t pp_eval_expr(preproc_t *pp, const char *expr, uint32_t len)
 #define PP_ARG_BUF  1024
 #define PP_TMP_BUF  8192
 
+/* __VA_ARGS__ is the last parameter and it swallows every argument from its
+ * own position onwards, so a parameter reference covers a range, not one arg. */
+static int vlast(const pp_macro_t *m, int pi)
+{
+    return m->varia && pi >= 0 && pi == m->num_params - 1;
+}
+
+static int varg(const pp_macro_t *m, int pi, int nargs)
+{
+    if (pi < 0) return pi;
+    int end = vlast(m, pi) ? nargs : pi + 1;
+    return end > nargs ? nargs : end;
+}
+
 static uint32_t pp_expand_text(preproc_t *pp,
                                const char *in, uint32_t in_len,
                                char *out, uint32_t out_max,
@@ -843,12 +913,16 @@ static uint32_t pp_expand_text(preproc_t *pp,
                             break;
                         }
                     }
-                    if (pi >= 0 && pi < nargs) {
+                    int a0 = pi, a1 = varg(m, pi, nargs);
+                    if (pi >= 0 && a0 < a1) {
                         if (slen < PP_TMP_BUF) subst[slen++] = '"';
-                        for (uint32_t k = 0; k < arg_lens[pi] && slen < PP_TMP_BUF; k++) {
-                            if (args[pi][k] == '"' || args[pi][k] == '\\')
-                                if (slen < PP_TMP_BUF) subst[slen++] = '\\';
-                            if (slen < PP_TMP_BUF) subst[slen++] = args[pi][k];
+                        for (int p = a0; p < a1; p++) {
+                            if (p > a0 && slen < PP_TMP_BUF) subst[slen++] = ',';
+                            for (uint32_t k = 0; k < arg_lens[p] && slen < PP_TMP_BUF; k++) {
+                                if (args[p][k] == '"' || args[p][k] == '\\')
+                                    if (slen < PP_TMP_BUF) subst[slen++] = '\\';
+                                if (slen < PP_TMP_BUF) subst[slen++] = args[p][k];
+                            }
                         }
                         if (slen < PP_TMP_BUF) subst[slen++] = '"';
                     }
@@ -868,9 +942,13 @@ static uint32_t pp_expand_text(preproc_t *pp,
                             break;
                         }
                     }
-                    if (pi >= 0 && pi < nargs) {
-                        for (uint32_t k = 0; k < arg_lens[pi] && slen < PP_TMP_BUF; k++)
-                            subst[slen++] = args[pi][k];
+                    int a0 = pi, a1 = varg(m, pi, nargs);
+                    if (pi >= 0 && (pi < nargs || vlast(m, pi))) {
+                        for (int p = a0; p < a1; p++) {
+                            if (p > a0 && slen < PP_TMP_BUF) subst[slen++] = ',';
+                            for (uint32_t k = 0; k < arg_lens[p] && slen < PP_TMP_BUF; k++)
+                                subst[slen++] = args[p][k];
+                        }
                     } else {
                         for (uint32_t k = ps; k < ps + plen && slen < PP_TMP_BUF; k++)
                             subst[slen++] = body[k];
@@ -940,6 +1018,7 @@ static void pp_dir_define(preproc_t *pp)
     char params[PP_MAX_PARAMS][BC_MAX_IDENT];
     uint32_t param_lens[PP_MAX_PARAMS];
     int num_params = -1; /* -1 = object-like */
+    int varia = 0;
 
     if (!pp_at_end(pp) && pp_cur(pp) == '(') {
         num_params = 0;
@@ -949,6 +1028,15 @@ static void pp_dir_define(preproc_t *pp)
         if (!pp_at_end(pp) && pp_cur(pp) != ')') {
             while (!pp_at_end(pp) && num_params < PP_MAX_PARAMS) {
                 pp_skip_hspace(pp);
+                if (pp_cur(pp) == '.' && pp_peek(pp, 1) == '.' &&
+                    pp_peek(pp, 2) == '.') {
+                    pp_advance(pp); pp_advance(pp); pp_advance(pp);
+                    memcpy(params[num_params], "__VA_ARGS__", 11);
+                    param_lens[num_params] = 11;
+                    num_params++;
+                    varia = 1;
+                    break;
+                }
                 if (!pp_is_ident_start(pp_cur(pp))) break;
                 uint32_t plen = pp_read_ident(pp, params[num_params], BC_MAX_IDENT);
                 param_lens[num_params] = plen;
@@ -961,7 +1049,12 @@ static void pp_dir_define(preproc_t *pp)
                     break;
             }
         }
-        pp_skip_hspace(pp);
+        /* Anything left before the ')' is a parameter list this preprocessor
+         * does not understand. Skipping it beats leaving it in the body,
+         * which is how '#define F(...)' used to expand to '...)'. */
+        KA_GUARD(g, PP_LINE_BUF);
+        while (!pp_at_end(pp) && pp_cur(pp) != ')' && pp_cur(pp) != '\n' && g--)
+            pp_advance(pp);
         if (!pp_at_end(pp) && pp_cur(pp) == ')')
             pp_advance(pp);
     }
@@ -971,13 +1064,15 @@ static void pp_dir_define(preproc_t *pp)
     /* Collect body (rest of logical line) */
     char body[PP_EXPAND_BUF];
     uint32_t body_len = pp_collect_line(pp, body, PP_EXPAND_BUF);
+    body_len = stripc(body, body_len);
 
     /* Trim trailing whitespace from body */
     while (body_len > 0 && (body[body_len-1] == ' ' || body[body_len-1] == '\t'))
         body_len--;
 
     pp_define_macro(pp, name, name_len, body, body_len,
-                    num_params, (const char (*)[BC_MAX_IDENT])params, param_lens);
+                    num_params, (const char (*)[BC_MAX_IDENT])params, param_lens,
+                    varia);
 }
 
 static void pp_dir_undef(preproc_t *pp)
@@ -1041,9 +1136,31 @@ static void pp_dir_error(preproc_t *pp)
     pp_error(pp, BC_E047, msg);
 }
 
+/* ---- #pragma once ---- */
+
+static int once_has(const preproc_t *pp, const char *path)
+{
+    for (uint32_t i = 0; i < pp->n_once; i++)
+        if (strcmp(pp->once[i], path) == 0) return 1;
+    return 0;
+}
+
+/* A full table only means the header gets read again, which is what every
+ * header did before this existed. Slower, never wrong. */
+static void once_add(preproc_t *pp, const char *path)
+{
+    if (once_has(pp, path)) return;
+    if (pp->n_once >= PP_MAX_ONCE) return;
+    snprintf(pp->once[pp->n_once++], BC_MAX_PATH, "%s", path);
+}
+
 static void pp_dir_pragma(preproc_t *pp)
 {
-    /* Just skip the line — could emit as a comment later */
+    pp_skip_hspace(pp);
+    if (pp->pos + 4 <= pp->src_len &&
+        memcmp(pp->src + pp->pos, "once", 4) == 0 &&
+        !pp_is_ident_char(pp_peek(pp, 4)))
+        once_add(pp, pp->filename);
     pp_skip_to_eol(pp);
 }
 
@@ -1161,6 +1278,9 @@ static void pp_dir_include(preproc_t *pp)
         return;
     }
 
+    if (once_has(pp, fullpath))
+        return;
+
     /* Guard against include depth overflow */
     if (pp->file_depth >= PP_MAX_FILE_DEPTH) {
         pp_error(pp, BC_E049, PP_MAX_FILE_DEPTH);
@@ -1207,6 +1327,57 @@ static int pp_pop_file(preproc_t *pp)
     snprintf(pp->filename, BC_MAX_PATH, "%s", fe->saved_filename);
     return 1;
 }
+
+/* ---- Multi-line macro invocations ---- */
+
+/* Expansion runs a line at a time, so an argument list that opens on one line
+ * and closes on a later one has to be joined first. True when the line ends
+ * inside the argument list of a function-like macro. */
+static int ocall(preproc_t *pp, const char *s, uint32_t n)
+{
+    int depth = 0;
+    int bcmt = pp->in_bcmt;
+    uint32_t i = 0;
+
+    while (i < n) {
+        if (bcmt) {
+            if (s[i] == '*' && i + 1 < n && s[i+1] == '/') { bcmt = 0; i += 2; }
+            else i++;
+            continue;
+        }
+        if (s[i] == '/' && i + 1 < n && s[i+1] == '*') { bcmt = 1; i += 2; continue; }
+        if (s[i] == '/' && i + 1 < n && s[i+1] == '/') break;
+        if (s[i] == '"' || s[i] == '\'') {
+            char q = s[i++];
+            while (i < n && s[i] != q) {
+                if (s[i] == '\\' && i + 1 < n) i++;
+                i++;
+            }
+            i++;
+            continue;
+        }
+        if (depth > 0) {
+            if (s[i] == '(') depth++;
+            else if (s[i] == ')') depth--;
+            i++;
+            continue;
+        }
+        if (pp_is_ident_start(s[i])) {
+            uint32_t st = i;
+            while (i < n && pp_is_ident_char(s[i])) i++;
+            uint32_t j = i;
+            while (j < n && (s[j] == ' ' || s[j] == '\t')) j++;
+            if (j < n && s[j] == '(') {
+                pp_macro_t *m = pp_find_macro(pp, s + st, i - st);
+                if (m && m->num_params >= 0) { depth = 1; i = j + 1; }
+            }
+            continue;
+        }
+        i++;
+    }
+    return depth > 0;
+}
+
 
 /* ---- Main processing loop ---- */
 
@@ -1290,7 +1461,7 @@ static void pp_process_directive(preproc_t *pp)
 
 int pp_process(preproc_t *pp)
 {
-    while (!pp_at_end(pp) || pp->file_depth > 0) {
+    while ((!pp_at_end(pp) || pp->file_depth > 0) && !pp->ovflw) {
         /* If we've reached the end of an included file, pop the file stack */
         if (pp_at_end(pp)) {
             if (!pp_pop_file(pp))
@@ -1330,7 +1501,24 @@ int pp_process(preproc_t *pp)
         pp->pos = line_start;
         char line[PP_LINE_BUF];
         uint32_t llen = pp_collect_line(pp, line, PP_LINE_BUF);
+
+        uint32_t joins = 0;
+        KA_GUARD(g, PP_MAX_JOIN);
+        while (g-- && llen + 2 < PP_LINE_BUF && ocall(pp, line, llen)) {
+            uint32_t nl = pp_cur(pp) == '\n' ? 1u
+                        : (pp_cur(pp) == '\r' && pp_peek(pp, 1) == '\n') ? 2u : 0u;
+            if (nl == 0) break;
+            llen = stripc(line, llen);
+            for (uint32_t k = 0; k < nl; k++)
+                pp_advance(pp);
+            line[llen++] = ' ';
+            llen += pp_collect_line(pp, line + llen, PP_LINE_BUF - llen);
+            joins++;
+        }
+        if (joins) llen = stripc(line, llen);
+
         pp_expand_and_emit(pp, line, llen);
+        while (joins--) pp_emit_char(pp, '\n');
 
         if (!pp_at_end(pp) && pp_cur(pp) == '\n') {
             pp_emit_char(pp, '\n');
@@ -1338,14 +1526,17 @@ int pp_process(preproc_t *pp)
         }
     }
 
+    /* Abandoning the run leaves the include stack loaded, and every entry
+     * owns a malloc'd buffer. */
+    KA_GUARD(g, PP_MAX_FILE_DEPTH + 1);
+    while (g-- && pp_pop_file(pp)) { }
+
     /* Check for unterminated conditionals */
-    if (pp->cond_depth > 0) {
+    if (pp->cond_depth > 0 && !pp->ovflw) {
         pp_error(pp, BC_E052, pp->cond_depth);
     }
 
-    /* Null-terminate output */
-    if (pp->out_len < pp->out_max)
-        pp->out[pp->out_len] = '\0';
+    pp->out[pp->out_len < pp->out_max ? pp->out_len : pp->out_max - 1] = '\0';
 
     return pp->num_errors > 0 ? BC_ERR_PREPROC : BC_OK;
 }
@@ -1385,5 +1576,5 @@ int pp_define(preproc_t *pp, const char *name, const char *value)
     uint32_t nlen = (uint32_t)strlen(name);
     uint32_t vlen = value ? (uint32_t)strlen(value) : 0;
     return pp_define_macro(pp, name, nlen, value ? value : "", vlen,
-                           -1, NULL, NULL);
+                           -1, NULL, NULL, 0);
 }

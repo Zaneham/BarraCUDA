@@ -10,6 +10,7 @@ typedef struct {
 } kw_entry_t;
 
 static const kw_entry_t keywords[] = {
+    {"_Noreturn",          TOK_NORETURN},
     {"__constant__",       TOK_CU_CONSTANT},
     {"__device__",         TOK_CU_DEVICE},
     {"__forceinline__",    TOK_CU_FORCEINLINE},
@@ -262,6 +263,7 @@ static const char *tok_names[] = {
     [TOK_CU_RESTRICT]   = "__restrict__",
     [TOK_CU_FORCEINLINE] = "__forceinline__",
     [TOK_CU_NOINLINE]   = "__noinline__",
+    [TOK_NORETURN]      = "_Noreturn",
     [TOK_EOF]           = "EOF",
     [TOK_ERROR]         = "ERROR",
 };

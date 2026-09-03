@@ -1,0 +1,2 @@
+# Options for ppovfl.cu. See test_diag.opt for the format.
+xfail all  expansion outgrows the output buffer, refusal is the point

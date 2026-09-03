@@ -54,6 +54,7 @@ typedef enum {
     BC_E050 = 50,  /* #include: cannot read '%s' */
     BC_E051 = 51,  /* unknown directive: #%s */
     BC_E052 = 52,  /* unterminated #if/#ifdef (missing %d #endif) */
+    BC_E053 = 53,  /* preprocessor output overflow (max %d bytes) */
 
     /* ---- Sema (E070-E099) ---- */
     BC_E070 = 70,  /* arrow on non-pointer */

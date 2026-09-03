@@ -18,6 +18,8 @@
 #define PP_MAX_COND_DEPTH   64
 #define PP_MAX_FILE_DEPTH   16
 #define PP_MAX_EXPAND_DEPTH 32
+#define PP_MAX_ONCE         256
+#define PP_MAX_JOIN         256
 #define PP_POOL_SIZE        (256 * 1024)   /* 256KB for macro names + bodies */
 #define PP_LINE_BUF         (64 * 1024)    /* 64KB max logical line */
 #define PP_EXPAND_BUF       (128 * 1024)   /* 128KB expansion workspace */
@@ -28,9 +30,10 @@ typedef struct {
     uint32_t body_off;
     uint16_t body_len;
     int16_t  num_params;   /* -1 = object-like, 0+ = function-like */
-    uint16_t param_off[PP_MAX_PARAMS];
+    uint8_t  varia;        /* last param is __VA_ARGS__ */
+    uint32_t param_off[PP_MAX_PARAMS];
     uint8_t  param_len[PP_MAX_PARAMS];
-} pp_macro_t;   /* ~56 bytes */
+} pp_macro_t;
 
 typedef struct {
     int  active;        /* currently emitting code? */
@@ -80,6 +83,10 @@ typedef struct {
     pp_file_entry_t file_stack[PP_MAX_FILE_DEPTH];
     int         file_depth;
 
+    /* Resolved paths of files that asked for #pragma once */
+    char        once[PP_MAX_ONCE][BC_MAX_PATH];
+    uint32_t    n_once;
+
     /* Expansion workspace */
     char        line_buf[PP_LINE_BUF];
     char        exp_buf[PP_EXPAND_BUF];
@@ -87,6 +94,10 @@ typedef struct {
     /* Block comment still open at end of line. Expansion runs per line, so
      * without this a macro named in comment prose gets substituted. */
     int         in_bcmt;
+
+    /* Output buffer filled. Reported once, then the run is abandoned; a
+     * truncated buffer is not a smaller program, it is a broken one. */
+    int         ovflw;
 
     /* Errors */
     bc_error_t  errors[BC_MAX_ERRORS];
