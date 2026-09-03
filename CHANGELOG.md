@@ -38,6 +38,17 @@ Booth — Changelog
 
 ### Frontend
 
+- `(a) + (b)` adds again; the parser treated any parenthesised identifier as a
+  type name without asking whether it named one, so the left operand vanished
+  into a cast with no diagnostic (Zane Hambly, 2026-09-03)
+
+- the cast test is now the type name registry, so the registry has to be
+  complete. Template type parameters, `using X = T` aliases and the type names
+  sema resolves without a typedef (`size_t`, `uint32_t`, `float4` and the rest)
+  all reach it. A compound literal through a typedef, `(pair){1, 2}`, parses
+  for the first time, and `sizeof(name)` where the name is a type reads as a
+  type rather than an expression (Zane Hambly, 2026-09-03)
+
 - `kath --mlir` reads MLIR text, no LLVM in the path. Čertík's pure-C
   reader vendored under `src/mlir/vendor` (mlir 826b69c9, corec a160199d),
   reached only through `src/mlir/mlir_fe.c` (Zane Hambly, 2026-08-11)

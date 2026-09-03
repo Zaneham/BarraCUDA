@@ -197,12 +197,41 @@ static const char *tntxt(const parser_t *P, uint32_t off)
                                : P->src + off;
 }
 
+/* Names sema resolves as types with no typedef anywhere in the source: the
+ * stdint spellings, the half formats, and the CUDA vector types. The parser
+ * has to recognise them too, or (uint32_t)-1 reads as a subtraction. Keep in
+ * step with resolve_typespec in sema.c. */
+static const char *const btnams[] = {
+    "size_t", "ptrdiff_t",
+    "int8_t", "uint8_t", "int16_t", "uint16_t",
+    "int32_t", "uint32_t", "int64_t", "uint64_t",
+    "half", "__half", "_Float16",
+    "nv_bfloat16", "__nv_bfloat16", "__bfloat16", "__hip_bfloat16",
+    "float2", "float3", "float4",
+    "double2", "double3", "double4",
+    "int2", "int3", "int4",
+    "uint2", "uint3", "uint4",
+    "char2", "char3", "char4",
+    "uchar2", "uchar3", "uchar4",
+    "short2", "short3", "short4",
+    "ushort2", "ushort3", "ushort4",
+    "long2", "long3", "long4",
+    "ulong2", "ulong3", "ulong4",
+    "longlong2", "ulonglong2",
+    "dim3"
+};
+
 static int is_reg_type(const parser_t *P, uint32_t off, uint16_t len)
 {
     const char *q = tntxt(P, off);
     for (int i = 0; i < P->num_tnames; i++) {
         if (P->tnames[i].len == len &&
             memcmp(tntxt(P, P->tnames[i].off), q, len) == 0)
+            return 1;
+    }
+    for (size_t i = 0; i < sizeof btnams / sizeof btnams[0]; i++) {
+        if (strlen(btnams[i]) == (size_t)len &&
+            memcmp(btnams[i], q, len) == 0)
             return 1;
     }
     return 0;
@@ -415,25 +444,22 @@ static int looks_like_cast(parser_t *P)
     if (t == TOK_IDENT) {
         const token_t *id = &P->tokens[P->pos + 1 < P->num_tokens
                                         ? P->pos + 1 : P->num_tokens - 1];
-        int known = is_reg_type(P, id->offset, (uint16_t)id->len);
-        if (peek_type(P, 2) == TOK_RPAREN) {
-            int after = peek_type(P, 3);
-            /* (ident) *expr — the classic C ambiguity. Could be
-             * cast+deref OR multiplication. Only treat as cast if
-             * we KNOW it's a type. Cost of getting this wrong: one
-             * GPU aperture fault and an afternoon of disassembly. */
-            if (after == TOK_STAR || after == TOK_AMP) {
-                if (known) return 1;
-            } else if (can_start_unary(after)) {
-                /* (ident)0, (ident)x etc. — no mul/deref ambiguity,
-                 * safe to assume cast (covers template params too) */
-                return 1;
-            }
-        }
         /* (ident*) or (ident**) — pointer cast to struct/vector type.
-         * Star is INSIDE the parens (part of the type), not ambiguous. */
+         * Star is INSIDE the parens (part of the type), not ambiguous, and
+         * a mismatch backtracks below, so a header typedef still casts. */
         if (peek_type(P, 2) == TOK_STAR)
             return 1;
+        /* (ident) anything — the classic C ambiguity. Every prefix operator
+         * that is also infix reaches here, so the only sound test is whether
+         * the name is a type in scope. Guess it and (a) + (b) quietly becomes
+         * b. Cost of getting this wrong: one GPU aperture fault and an
+         * afternoon of disassembly. */
+        if (peek_type(P, 2) == TOK_RPAREN &&
+            is_reg_type(P, id->offset, (uint16_t)id->len)) {
+            int after = peek_type(P, 3);
+            if (can_start_unary(after) || after == TOK_LBRACE)
+                return 1;
+        }
     }
     return 0;
 }
@@ -524,7 +550,10 @@ static uint32_t parse_primary(parser_t *P)
         uint32_t n = alloc_node(P, AST_SIZEOF);
         advance(P);
         if (match(P, TOK_LPAREN)) {
-            if (is_type_keyword(cur_type(P))) {
+            if (is_type_keyword(cur_type(P)) ||
+                (cur_type(P) == TOK_IDENT &&
+                 peek_type(P, 1) == TOK_RPAREN &&
+                 is_reg_type(P, cur(P)->offset, (uint16_t)cur(P)->len))) {
                 uint16_t sq = 0, sc = 0;
                 uint32_t inner = parse_type_spec(P, &sq, &sc);
                 while (cur_type(P) == TOK_STAR) advance(P);
@@ -1026,6 +1055,11 @@ static uint32_t parse_declaration(parser_t *P)
                 P->nodes[name].d.text.len = cur(P)->len;
                 advance(P);
                 add_child(P, tp, name);
+                /* A type parameter is a type name for the body below it,
+                 * so (T)x still casts once the registry is the test. */
+                if (P->nodes[tp].d.oper.flags == 0)
+                    reg_tname(P, P->nodes[name].d.text.offset,
+                              (uint16_t)P->nodes[name].d.text.len);
             }
             if (cur_type(P) == TOK_ASSIGN) {
                 advance(P);
@@ -1081,6 +1115,10 @@ static uint32_t parse_declaration(parser_t *P)
             add_child(P, u, name);
             match(P, TOK_DCOLON);
             if (cur_type(P) == TOK_ASSIGN) {
+                /* using X = T is a typedef wearing a nicer jacket, so X has
+                 * to reach the registry the same way. */
+                reg_tname(P, P->nodes[name].d.text.offset,
+                          (uint16_t)P->nodes[name].d.text.len);
                 advance(P);
                 uint16_t q2, c2;
                 uint32_t alias_type = parse_type_spec(P, &q2, &c2);
