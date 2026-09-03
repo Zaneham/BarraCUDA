@@ -1,5 +1,7 @@
 # Options for test_mfma.cu. See test_diag.opt for the format.
 #
-# This one is a real bug rather than a missing feature. reprocheck used to
-# count it as a skip and say nothing, which is how it stayed quiet.
-xfail --amdgpu  verify rejects VGPR in scalar source of v_mfma
+# Both refusals are deliberate. MFMA operands are register tuples (v[0:3])
+# and a vreg here is a single 32-bit register, so the old single-register
+# form llvm-mc rejects is no longer emitted; PTX has no MFMA at all.
+xfail --amdgpu      MFMA needs register tuples the machine IR cannot express
+xfail --nvidia-ptx  MFMA is an AMD intrinsic, PTX wants mma.sync instead

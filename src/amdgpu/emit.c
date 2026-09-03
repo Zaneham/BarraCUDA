@@ -688,7 +688,8 @@ static void ra_lin(amd_module_t *A, uint32_t mf_idx)
      * for spill relays.  GFX942's AccVGPRs are MFMA-only — the
      * 8-bit encoding fields in VOP/FLAT literally can't see them.
      * We tried.  The hardware was unimpressed. */
-    for (uint16_t r = RA_VGPR_CEIL; r-- > 0; )
+    uint16_t vceil = F->uses_mfma ? RA_MFMA_LO : RA_VGPR_CEIL;
+    for (uint16_t r = vceil; r-- > 0; )
         RA.vgpr_free[RA.num_vgpr_free++] = (uint8_t)r;
 
     ra_nspill = 0;
@@ -791,6 +792,7 @@ static void ra_lin(amd_module_t *A, uint32_t mf_idx)
     if (F->is_kernel && F->num_sgprs < F->first_alloc_sgpr)
         F->num_sgprs = F->first_alloc_sgpr;
     F->num_vgprs = RA.max_vgpr;
+    if (F->uses_mfma && F->num_vgprs < RA_MFMA_HI) F->num_vgprs = RA_MFMA_HI;
 
     /* Match old regalloc_function order exactly:
      * 1. min SGPR/VGPR + launch_bounds
@@ -1952,6 +1954,7 @@ static void ra_gc(amd_module_t *A, uint32_t mf_idx)
 
         F->num_sgprs = max_sgpr;
         F->num_vgprs = max_vgpr;
+        if (F->uses_mfma && F->num_vgprs < RA_MFMA_HI) F->num_vgprs = RA_MFMA_HI;
         gc_success = 1;
         break; /* success, no spills */
     }
@@ -1999,6 +2002,11 @@ static void asm_append(amd_module_t *A, const char *fmt, ...)
 
 static void print_operand(amd_module_t *A, const moperand_t *op)
 {
+    if (op->nreg > 1 && (op->kind == MOP_SGPR || op->kind == MOP_VGPR)) {
+        asm_append(A, "%c[%u:%u]", op->kind == MOP_SGPR ? 's' : 'v',
+                   op->reg_num, op->reg_num + op->nreg - 1);
+        return;
+    }
     switch (op->kind) {
     case MOP_SGPR:
         asm_append(A, "s%u", op->reg_num);
@@ -2464,13 +2472,17 @@ int amdgpu_emit_elf(amd_module_t *A, const char *path)
      * like a well-organised criminal enterprise. */
     static uint8_t rodata[16384];   /* up to ~256 KDs with alignment */
     uint32_t rodata_len = 0;
-    static uint32_t rodata_kd_off[64]; /* KD offset within .rodata */
-    static uint32_t code_offsets[64];  /* code offset within .text */
+    static uint32_t rodata_kd_off[AMD_MAX_ELFK]; /* KD offset within .rodata */
+    static uint32_t code_offsets[AMD_MAX_ELFK];  /* code offset within .text */
     uint32_t num_kernels = 0;
 
     for (uint32_t fi = 0; fi < A->num_mfuncs; fi++) {
         if (!A->mfuncs[fi].is_kernel) continue;
-        if (num_kernels >= 64) break;
+        if (num_kernels >= AMD_MAX_ELFK) {
+            fprintf(stderr, "amdgpu: more kernels than one object holds "
+                            "(max %u)\n", AMD_MAX_ELFK);
+            return BC_ERR_AMDGPU;
+        }
 
         mfunc_t *F = &A->mfuncs[fi];
 
@@ -2718,8 +2730,7 @@ int amdgpu_emit_elf(amd_module_t *A, const char *path)
                     uint32_t pt_idx = A->bir->type_fields[ft->count + pi];
                     const bir_type_t *pt = &A->bir->types[pt_idx];
                     is_ptr = (pt->kind == BIR_TYPE_PTR);
-                    if (!is_ptr)
-                        arg_sz = (pt->width > 0) ? (uint32_t)(pt->width / 8) : 4;
+                    if (!is_ptr) arg_sz = bir_bsz(A->bir, pt_idx, 8);
                 }
                 if (is_ptr) {
                     mp_fixmap(mp_buf, &mp_pos, 4);
@@ -2831,7 +2842,8 @@ int amdgpu_emit_elf(amd_module_t *A, const char *path)
     static uint32_t sk_name[64], sf_name[64]; /* .strtab offsets */
 
     ki = 0;
-    for (uint32_t fi = 0; fi < A->num_mfuncs && ki < num_kernels && ki < 64; fi++) {
+    for (uint32_t fi = 0; fi < A->num_mfuncs && ki < num_kernels
+                          && ki < AMD_MAX_ELFK; fi++) {
         if (!A->mfuncs[fi].is_kernel) continue;
         const char *name = A->bir->strings + A->mfuncs[fi].name;
         char kd[256];
@@ -2908,7 +2920,8 @@ int amdgpu_emit_elf(amd_module_t *A, const char *path)
     uint32_t si = 1;
 
     ki = 0;
-    for (uint32_t fi = 0; fi < A->num_mfuncs && ki < num_kernels && ki < 64; fi++) {
+    for (uint32_t fi = 0; fi < A->num_mfuncs && ki < num_kernels
+                          && ki < AMD_MAX_ELFK; fi++) {
         if (!A->mfuncs[fi].is_kernel) continue;
 
         /* .kd descriptor (STT_OBJECT) in .rodata (section 5) */

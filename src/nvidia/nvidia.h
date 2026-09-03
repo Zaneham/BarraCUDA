@@ -90,14 +90,14 @@ typedef enum {
     NV_ST_GLB_U8,   NV_ST_GLB_U16,
 
     /* Loads / stores — shared */
-    NV_LD_SHR_U32,  NV_LD_SHR_F32,
-    NV_ST_SHR_U32,  NV_ST_SHR_F32,
+    NV_LD_SHR_U32,  NV_LD_SHR_F32,  NV_LD_SHR_U8,
+    NV_ST_SHR_U32,  NV_ST_SHR_F32,  NV_ST_SHR_U8,
 
     /* Loads / stores — local (scratch / alloca) */
     NV_LD_LOC_U32,  NV_LD_LOC_U64,
-    NV_LD_LOC_F32,  NV_LD_LOC_F64,
+    NV_LD_LOC_F32,  NV_LD_LOC_F64,  NV_LD_LOC_U8,
     NV_ST_LOC_U32,  NV_ST_LOC_U64,
-    NV_ST_LOC_F32,  NV_ST_LOC_F64,
+    NV_ST_LOC_F32,  NV_ST_LOC_F64,  NV_ST_LOC_U8,
 
     /* Parameter loads */
     NV_LD_PARAM_U32,  NV_LD_PARAM_U64,
@@ -150,6 +150,11 @@ typedef enum {
     NV_EXIT,          /* exit; */
     NV_MOV_F64_LIT,   /* mov.f64 %fd, 0dXXXX — ops[0]=dst, ops[1].imm=hi32, ops[2].imm=lo32 */
     NV_LEA_LOCAL,     /* mov.u64 %rd, __local+off — ops[0]=dst, ops[1].imm=byte offset */
+    NV_MOV_PK16,      /* mov.b32 %rb, {%rh_lo, %rh_hi} — packs two halves */
+    NV_MMA,           /* mma.sync.aligned.<shape>.row.col.f32.<t>.<t>.f32.
+                       * ops are the BASE register of each fragment tuple:
+                       * [0]=D [1]=A [2]=B [3]=C; flags = nv_mmash_t index */
+    NV_BARWARP,       /* bar.warp.sync 0xffffffff */
 
     NV_OP_COUNT
 } nv_ptx_op_t;
@@ -164,6 +169,7 @@ typedef enum {
     NV_RF_PRED = 4,   /* %p<N>  — predicate */
     NV_RF_U16  = 5,   /* %rh<N> — 16-bit integer */
     NV_RF_F16  = 6,   /* %h<N>  — 16-bit float */
+    NV_RF_B32  = 7,   /* %rb<N> — untyped 32-bit, mma fragment halves */
     NV_RF_COUNT
 } nv_rfile_t;
 
@@ -192,6 +198,15 @@ typedef enum {
 #define NV_SPEC_NCTAID_X  9
 #define NV_SPEC_NCTAID_Y  10
 #define NV_SPEC_NCTAID_Z  11
+#define NV_SPEC_LANEID    12
+
+typedef struct {
+    const char *sfx;     /* everything between "aligned." and the operands */
+    uint8_t     na, nb;  /* A and B elements per lane */
+} nv_mmash_t;
+
+#define NV_MMA_NSHAPE 4
+extern const nv_mmash_t nv_mmash[NV_MMA_NSHAPE];
 
 typedef struct {
     uint8_t  kind;       /* nv_mop_t */

@@ -740,6 +740,12 @@ static void isel_block(uint32_t bir_bi)
             S.had_error = 1;
             break;
 
+        case BIR_MMA: case BIR_MFRG:
+            fprintf(stderr, "kath: warp-collective mma not supported on the "
+                            "Tensix backend\n");
+            S.had_error = 1;
+            break;
+
         /* ---- Misc ---- */
         case BIR_SELECT:
             isel_select(idx, I);

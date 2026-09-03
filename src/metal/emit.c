@@ -507,6 +507,11 @@ static int mt_stmt(metal_module_t *mm, uint32_t gi)
         if (!mt_lhs(mm, gi)) return 0;
         return mt_wfmt(mm, "gdim.%c;\n", mt_dim(I->subop));
 
+    case BIR_MMA: case BIR_MFRG:
+        fprintf(stderr, "kath: warp-collective mma not supported on the "
+                        "Metal backend\n");
+        return 0;
+
     case BIR_SELECT:
         if (!mt_lhs(mm, gi)) return 0;
         if (!mt_val(mm, I->operands[0])) return 0;

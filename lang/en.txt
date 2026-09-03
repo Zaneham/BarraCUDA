@@ -83,6 +83,10 @@ E123=expected identifier after 'import'
 E124=expected attribute name after '.'
 E125=unrecognised expression
 
+# ---- Linking translation units (E126-E127) ----
+E126='%s' is defined in more than one translation unit
+E127=too many globals to reference (max %d)
+
 # ---- ABEND Messages (hex IDs) ----
 A0C1=illegal GPU instruction
 A0C4=memory access violation (page not mapped)

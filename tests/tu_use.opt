@@ -1,0 +1,6 @@
+# Options for tu_use.cu. See test_diag.opt for the format.
+#
+# Half of a two-file fixture. It calls tu_mul7, which tu_lib.cu defines, so
+# on its own it is meant to come back with E105. The pair is exercised by
+# the mtu family instead.
+xfail all  one half of a multi-file fixture, tu_lib.cu holds the callee

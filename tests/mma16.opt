@@ -1,0 +1,5 @@
+# Options for mma16.cu. See test_diag.opt for the format.
+#
+# The warp-collective mma lowers on PTX only. AMD needs register tuples in
+# the machine IR before MFMA can carry a real fragment, so it refuses.
+xfail --amdgpu  warp-collective mma is NVIDIA PTX only

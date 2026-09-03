@@ -127,7 +127,7 @@ TARGET  = kath
 # strict flags without libhsa or libcuda having to be present. Neither is a
 # trunner test; both carry their own main and want real hardware.
 EXAMPLE_SRC = $(wildcard examples/*.c)
-HOSTCHK     = $(OBJDIR)/tests/tnv_rt.o               $(patsubst examples/%.c,$(OBJDIR)/examples/%.o,$(EXAMPLE_SRC))
+HOSTCHK     = $(OBJDIR)/tests/tnv_rt.o $(OBJDIR)/tests/tnv_i1.o $(OBJDIR)/tests/tnv_bstr.o $(OBJDIR)/tests/gpu_mma.o $(patsubst examples/%.c,$(OBJDIR)/examples/%.o,$(EXAMPLE_SRC))
 
 all: $(TARGET) $(ALT_RT) $(HOSTCHK)
 
@@ -157,6 +157,7 @@ TSRC    = tests/tmain.c tests/tsmoke.c tests/tcomp.c tests/tenc.c \
           tests/tra_ssa.c \
           tests/tguard.c \
           tests/ttriton.c \
+          tests/tmma.c \
           tests/ttdf.c \
           tests/ttmc.c \
           tests/trv_enc.c tests/trv_buf.c tests/trv_elf.c tests/trv_isel.c \
@@ -168,7 +169,9 @@ TSRC    = tests/tmain.c tests/tsmoke.c tests/tcomp.c tests/tenc.c \
           tests/trpi.c \
           tests/tmlir.c \
           tests/tbir.c \
-          tests/tocm.c
+          tests/tocm.c \
+          tests/tpack.c \
+          tests/tmtu.c
 
 TOBJS   = $(TSRC:%.c=$(OBJDIR)/%.o)
 COBJS   = $(OBJDIR)/src/kauri_impl.o $(OBJDIR)/src/ir/bir.o $(OBJDIR)/src/ir/bir_print.o $(OBJDIR)/src/ir/bir_lower.o $(OBJDIR)/src/ir/bir_mem2reg.o $(OBJDIR)/src/ir/bir_cfold.o $(OBJDIR)/src/ir/bir_dce.o $(OBJDIR)/src/ir/bir_struct.o $(OBJDIR)/src/ir/bir_insert.o $(OBJDIR)/src/ir/bir_sroa.o $(OBJDIR)/src/ir/bir_inline.o \

@@ -32,7 +32,11 @@ static const char *bc_dflt[BC_EID_MAX] = {
     /* E025 */ "unexpected token in function body",
     /* E026 */ "unexpected token in block",
     /* E027 */ "unexpected token at top level",
-    /* E028-E039 */ NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+    /* E028 */ "parameter pack must be the last template parameter here",
+    /* E029 */ "default argument on a template parameter pack",
+    /* E030 */ "unsupported: %s",
+    /* E031 */ "pack expansion has no unexpanded parameter pack",
+    /* E032-E039 */ NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
 
     /* ---- Preprocessor ---- */
     /* E040 */ "macro string pool exhausted",
@@ -65,7 +69,8 @@ static const char *bc_dflt[BC_EID_MAX] = {
     /* E080 */ "switch expression must be integer type",
     /* E081 */ "__global__ function must return void",
     /* E082 */ "'%s' passes more than %d arguments",
-    /* E083-E099 */ NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+    /* E083 */ "parameter pack '%s' must be expanded",
+    /* E084-E099 */ NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
 
     /* ---- Lowering ---- */
     /* E100 */ "too many labels (max 256)",
@@ -95,7 +100,8 @@ static const char *bc_dflt[BC_EID_MAX] = {
     /* E123 */ "expected identifier after 'import'",
     /* E124 */ "expected attribute name after '.'",
     /* E125 */ "unrecognised expression",
-    /* E126-E149 */
+    /* E126 */ "'%s' is defined in more than one translation unit",
+    /* E127 */ "too many globals to reference (max %d)",
 };
 
 /* ---- ABEND compiled-in defaults ----

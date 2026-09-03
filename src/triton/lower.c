@@ -1117,6 +1117,18 @@ static uint32_t l_expr(tn_lower_t *L, uint32_t node_idx)
 
 static void l_stmt(tn_lower_t *L, uint32_t node_idx);
 
+static void l_rebnd(tn_lower_t *L, uint32_t tgt, uint32_t decl, uint32_t v)
+{
+    if (decl >= TN_MAX_NODES) return;
+    if (L->node_val[decl] != BIR_VAL_NONE && L->vald[decl] < L->loopd) {
+        l_err(L, 141, l_tok(L, tgt),
+              "loop-carried reassignment not yet lowered");
+        return;
+    }
+    L->node_val[decl] = v;
+    L->vald[decl] = (uint8_t)L->loopd;
+}
+
 static void l_assign(tn_lower_t *L, uint32_t node_idx)
 {
     uint32_t value_node = l_kid(L, node_idx, 1);
@@ -1128,6 +1140,15 @@ static void l_assign(tn_lower_t *L, uint32_t node_idx)
         return;
     }
     uint32_t v = l_expr(L, value_node);
+    uint32_t tgt = l_kid(L, node_idx, 0);
+    if (v != BIR_VAL_NONE && tgt &&
+        L->parser->nodes[tgt].kind == TN_NK_NAME) {
+        int k = L->sema->node_sym_kind[tgt];
+        if (k == TN_SYM_LOCAL || k == TN_SYM_LOOPVAR) {
+            l_rebnd(L, tgt, L->sema->node_sym_aux[tgt], v);
+            return;
+        }
+    }
     L->node_val[node_idx] = v;
 }
 
@@ -1189,7 +1210,10 @@ static void l_for(tn_lower_t *L, uint32_t node_idx)
     uint32_t bodyb = l_new_block(L, "for.body"); l_op(L, brc, bodyb);                   /* [1]=true */
     L->cur_block = bodyb;
     L->node_val[node_idx] = kphi;          /* bind the loop variable k */
+    L->vald[node_idx] = (uint8_t)(L->loopd + 1);
+    L->loopd++;
     l_block(L, body);
+    L->loopd--;
     uint32_t kn = l_emit(L, BIR_ADD, L->t_i32, 0); l_op(L,kn,kphi); l_op(L,kn,step);
     l_op(L, kphi, bodyb); l_op(L, kphi, kn);   /* phi back-edge pair [body: k+step] */
     uint32_t brh = l_emit(L, BIR_BR, L->t_void, 0); l_op(L,brh,head);       /* back-edge */
@@ -1319,14 +1343,11 @@ static void l_stmt(tn_lower_t *L, uint32_t node_idx)
         l_op(L, inst, old_val);
         l_op(L, inst, rhs_val);
 
-        /* Re-bind the local to the new value so subsequent
-         * references read the updated state. */
         int kind = L->sema->node_sym_kind[target_idx];
-        uint32_t aux = L->sema->node_sym_aux[target_idx];
-        if ((kind == TN_SYM_LOCAL || kind == TN_SYM_LOOPVAR) &&
-            aux < TN_MAX_NODES) {
-            L->node_val[aux] = inst;
-        }
+        if (kind == TN_SYM_LOCAL || kind == TN_SYM_LOOPVAR)
+            l_rebnd(L, target_idx, L->sema->node_sym_aux[target_idx], inst);
+        else if (kind == TN_SYM_PARAM)
+            l_rebnd(L, target_idx, node_idx, inst);
         break;
     }
     case TN_NK_IF:

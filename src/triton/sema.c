@@ -433,15 +433,17 @@ static void s_bind_assign_target(tn_sema_t *S, uint32_t target_idx,
     if (t->kind == TN_NK_NAME) {
         const tn_tok_t *tk = s_name_tok(S, target_idx);
         if (!tk) return;
-        /* Bind the local with aux = the assign node that introduced
-         * it. Lowering uses aux to find the BIR value the RHS
-         * produced, so it must point at the declaring node even on a
-         * re-assign. */
-        if (!s_lookup(S, P->lex->src, tk->off, (uint16_t)tk->len)) {
+        const tn_sym_t *prev = s_lookup(S, P->lex->src, tk->off,
+                                        (uint16_t)tk->len);
+        uint32_t decl = assign_node;
+        if (!prev || prev->kind == TN_SYM_PARAM) {
             s_bind(S, tk->off, (uint16_t)tk->len,
                    TN_SYM_LOCAL, assign_node, assign_node);
+        } else if (prev->kind == TN_SYM_LOCAL ||
+                   prev->kind == TN_SYM_LOOPVAR) {
+            decl = prev->aux;
         }
-        s_annotate(S, target_idx, TN_SYM_LOCAL, assign_node);
+        s_annotate(S, target_idx, TN_SYM_LOCAL, decl);
         return;
     }
 
@@ -566,13 +568,20 @@ static void s_walk(tn_sema_t *S, uint32_t node_idx)
         return;
     }
 
-    case TN_NK_AUG_ASSIGN:
-        /* a += b: a must already be bound (Python's rule), so walk
-         * both sides without introducing a new binding. */
+    case TN_NK_AUG_ASSIGN: {
         for (uint32_t i = 0; i < nk; i++) {
             s_walk(S, s_kid(S, node_idx, i));
         }
+        uint32_t atgt = (nk > 0) ? s_kid(S, node_idx, 0) : 0;
+        if (atgt && atgt < P->num_nodes &&
+            P->nodes[atgt].kind == TN_NK_NAME &&
+            S->node_sym_kind[atgt] == TN_SYM_PARAM) {
+            const tn_tok_t *tk = s_name_tok(S, atgt);
+            if (tk) s_bind(S, tk->off, (uint16_t)tk->len,
+                           TN_SYM_LOCAL, node_idx, node_idx);
+        }
         return;
+    }
 
     case TN_NK_FOR: {
         /* kids: target, iter, body, optional else. */

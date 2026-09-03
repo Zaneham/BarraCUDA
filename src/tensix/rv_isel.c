@@ -938,20 +938,14 @@ static int sel_unrch(rv_buf_t *out)
     return emit(out, rv_ebreak());
 }
 
-static uint32_t tybytes(const bir_module_t *M, uint32_t ti);
+static uint32_t gepbytes(const bir_module_t *M, uint32_t ti);
 
-/* Access width in bytes from the pointer's pointee type. Returns 0 when the
- * type is not a pointer we can size, which is what an untyped pointer into L1
- * looks like, and the caller then assumes a word. Widths we cannot express in
- * one RV32 access come back as-is so the caller can refuse. */
 static uint32_t accwid(const bir_module_t *M, uint32_t ptr_val)
 {
     if (BIR_VAL_IS_CONST(ptr_val)) return 0u;
     uint32_t idx = BIR_VAL_INDEX(ptr_val);
     if (idx >= M->num_insts) return 0u;
-    uint32_t pt = M->insts[idx].type;
-    if (pt >= M->num_types || M->types[pt].kind != BIR_TYPE_PTR) return 0u;
-    return tybytes(M, M->types[pt].inner);
+    return gepbytes(M, M->insts[idx].type);
 }
 
 /* Pick the load or store for an access width, or refuse. An i64 or an
@@ -960,7 +954,6 @@ static uint32_t accwid(const bir_module_t *M, uint32_t ptr_val)
 static int winsn(uint32_t w, int is_load, uint32_t *insn)
 {
     switch (w) {
-    case 0u:  /* unsizable pointee; assume a word, as the isel always has */
     case 4u: *insn = is_load ? rv_lw (RV_T0, RV_T1, 0) : rv_sw(RV_T0, RV_T1, 0); return BC_OK;
     case 2u: *insn = is_load ? rv_lhu(RV_T0, RV_T1, 0) : rv_sh(RV_T0, RV_T1, 0); return BC_OK;
     case 1u: *insn = is_load ? rv_lbu(RV_T0, RV_T1, 0) : rv_sb(RV_T0, RV_T1, 0); return BC_OK;
@@ -1031,49 +1024,14 @@ static uint32_t algnup(uint32_t x, uint32_t a)
     return (x + (a - 1u)) & ~(a - 1u);
 }
 
-/*
- * Byte size of a BIR type. Primitives are immediate. Aggregates
- * recurse and apply natural alignment between fields, which is
- * the layout C/CUDA front ends produce in the absence of
- * explicit packing or alignment attributes.
- *
- * Returns 0 if any subcomponent is unknown (e.g. a struct that
- * contains a FUNC or an as-yet-unhandled type kind). Callers must
- * check and refuse rather than silently computing a wrong offset.
- */
 static uint32_t tybytes(const bir_module_t *M, uint32_t ti)
 {
-    if (ti >= M->num_types) return 0u;
-    const bir_type_t *t = &M->types[ti];
-    switch (t->kind) {
-    case BIR_TYPE_INT:    return (uint32_t)(t->width / 8u);
-    case BIR_TYPE_FLOAT:  return (uint32_t)(t->width / 8u);
-    case BIR_TYPE_BFLOAT: return 2u;
-    case BIR_TYPE_PTR:    return 4u;
-    case BIR_TYPE_ARRAY: {
-        uint32_t es = tybytes(M, t->inner);
-        if (es == 0u) return 0u;
-        return es * t->count;
-    }
-    case BIR_TYPE_VECTOR: {
-        uint32_t es = tybytes(M, t->inner);
-        if (es == 0u) return 0u;
-        return es * (uint32_t)t->width;     /* width = lane count for VECTOR */
-    }
-    case BIR_TYPE_STRUCT: {
-        uint32_t off = 0u;
-        for (uint16_t i = 0; i < t->num_fields; i++) {
-            if (t->count + i >= M->num_type_fields) return 0u;
-            uint32_t ft = M->type_fields[t->count + i];
-            uint32_t fs = tybytes(M, ft);
-            if (fs == 0u) return 0u;
-            off = algnup(off, natalg(fs)) + fs;
-        }
-        return off;                         /* no tail padding for now */
-    }
-    default:
-        return 0u;
-    }
+    return bir_bsz(M, ti, 4);
+}
+
+static uint32_t gepbytes(const bir_module_t *M, uint32_t ti)
+{
+    return bir_gsz(M, ti, 4);
 }
 
 /*
@@ -1227,7 +1185,7 @@ static int sel_gep(const bir_module_t *M, uint32_t inst_idx,
             off = (int64_t)sfldof(M, base_pointee,
                                                (uint32_t)idx_v);
         } else {
-            uint32_t elem_sz = tybytes(M, M->types[I->type].inner);
+            uint32_t elem_sz = gepbytes(M, I->type);
             if (elem_sz == 0u) {
                 fprintf(stderr, "rv_isel: unknown GEP pointee size\n");
                 return BC_ERR_TDF;
@@ -1248,7 +1206,7 @@ static int sel_gep(const bir_module_t *M, uint32_t inst_idx,
                 "rv_isel: non-constant struct GEP index is illegal\n");
         return BC_ERR_TDF;
     }
-    uint32_t elem_sz = tybytes(M, M->types[I->type].inner);
+    uint32_t elem_sz = gepbytes(M, I->type);
     if (elem_sz == 0u) {
         fprintf(stderr, "rv_isel: unknown GEP pointee size\n");
         return BC_ERR_TDF;
@@ -1411,7 +1369,12 @@ int rv_isel_func(const bir_module_t *M, uint32_t func_idx,
                 M->types[I->type].kind == BIR_TYPE_PTR) {
                 pointee_sz = tybytes(M, M->types[I->type].inner);
             }
-            if (pointee_sz == 0u) pointee_sz = 4u;  /* default i32-shaped */
+            if (pointee_sz == 0u) {
+                fprintf(stderr,
+                        "rv_isel: alloca at idx %u has unsizable "
+                        "pointee type\n", idx);
+                return BC_ERR_TDF;
+            }
             alctot = rndup(alctot, ISEL_ALLOCA_ALIGN);
             alcoff[lidx] = alctot;
             alctot += pointee_sz;

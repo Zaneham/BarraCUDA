@@ -29,6 +29,9 @@ typedef enum {
     AST_INIT_LIST,
     AST_SCOPE_RES,
     AST_TEMPLATE_ARGS,
+    AST_PACK_EXP,
+    AST_PACK_SIZE,
+    AST_FOLD,
 
     AST_EXPR_STMT,
     AST_BLOCK,
@@ -65,6 +68,17 @@ typedef enum {
 
     AST_TYPE_COUNT
 } ast_type_t;
+
+#define TP_NTYP         0x01
+#define TP_PACK         0x02
+
+#define PRM_PACK        0x01
+#define PRM_VARG        0x02
+
+#define FLD_UL          0x01
+#define FLD_UR          0x02
+#define FLD_BL          0x03
+#define FLD_BR          0x04
 
 #define QUAL_CONST      0x01
 #define QUAL_VOLATILE   0x02

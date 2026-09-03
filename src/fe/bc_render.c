@@ -38,6 +38,7 @@ static const char *line_at(const char *src, uint32_t line, int *len)
     }
     const char *e = p;
     while (*e != '\0' && *e != '\n') e++;
+    if (e > p && e[-1] == '\r') e--;   /* CRLF source, don't echo the CR */
     *len = (int)(e - p);
     return p;
 }
