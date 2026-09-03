@@ -90,6 +90,18 @@ bash tests/diff/run_diff.sh
 ./kath --lang lang/mi.txt --amdgpu-bin kernel.cu -o kernel.hsaco
 ```
 
+## Several files at once
+
+Hand `kath` more than one `.cu` and each is compiled on its own, then linked into the single module the backend emits.
+
+```bash
+./kath --amdgpu-bin softmax.cu rope.cu common_kernels.cu -o kernels.hsaco
+```
+
+Each file gets a fresh preprocessor, lexer, parser and sema, so a macro, typedef or struct in one cannot reach the next, and two files may each keep their own `static` helper of the same name without either calling the other's. Anything not marked `static` is one symbol the whole program shares, so a `__device__` function, a `__constant__` global, or an `inline` function arriving from a header several files include, all give you one copy rather than one per file. Two files defining the same non-`inline` symbol is E126 rather than a quiet decision about which one wins.
+
+Symbols become visible in the order you list the files, so a `__device__` function has to be defined in a file earlier on the command line than the one calling it. The other way round comes back as E105, unknown function. The other frontends read one document each, so `--triton`, `--mlir` and `--bir-in` still take a single file and will say so if given more.
+
 ## Runtime Launcher
 
 Booth includes a minimal HSA runtime (`src/runtime/`) for dispatching compiled kernels on real AMD hardware. Zero compile-time dependency on ROCm. It loads `libhsa-runtime64.so` at runtime via `dlopen`.

@@ -15,8 +15,8 @@
  * everything downstream derives from these three numbers. */
 #define BC_VERSION_MAJOR    0
 #define BC_VERSION_MINOR    5
-#define BC_VERSION_PATCH    2
-#define BC_VERSION_STRING   "0.5.2"
+#define BC_VERSION_PATCH    3
+#define BC_VERSION_STRING   "0.5.3"
 
 /* The universe has limits. So do our buffers. No malloc, no madness. */
 #define BC_MAX_SOURCE       (4 * 1024 * 1024)

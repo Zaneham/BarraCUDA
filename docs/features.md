@@ -15,6 +15,7 @@ The following CUDA features compile to working GFX9/GFX10/GFX11/GFX12 machine co
 - Short-circuit `&&` and `||`
 - Ternary operator
 - Templates (basic instantiation)
+- Parameter packs: `typename... A`, `A... a`, `A&&...`, `sizeof...`, and fold expressions
 - Multiple return paths, `continue`, `break`
 
 ### CUDA Features
@@ -44,18 +45,18 @@ The following CUDA features compile to working GFX9/GFX10/GFX11/GFX12 machine co
 - BIR text frontend (`--bir-in`): a module printed by `--ir` reads back in, so a compiler outside this tree can target Booth without linking against it
 - x86-64 CPU backend (`--cpu`): CUDA and Triton kernels compile to a host object and run with no GPU. SIMT becomes a thread loop. Stack-everything codegen, no register allocator yet
 - TDF (Tile DataFlow) IR layer above BIR: regions / channels / NoC arcs as first-class compiler concepts, L1 placement, fission pass for multi-core kernels
+- Multiple translation units: hand `kath` several `.cu` files in one invocation and each is compiled on its own, then linked into the module the backend emits. `static` at file scope means one file's own, so two files may keep their own helper of the same name, and a symbol defined twice is refused rather than silently picked between. See [usage.md](usage.md#several-files-at-once)
 - SYSPRINT: class-tagged structured kernel output, pattern-routed sinks on the host. See [mainframe.md](mainframe.md) for the kernel/host workflow.
 
 ## What Doesn't Work (Yet)
 
 Being honest about limitations is important. Here's what's missing:
 
-- Parameter reassignment in `__device__` functions (use local variables)
 - Textures and surfaces
 - Dynamic parallelism (device-side kernel launch)
-- Multiple translation units
 - Host code generation (only device code is compiled)
-- Rank-2 matrix codegen on the GPU backends (MFMA on AMD, mma.sync on NVIDIA). Triton `tl.dot` already runs on the CPU backend, materialised and unrolled with a K-loop, but the GPU matrix-instruction path is a separate job. On GPU targets rank-2 tiles still refuse cleanly with E099, no silent wrong code.
+- Triton `tl.dot` on the matrix cores. `mma.sync` and MFMA are in and checked against llvm-mc byte for byte, but a rank-2 tile still materialises and unrolls into scalar FMAs on every backend, which is correct and very large rather than a refusal. Reaching the matrix path from Triton is an execution-model change, not a missing encoding
+- Loop-carried reassignment in a Triton kernel. Rewriting a name across a `for` back-edge needs a phi at the loop head and only the counter gets one, so an accumulator refuses with E141 rather than quietly reading its pre-loop value every trip
 - CPU backend is correct-first: stack-everything codegen, no register allocator yet, single block per call, and `tl.load` masks aren't honoured (so keep the launch's nthreads equal to the element count). It runs; it isn't fast.
 - MLIR beyond `func`, `return` and `arith`. No `memref`, `scf` or `gpu` dialect, and a function body with more than one block is refused rather than flattened. Nothing marks an MLIR function as a kernel, so it lowers as a device function: `--cpu` and `--rv64` emit real code, `--metal` counts it as a kernel, and `--amdgpu-bin` and `--nvidia-ptx` report zero kernels and write an empty container
 - OCaml kernels have no `while` and no early exit, no `f64`, no warp shuffles, and no atomic `min` or `max`. BIR carries one opcode for each of those two and the NVIDIA and AMD backends read it with opposite signedness, so they stay out of reach until the IR can say which is meant

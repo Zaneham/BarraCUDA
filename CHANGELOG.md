@@ -1,7 +1,7 @@
 Booth — Changelog
 =================
 
-## Unreleased
+## Booth 0.5.3
 
 ### Runtime
 
