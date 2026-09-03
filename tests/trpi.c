@@ -112,3 +112,115 @@ static void rpi03(void)
     PASS();
 }
 TH_REG("rpi", 3, "a constant above INT32_MAX is not clamped", rpi03)
+
+/* looks_like_cast read `( ident )` before any prefix operator as a cast to a
+ * type called ident, without ever asking whether ident named a type. Only `+`
+ * and `-` are also infix, so `(a) + (b)` became a cast applied to `+(b)` and
+ * the left operand vanished with no diagnostic. `-` left the tell, `sub 0, b`.
+ *
+ * The fixture stays on disk after a failure, so build/rpi04.cu names the case
+ * that broke. */
+static void rpi04(void)
+{
+    static const struct { const char *ex; const char *ir; } cs[] = {
+        { "(a) + (b)",        "add i32 %0, %1"     },
+        { "(a) - (b)",        "sub i32 %0, %1"     },
+        { "(a) + b",          "add i32 %0, %1"     },
+        { "(b) + (a)",        "add i32 %1, %0"     },
+        { "(a) + (a * 2)",    "add i32 %0, %2"     },
+        { "(a) + a * 2",      "add i32 %0, %2"     },
+        { "(a) + (a)",        "add i32 %0, %0"     },
+        { "((a)) + (b)",      "add i32 %0, %1"     },
+        { "(a) * (b)",        "mul i32 %0, %1"     },
+        { "(a) & (b)",        "and i32 %0, %1"     },
+        { "(a) / (b)",        "sdiv i32 %0, %1"    },
+        { "(a) < (b)",        "icmp slt i32 %0, %1"},
+        { "(a * 2) + (a)",    "add i32 %2, %0"     },
+        { "(a + 1) + (a * 2)","add i32 %2, %3"     },
+    };
+    char cmd[512];
+
+    for (size_t i = 0; i < sizeof cs / sizeof cs[0]; i++) {
+        FILE *f = fopen("build/rpi04.cu", "w");
+        CHNE(f, NULL);
+        fprintf(f, "__device__ int f(int a, int b){ return %s; }\n", cs[i].ex);
+        fclose(f);
+
+        snprintf(cmd, sizeof cmd, "%s --ir build/rpi04.cu", BC_BIN);
+        CHEQ(th_run(cmd, obuf, (int)sizeof obuf), 0);
+        CHNE(strstr(obuf, cs[i].ir), NULL);
+    }
+    PASS();
+}
+TH_REG("rpi", 4, "a parenthesised variable is not a cast", rpi04)
+
+/* The other half of the same test. Tightening it must not cost a real cast,
+ * so every shape a typedef name reaches the parser in is checked here, and
+ * `(pair){...}` is one the loose rule never recognised at all. */
+static void rpi05(void)
+{
+    static const struct { const char *src; const char *ir; } cs[] = {
+        { "typedef int myint;\n"
+          "__device__ int f(int a, int b){ return (myint)(a) + b; }\n",
+          "add i32 %0, %1" },
+
+        { "typedef int myint;\n"
+          "__device__ int f(int a, int b){ (void)a; return (myint) + b; }\n",
+          "ret i32 %1" },
+
+        { "typedef int myint;\n"
+          "__device__ int f(int a, int b){ (void)a; (void)b; return (myint)-1; }\n",
+          "ret i32 4294967295" },
+
+        { "typedef int myint;\n"
+          "__device__ int f(void *p){ return *(myint*)p; }\n",
+          "bitcast ptr<global, void> %0 to ptr<global, i32>" },
+
+        { "typedef struct { int x; int y; } pair;\n"
+          "__device__ int f(int a, int b){ pair p = (pair){ a, b }; return p.y; }\n",
+          "store i32 %1, %6" },
+
+        { "__device__ int f(int a, int b){ return (int)(uint32_t)-1 + a + b; }\n",
+          "add i32 4294967295, %0" },
+
+        { "using myint = int;\n"
+          "__device__ int f(int a, int b){ return (myint)(a) + b; }\n",
+          "add i32 %0, %1" },
+    };
+    char cmd[512];
+
+    for (size_t i = 0; i < sizeof cs / sizeof cs[0]; i++) {
+        FILE *f = fopen("build/rpi05.cu", "w");
+        CHNE(f, NULL);
+        fputs(cs[i].src, f);
+        fclose(f);
+
+        snprintf(cmd, sizeof cmd, "%s --ir build/rpi05.cu", BC_BIN);
+        CHEQ(th_run(cmd, obuf, (int)sizeof obuf), 0);
+        CHNE(strstr(obuf, cs[i].ir), NULL);
+    }
+    PASS();
+}
+TH_REG("rpi", 5, "a typedef name still casts", rpi05)
+
+/* A template type parameter is a type name for the body below it. It is not a
+ * typedef and never reached the registry, so it survived on the loose rule
+ * alone and (T)a + b would have started returning b. */
+static void rpi06(void)
+{
+    static const char *const src =
+        "template<typename T> __device__ T g(T a, T b){ return (T)a + b; }\n";
+    char cmd[512];
+
+    FILE *f = fopen("build/rpi06.cu", "w");
+    CHNE(f, NULL);
+    fputs(src, f);
+    fclose(f);
+
+    snprintf(cmd, sizeof cmd, "%s --parse build/rpi06.cu", BC_BIN);
+    CHEQ(th_run(cmd, obuf, (int)sizeof obuf), 0);
+    CHNE(strstr(obuf, "(binary +"), NULL);
+    CHNE(strstr(obuf, "(cast"), NULL);
+    PASS();
+}
+TH_REG("rpi", 6, "a template type parameter names a type", rpi06)
