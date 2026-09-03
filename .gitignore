@@ -53,6 +53,12 @@ __pycache__/
 /tri_*.ttinsn
 /tri_*.elf
 
+# Line-splicing fixtures. The suite writes these itself because
+# .gitattributes checks the tree out as eol=lf, so a committed CRLF
+# fixture would arrive as an LF one and test nothing.
+/tests/spl_lf.cu
+/tests/spl_crlf.cu
+
 # Ad-hoc test kernels and runners that piled up during the Moa GPU
 # port and the parameter-count and scratch-allocation investigations.
 # Listed by name rather than pattern so future intentional tests are

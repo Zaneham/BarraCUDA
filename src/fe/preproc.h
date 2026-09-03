@@ -57,6 +57,8 @@ typedef struct {
     uint32_t    pos;
     uint32_t    line;
 
+    uint32_t    nspl;
+
     /* Output */
     char       *out;
     uint32_t    out_len;

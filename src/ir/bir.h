@@ -20,6 +20,7 @@
 #define BIR_MAX_FUNCS       (1 << 12)
 #define BIR_MAX_GLOBALS     (1 << 12)
 #define BIR_MAX_STRINGS     (1 << 20)
+#define BIR_BSZ_DEEP        16      /* aggregate nesting bir_bsz will walk */
 
 /* ---- Value References ---- */
 
@@ -168,6 +169,10 @@ typedef enum {
 
     /* Matrix */
     BIR_MFMA,                   /* subop = variant ID, ops: [0]=A, [1]=B, [2]=C(accum) */
+    BIR_MMA,                    /* warp-collective D += A*B over a 16x16x16 f16 tile.
+                                 * ops: [0]=A [1]=lda [2]=B [3]=ldb [4]=D [5]=ldd */
+    BIR_MFRG,                   /* MFMA over per-lane fragments in memory.
+                                 * subop = variant, ops: [0]=A [1]=B [2]=C/D */
 
     /* Misc */
     BIR_CALL,                   /* ops[0] = callee func index, rest = args */
@@ -258,7 +263,7 @@ typedef struct {
     uint16_t    num_blocks;
     uint16_t    num_params;
     uint16_t    cuda_flags;     /* CUDA_GLOBAL, CUDA_DEVICE, CUDA_HOST from ast.h */
-    uint16_t    pad;
+    uint16_t    tu;             /* owning TU for internal linkage, BIR_TU_EXT for external */
     uint32_t    launch_bounds_max;
     uint32_t    launch_bounds_min;
 } bir_func_t;   /* 32 bytes */
@@ -272,7 +277,14 @@ typedef struct {
     uint16_t    cuda_flags;
     uint8_t     addrspace;      /* bir_addrspace_t */
     uint8_t     is_const;
-} bir_global_t;  /* 16 bytes */
+    uint16_t    tu;             /* owning TU for internal linkage, BIR_TU_EXT for external */
+    uint16_t    pad;
+} bir_global_t;  /* 20 bytes */
+
+
+#define BIR_TU_EXT      0xFFFFu
+#define BIR_SYM_NONE    0xFFFFFFFFu
+#define BIR_SYM_MAX     160         /* room for a 128-char name plus the suffix */
 
 /* ---- Pool overflow ---- */
 
@@ -343,6 +355,10 @@ uint32_t    bir_type_struct(bir_module_t *M, const uint32_t *fields, int nfields
 uint32_t    bir_type_func(bir_module_t *M, uint32_t ret,
                           const uint32_t *params, int nparams);
 
+uint32_t    bir_bsz(const bir_module_t *M, uint32_t ty, uint32_t psz);
+
+uint32_t    bir_gsz(const bir_module_t *M, uint32_t ty, uint32_t psz);
+
 /* String table */
 uint32_t    bir_add_string(bir_module_t *M, const char *s, uint32_t len);
 
@@ -358,6 +374,12 @@ uint32_t    bir_const_bytes(bir_module_t *M, uint32_t type,
  * Phase-2 support gate on this and refuse rather than producing
  * silent wrong output. */
 int         bir_global_is_bytes(const bir_module_t *M, uint32_t gi);
+
+int         bir_mang(const char *name, uint16_t tu, char *out, int size);
+
+uint32_t    bir_fsym(const bir_module_t *M, const char *name, uint16_t tu,
+                     int nargs);
+uint32_t    bir_gsym(const bir_module_t *M, const char *name, uint16_t tu);
 
 /* Name tables */
 const char *bir_op_name(int op);

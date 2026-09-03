@@ -12,6 +12,10 @@ Booth — Changelog
 
 ### Frontend
 
+- variadic template parameter packs, several `.cu` files as separate
+  translation units, `mma.sync` and `mfma` lowering, and an i1 that no
+  longer strides by zero (Zane Hambly, 2026-09-03)
+
 - `(a) + (b)` adds again; the parser treated any parenthesised identifier as a
   type name without asking whether it named one, so the left operand vanished
   into a cast with no diagnostic (Zane Hambly, 2026-09-03)

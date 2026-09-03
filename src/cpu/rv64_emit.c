@@ -284,33 +284,12 @@ static void call_libm1(rv64_mod_t*V,const char *name,uint32_t op0,int32_t s){
     fst_slot(V,V_FA0,s);
 }
 
-/* element size in bytes of a pointer's pointee (drives GEP stride) */
-/* size in bytes of a type. Aggregates summed naively (no padding), which is
- * right for these kernels: every field is 4 or 8 bytes, so nothing needs it. */
 static int type_size(const rv64_mod_t*V,uint32_t ty){
-    if (ty>=V->M->num_types) return 8;
-    const bir_type_t *t=&V->M->types[ty];
-    switch (t->kind){
-    case BIR_TYPE_INT: case BIR_TYPE_FLOAT: case BIR_TYPE_BFLOAT: return t->width?(int)(t->width/8):4;
-    case BIR_TYPE_PTR: return 8;
-    case BIR_TYPE_ARRAY: return (int)t->count*type_size(V,t->inner);
-    case BIR_TYPE_VECTOR: return (int)t->width*type_size(V,t->inner);
-    case BIR_TYPE_STRUCT: { int s=0; for(uint16_t i=0;i<t->num_fields;i++) s+=type_size(V,V->M->type_fields[t->count+i]); return s; }
-    default: return 8;
-    }
+    return (int)bir_bsz(V->M,ty,8);
 }
 
-static int pointee_sz(rv64_mod_t*V,uint32_t ty){
-    if (ty<V->M->num_types && V->M->types[ty].kind==BIR_TYPE_PTR){
-        uint32_t in=V->M->types[ty].inner;
-        if (in<V->M->num_types){
-            uint8_t k=V->M->types[in].kind;
-            if (k==BIR_TYPE_PTR) return 8;
-            if (k==BIR_TYPE_STRUCT || k==BIR_TYPE_ARRAY || k==BIR_TYPE_VECTOR) return type_size(V,in);
-            uint32_t w=V->M->types[in].width; if (w>=8) return (int)(w/8);
-        }
-    }
-    return 4;
+static int pointee_sz(const rv64_mod_t*V,uint32_t ty){
+    return (int)bir_gsz(V->M,ty,8);
 }
 /* 64 for an i64, 32 for anything narrower; the shifts and the divider use
  * it to pick the *W word ops so a 32-bit value shifts like a 32-bit value. */
@@ -387,9 +366,8 @@ static void rv64_func(rv64_mod_t *V,const bir_func_t *F){
             const bir_inst_t*I=&V->M->insts[ix];
             if ((I->op==BIR_ALLOCA||I->op==BIR_SHARED_ALLOC) && na<RV_ALLOCA_MAX){
                 uint32_t pte=(I->type<V->M->num_types)?V->M->types[I->type].inner:0;
-                int sz=8; if (pte<V->M->num_types){ const bir_type_t*t=&V->M->types[pte];
-                    if (t->kind==BIR_TYPE_ARRAY) sz=(int)t->count*( (t->inner<V->M->num_types&&V->M->types[t->inner].width)?(int)(V->M->types[t->inner].width/8):4 );
-                    else if (t->width) sz=(int)(t->width/8); }
+                int sz=type_size(V,pte);
+                if(!sz){ fprintf(stderr,"kath: alloca of a type with no storage size\n"); V->n_errs++; }
                 sz=(sz+7)&~7; if(sz<8)sz=8; off-=sz; V->alloca_off[na++]=off;
             }
         }
@@ -631,14 +609,20 @@ static void rv64_func(rv64_mod_t *V,const bir_func_t *F){
         case BIR_SHFL: case BIR_SHFL_UP: case BIR_SHFL_DOWN: case BIR_SHFL_XOR:
         case BIR_BALLOT: case BIR_VOTE_ANY: case BIR_VOTE_ALL:
             load_val(V,V_T0,I->operands[1]); st_slot(V,V_T0,s); break;
-        case BIR_GEP: { int sz=pointee_sz(V,I->type); load_val(V,V_T0,I->operands[1]); e_li(V,V_T1,sz); e_mul(V,V_T0,V_T0,V_T1); load_val(V,V_T1,I->operands[0]); e_add(V,V_T0,V_T0,V_T1); st_slot(V,V_T0,s); break; }
+        case BIR_GEP: { int sz=pointee_sz(V,I->type);
+            if(!sz){ fprintf(stderr,"kath: gep through a pointer with no storage size\n"); V->n_errs++; break; }
+            load_val(V,V_T0,I->operands[1]); e_li(V,V_T1,sz); e_mul(V,V_T0,V_T0,V_T1); load_val(V,V_T1,I->operands[0]); e_add(V,V_T0,V_T0,V_T1); st_slot(V,V_T0,s); break; }
         case BIR_LOAD: { load_val(V,V_T0,I->operands[0]);
-            const bir_type_t*t=(I->type<V->M->num_types)?&V->M->types[I->type]:0; int w=t?(int)t->width:32;
-            if (w==64) e_ld(V,V_T0,V_T0,0); else if (w==16) e_lh(V,V_T0,V_T0,0); else if (w==8||w==1) e_lb(V,V_T0,V_T0,0); else e_lw(V,V_T0,V_T0,0);
+            int aw=pointee_sz(V,val_type(V,I->operands[0]));
+            if (aw==8) e_ld(V,V_T0,V_T0,0); else if (aw==4) e_lw(V,V_T0,V_T0,0);
+            else if (aw==2) e_lh(V,V_T0,V_T0,0); else if (aw==1) e_lb(V,V_T0,V_T0,0);
+            else { fprintf(stderr,"kath: %d-byte load has no single RV64 access\n",aw); V->n_errs++; break; }
             st_slot(V,V_T0,s); break; }
         case BIR_STORE: { load_val(V,V_T0,I->operands[0]); load_val(V,V_T1,I->operands[1]);
-            int w=pointee_sz(V,val_type(V,I->operands[1]))*8;
-            if (w==64) e_sd(V,V_T1,V_T0,0); else if (w==16) e_sh(V,V_T1,V_T0,0); else if (w==8) e_sb(V,V_T1,V_T0,0); else e_sw(V,V_T1,V_T0,0);
+            int aw=pointee_sz(V,val_type(V,I->operands[1]));
+            if (aw==8) e_sd(V,V_T1,V_T0,0); else if (aw==4) e_sw(V,V_T1,V_T0,0);
+            else if (aw==2) e_sh(V,V_T1,V_T0,0); else if (aw==1) e_sb(V,V_T1,V_T0,0);
+            else { fprintf(stderr,"kath: %d-byte store has no single RV64 access\n",aw); V->n_errs++; }
             break; }
         case BIR_ICMP: { load_val(V,V_T0,I->operands[0]); load_val(V,V_T1,I->operands[1]);
             switch(I->subop){
@@ -666,6 +650,9 @@ static void rv64_func(rv64_mod_t *V,const bir_func_t *F){
             if (is_kernel){ if(n_ret<RV_RET_MAX) retfix[n_ret++]=V->codelen; e_jal(V,V_ZERO,0); } /* -> loop_cont */
             else { e_ld(V,V_RA,V_SP,0); e_ld(V,V_S0,V_SP,8); e_addi(V,V_SP,V_SP,frame); e_jalr(V,V_ZERO,V_RA,0); }
             break;
+        case BIR_MMA: case BIR_MFRG:
+            fprintf(stderr,"kath: warp-collective mma not supported on the RV64 backend\n");
+            V->n_errs++; break;
         default: e_li(V,V_T0,0); st_slot(V,V_T0,s); break;
         }}
     }

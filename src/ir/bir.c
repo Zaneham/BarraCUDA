@@ -107,6 +107,8 @@ static const char *op_names[BIR_OP_COUNT] = {
     [BIR_FMIN]          = "fmin",
 
     [BIR_MFMA]          = "mfma",
+    [BIR_MMA]           = "mma",
+    [BIR_MFRG]          = "mfrg",
 
     [BIR_CALL]          = "call",
     [BIR_SELECT]        = "select",
@@ -389,6 +391,83 @@ uint32_t bir_type_func(bir_module_t *M, uint32_t ret,
     return intern_compound(M, BIR_TYPE_FUNC, ret, params, nparams);
 }
 
+/* ---- Type Sizes ---- */
+
+static uint32_t bsz_al(uint32_t sz, uint32_t psz)
+{
+    uint32_t a = 1;
+    if (sz > psz) sz = psz;
+    while (a * 2u <= sz) a *= 2u;
+    return a;
+}
+
+static uint32_t bsz_up(uint32_t x, uint32_t a)
+{
+    return (x + a - 1u) & ~(a - 1u);
+}
+
+uint32_t bir_bsz(const bir_module_t *M, uint32_t ty, uint32_t psz)
+{
+    struct { uint32_t ty, mul, fld, sum, alg; } fr[BIR_BSZ_DEEP];
+    uint32_t sp = 1, guard = 4u * BIR_MAX_TYPE_FIELDS;
+
+    fr[0].ty = ty; fr[0].mul = 1; fr[0].fld = 0; fr[0].sum = 0; fr[0].alg = 1;
+
+    while (guard--) {
+        uint32_t i = sp - 1, w, va, val;
+        const bir_type_t *T;
+
+        if (fr[i].ty >= M->num_types) return 0;
+        T = &M->types[fr[i].ty];
+
+        if (T->kind == BIR_TYPE_ARRAY || T->kind == BIR_TYPE_VECTOR) {
+            uint32_t n = (T->kind == BIR_TYPE_ARRAY) ? T->count
+                                                     : (uint32_t)T->width;
+            if (n && fr[i].mul > 0xFFFFFFFFu / n) return 0;
+            fr[i].mul *= n; fr[i].ty = T->inner; continue;
+        }
+
+        if (T->kind == BIR_TYPE_STRUCT) {
+            if (fr[i].fld < (uint32_t)T->num_fields) {
+                uint32_t f = T->count + fr[i].fld++;
+                if (f >= M->num_type_fields || sp >= BIR_BSZ_DEEP) return 0;
+                fr[sp].ty = M->type_fields[f];
+                fr[sp].mul = 1; fr[sp].fld = 0; fr[sp].sum = 0; fr[sp].alg = 1;
+                sp++;
+                continue;
+            }
+            w  = bsz_up(fr[i].sum, fr[i].alg);
+            va = fr[i].alg;
+        } else {
+            switch (T->kind) {
+            case BIR_TYPE_INT:
+            case BIR_TYPE_FLOAT:
+            case BIR_TYPE_BFLOAT: w = ((uint32_t)T->width + 7u) / 8u; break;
+            case BIR_TYPE_PTR:    w = psz; break;
+            default:              return 0;
+            }
+            va = bsz_al(w, psz);
+        }
+        if (!w) return 0;
+
+        if (fr[i].mul > 0xFFFFFFFFu / w) return 0;
+        val = fr[i].mul * w;
+        if (--sp == 0) return val;
+
+        if (va > fr[sp - 1].alg) fr[sp - 1].alg = va;
+        if (bsz_up(fr[sp - 1].sum, va) > 0xFFFFFFFFu - val) return 0;
+        fr[sp - 1].sum = bsz_up(fr[sp - 1].sum, va) + val;
+    }
+    return 0;
+}
+
+uint32_t bir_gsz(const bir_module_t *M, uint32_t ty, uint32_t psz)
+{
+    if (ty < M->num_types && M->types[ty].kind == BIR_TYPE_PTR)
+        return bir_bsz(M, M->types[ty].inner, psz);
+    return bir_bsz(M, ty, psz);
+}
+
 /* ---- String Table ---- */
 
 uint32_t bir_add_string(bir_module_t *M, const char *s, uint32_t len)
@@ -464,6 +543,57 @@ int bir_global_is_bytes(const bir_module_t *M, uint32_t gi)
     uint32_t ci = BIR_VAL_INDEX(init);
     if (ci >= M->num_consts) return 0;
     return M->consts[ci].kind == BIR_CONST_BYTES;
+}
+
+int bir_mang(const char *name, uint16_t tu, char *out, int size)
+{
+    int n = snprintf(out, (size_t)size, "%s__%u", name, (unsigned)tu);
+    if (n < 0 || n >= size) { out[0] = '\0'; return 1; }
+    return 0;
+}
+
+uint32_t bir_fsym(const bir_module_t *M, const char *name, uint16_t tu,
+                  int nargs)
+{
+    char mng[BIR_SYM_MAX];
+
+    for (int pass = 0; pass < 2; pass++) {
+        const char *want = name;
+        uint16_t wtu = BIR_TU_EXT;
+
+        if (pass == 0) {
+            if (tu == BIR_TU_EXT) continue;
+            if (bir_mang(name, tu, mng, (int)sizeof mng) != 0) continue;
+            want = mng;
+            wtu = tu;
+        }
+        for (uint32_t i = 0; i < M->num_funcs; i++) {
+            const bir_func_t *F = &M->funcs[i];
+            if (F->tu != wtu || F->name >= M->string_len) continue;
+            if (strcmp(&M->strings[F->name], want) != 0) continue;
+            if (nargs < 0 || F->num_params == (uint16_t)nargs) return i;
+        }
+    }
+    return BIR_SYM_NONE;
+}
+
+uint32_t bir_gsym(const bir_module_t *M, const char *name, uint16_t tu)
+{
+    char mng[BIR_SYM_MAX];
+
+    if (tu != BIR_TU_EXT && bir_mang(name, tu, mng, (int)sizeof mng) == 0) {
+        for (uint32_t i = 0; i < M->num_globals; i++) {
+            const bir_global_t *G = &M->globals[i];
+            if (G->tu != tu || G->name >= M->string_len) continue;
+            if (strcmp(&M->strings[G->name], mng) == 0) return i;
+        }
+    }
+    for (uint32_t i = 0; i < M->num_globals; i++) {
+        const bir_global_t *G = &M->globals[i];
+        if (G->tu != BIR_TU_EXT || G->name >= M->string_len) continue;
+        if (strcmp(&M->strings[G->name], name) == 0) return i;
+    }
+    return BIR_SYM_NONE;
 }
 
 uint32_t bir_const_float(bir_module_t *M, uint32_t type, double val)

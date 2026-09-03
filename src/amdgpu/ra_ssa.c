@@ -948,6 +948,7 @@ static uint32_t rs_aloc(amd_module_t *A, mfunc_t *F,
     if (F->is_kernel && F->num_sgprs < F->first_alloc_sgpr)
         F->num_sgprs = F->first_alloc_sgpr;
     F->num_vgprs = max_vgpr;
+    if (F->uses_mfma && F->num_vgprs < RA_MFMA_HI) F->num_vgprs = RA_MFMA_HI;
 
     return n_spill;
 }

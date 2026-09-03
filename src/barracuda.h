@@ -26,6 +26,7 @@
 /* Arguments in one call. Real ocean kernels pass 23, so 16 was not enough. */
 #define BC_MAX_ARGS         64
 #define BC_MAX_PATH         512
+#define BC_MAX_TUS          256
 #define BC_MAX_DEPTH        256
 #define CUDA_GLOBAL         0x0001
 #define CUDA_DEVICE         0x0002

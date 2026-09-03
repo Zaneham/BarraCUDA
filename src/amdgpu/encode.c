@@ -456,6 +456,12 @@ static void encode_flat_global(amd_module_t *A, const minst_t *mi, uint16_t hw_o
 
 static void encode_vop3p_mai(amd_module_t *A, const minst_t *mi, uint16_t hw_op)
 {
+    const amd_mfma_t *sh = amd_mfsh(mi->op);
+    if (sh) {
+        uint8_t t = amd_mfop(sh, A->target);
+        if (t == MFMA_NONE) { A->enc_err = 1; return; }
+        hw_op = t;
+    }
     /* VOP3P-MAI: 64-bit encoding for MFMA matrix instructions.
        DW0: [31:23]=0x1A7(prefix) [22:16]=OP(7b) [15]=ACC_CD [14:11]=ABID
             [10:8]=CBSZ [7:0]=VDST

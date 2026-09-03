@@ -1,0 +1,6 @@
+# Options for mfrg.cu. See test_diag.opt for the format.
+#
+# MFMA is a CDNA matrix core instruction. The default --amdgpu target is
+# gfx1100 (RDNA 3), which has none, and PTX wants mma.sync instead.
+xfail --amdgpu      MFMA needs a CDNA target (--gfx90a or --gfx942)
+xfail --nvidia-ptx  MFMA is AMD; PTX has mma.sync

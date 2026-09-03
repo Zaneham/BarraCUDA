@@ -240,6 +240,8 @@ static void divergence_analysis(const bir_func_t *F)
             case BIR_SHFL: case BIR_SHFL_UP:
             case BIR_SHFL_DOWN: case BIR_SHFL_XOR:
             case BIR_ALLOCA: /* per-thread scratch — inherently divergent */
+            case BIR_MMA:
+            case BIR_MFRG:
             case BIR_MFMA:  /* matrix result is a collective warp operation */
             /* atomic RMW: lanes serialise, each sees a different old value. oh yeah fixin it now: ZH */
             case BIR_ATOMIC_ADD: case BIR_ATOMIC_SUB:
@@ -704,20 +706,6 @@ static int bir_type_width(uint32_t tidx)
     return 32;
 }
 
-static uint32_t arrsz(uint32_t tidx)
-{
-    if (tidx >= S.bir->num_types) return 4;
-    const bir_type_t *t = &S.bir->types[tidx];
-    if (t->kind == BIR_TYPE_ARRAY)
-        return t->count * arrsz(t->inner);
-    if (t->kind == BIR_TYPE_INT || t->kind == BIR_TYPE_FLOAT
-        || t->kind == BIR_TYPE_BFLOAT)
-        return t->width / 8;
-    if (t->kind == BIR_TYPE_PTR) return 8;
-    if (t->kind == BIR_TYPE_STRUCT) return t->num_fields * 4;
-    return 4;
-}
-
 /* Get type kind */
 static int bir_type_kind(uint32_t tidx)
 {
@@ -734,13 +722,17 @@ static int get_addrspace(uint32_t tidx)
     return BIR_AS_GLOBAL;
 }
 
-/* Get pointee type's size in bytes */
 static uint32_t pointee_size(uint32_t ptr_type)
 {
-    if (ptr_type >= S.bir->num_types) return 4;
-    const bir_type_t *pt = &S.bir->types[ptr_type];
-    if (pt->kind != BIR_TYPE_PTR || pt->inner >= S.bir->num_types) return 4;
-    return arrsz(pt->inner);
+    return bir_gsz(S.bir, ptr_type, 8);
+}
+
+static void amd_unsz(const char *what, uint32_t ty)
+{
+    char buf[128];
+    if (bir_type_str(S.bir, ty, buf, (int)sizeof buf) <= 0) buf[0] = 0;
+    fprintf(stderr, "kath: %s of %s has no storage size\n", what, buf);
+    S.had_error = 1;
 }
 
 /* ---- Instruction Selection: Individual BIR Opcodes ---- */
@@ -1418,6 +1410,8 @@ static void isel_gep(uint32_t idx, const bir_inst_t *I, int div)
     uint32_t elem_sz = pointee_size(ptr_type);
     uint32_t base_val = get_op(I, 0);
 
+    if (!elem_sz) { amd_unsz("gep", ptr_type); return; }
+
     /* Check if base pointer carries an SGPR pair (saddr mode) */
     uint16_t sbase = 0xFFFF;
     if (!BIR_VAL_IS_CONST(base_val) && base_val != BIR_VAL_NONE) {
@@ -1556,6 +1550,9 @@ static void isel_gep(uint32_t idx, const bir_inst_t *I, int div)
 
 static void isel_alloca(uint32_t idx, const bir_inst_t *I)
 {
+    uint32_t sz = pointee_size(I->type);
+    if (!sz) { amd_unsz("alloca", I->type); return; }
+
     /* Compute scratch frame offset */
     uint32_t align = 1u << I->subop;
     S.scratch_offset = (S.scratch_offset + align - 1) & ~(align - 1);
@@ -1569,15 +1566,13 @@ static void isel_alloca(uint32_t idx, const bir_inst_t *I)
     /* v_mov_b32 vr, scratch_offset */
     emit1(AMD_V_MOV_B32, mop_vreg_v((uint16_t)vr), mop_imm((int32_t)S.scratch_offset));
 
-    uint32_t sz = pointee_size(I->type);
-    if (sz < 4) sz = 4;
-    S.scratch_offset += sz;
+    S.scratch_offset += (sz + 3u) & ~3u;
 }
 
 static void isel_shared_alloc(uint32_t idx, const bir_inst_t *I)
 {
     uint32_t sz = pointee_size(I->type);
-    if (sz < 1) sz = 4;
+    if (!sz) { amd_unsz("shared_alloc", I->type); return; }
     /* Align to 4 bytes */
     S.lds_offset = (S.lds_offset + 3u) & ~3u;
     uint32_t vr = map_bir_val(idx, 0);
@@ -2182,12 +2177,10 @@ static void isel_warp(uint32_t idx, const bir_inst_t *I)
 /* F64 matrix (gfx942) */
 #define MFMA_F64_4x4x4      20
 #define MFMA_F64_16x16x4    21
+#define MFMA_I8_16x16x32    22
+#define MFMA_I8_32x32x16    23
 
-static void isel_mfma(uint32_t idx, const bir_inst_t *I)
-{
-    /* Map subop → AMD machine opcode. The hardware does the hard
-       part; we just shuffle operands like a very expensive postman. */
-    static const uint16_t mfma_ops[] = {
+static const uint16_t mfma_op_tab[] = {
         [MFMA_F16_4x4x4]     = AMD_V_MFMA_F32_4X4X4_F16,
         [MFMA_F16_16x16x16]  = AMD_V_MFMA_F32_16X16X16_F16,
         [MFMA_F16_32x32x8]   = AMD_V_MFMA_F32_32X32X8_F16,
@@ -2210,23 +2203,77 @@ static void isel_mfma(uint32_t idx, const bir_inst_t *I)
         [MFMA_BF8_BF8_32x32] = AMD_V_MFMA_F32_32X32X16_BF8_BF8,
         [MFMA_F64_4x4x4]     = AMD_V_MFMA_F64_4X4X4_F64,
         [MFMA_F64_16x16x4]   = AMD_V_MFMA_F64_16X16X4_F64,
-    };
+        [MFMA_I8_16x16x32]   = AMD_V_MFMA_I32_16X16X32_I8,
+        [MFMA_I8_32x32x16]   = AMD_V_MFMA_I32_32X32X16_I8,
+};
 
-    uint8_t var = I->subop;
-    if (var > MFMA_F64_16x16x4) return;
-    uint16_t mop = mfma_ops[var];
+#define MF_D  208u   /* up to 16, 16-aligned */
+#define MF_C  224u   /* up to 16, 16-aligned */
+#define MF_A  240u   /* up to 4,   4-aligned */
+#define MF_B  244u   /* up to 4,   4-aligned */
 
-    /* MFMA: ops[0]=A, ops[1]=B, ops[2]=C(accum). All VGPR on gfx942. */
-    moperand_t a = ensure_vgpr(resolve_val(I->operands[0], 1));
-    moperand_t b = ensure_vgpr(resolve_val(I->operands[1], 1));
-    moperand_t c = ensure_vgpr(resolve_val(I->operands[2], 1));
-    uint32_t vr = map_bir_val(idx, 1);
+static void isel_refuse(const char *what);
 
-    /* Wait for any pending VMEM before the matrix op — the hardware
-       won't schedule around these for you */
+static void mf_ldst(int store, uint32_t ptr_val, uint16_t phys, int32_t off)
+{
+    uint16_t sbase = 0xFFFF;
+    if (ptr_val != BIR_VAL_NONE && !BIR_VAL_IS_CONST(ptr_val)) {
+        uint32_t si = BIR_VAL_INDEX(ptr_val);
+        if (si < BIR_MAX_INSTS) sbase = S.amd->val_sbase[si];
+    }
+    moperand_t addr = ensure_vgpr(resolve_val(ptr_val, 1));
+    moperand_t ops[MINST_MAX_OPS];
+
+    if (sbase != 0xFFFF) {
+        moperand_t a = addr;
+        if (off != 0) {
+            a = mop_vreg_v((uint16_t)new_vreg(1));
+            emit2(AMD_V_ADD_U32, a, mop_imm(off), addr);
+        }
+        if (store) { ops[0] = a; ops[1] = mop_vgpr(phys); ops[2] = mop_sgpr(sbase);
+                     emit_minst(AMD_GLOBAL_STORE_DWORD, 0, 3, ops, 0); }
+        else       { ops[0] = mop_vgpr(phys); ops[1] = a; ops[2] = mop_sgpr(sbase);
+                     emit_minst(AMD_GLOBAL_LOAD_DWORD, 1, 2, ops, 0); }
+        return;
+    }
+    if (store) { ops[0] = addr; ops[1] = mop_vgpr(phys); ops[2] = mop_imm(off);
+                 emit_minst(AMD_GLOBAL_STORE_DWORD, 0, 3, ops, 0); }
+    else       emit2(AMD_GLOBAL_LOAD_DWORD, mop_vgpr(phys), addr, mop_imm(off));
+}
+
+static void isel_mfrg(const bir_inst_t *I)
+{
+    if (I->subop >= (uint8_t)(sizeof mfma_op_tab / sizeof mfma_op_tab[0])) {
+        isel_refuse("MFMA variant"); return;
+    }
+    uint16_t mop = mfma_op_tab[I->subop];
+    const amd_mfma_t *sh = amd_mfsh(mop);
+    if (!sh || amd_mfop(sh, S.amd->target) == MFMA_NONE) {
+        isel_refuse("this MFMA shape on this CDNA target"); return;
+    }
+    S.mf->uses_mfma = 1;
+
+    for (uint8_t i = 0; i < sh->wa; i++)
+        mf_ldst(0, I->operands[0], (uint16_t)(MF_A + i), (int32_t)i * 4);
+    for (uint8_t i = 0; i < sh->wb; i++)
+        mf_ldst(0, I->operands[1], (uint16_t)(MF_B + i), (int32_t)i * 4);
+    for (uint8_t i = 0; i < sh->wd; i++)
+        mf_ldst(0, I->operands[2], (uint16_t)(MF_C + i), (int32_t)i * 4);
     emit_wait_vm();
 
-    emit3(mop, mop_vreg_v((uint16_t)vr), a, b, c);
+    moperand_t d = mop_vgpr(MF_D), a = mop_vgpr(MF_A);
+    moperand_t b = mop_vgpr(MF_B), c = mop_vgpr(MF_C);
+    d.nreg = sh->wd; a.nreg = sh->wa; b.nreg = sh->wb; c.nreg = sh->wd;
+    emit3(mop, d, a, b, c);
+
+    for (uint8_t i = 0; i < sh->wd; i++)
+        mf_ldst(1, I->operands[2], (uint16_t)(MF_D + i), (int32_t)i * 4);
+}
+
+static void isel_mfma(uint32_t idx, const bir_inst_t *I)
+{
+    (void)idx; (void)I;
+    isel_refuse("MFMA in register form (use __builtin_mfma_*)");
 }
 
 static void isel_select(uint32_t idx, const bir_inst_t *I, int div)
@@ -2666,6 +2713,12 @@ static void isel_function(uint32_t fi)
             /* Matrix */
             case BIR_MFMA:
                 isel_mfma(idx, I);
+                break;
+            case BIR_MMA:
+                isel_refuse("warp-collective mma (NVIDIA PTX only for now)");
+                break;
+            case BIR_MFRG:
+                isel_mfrg(I);
                 break;
 
             /* Misc */

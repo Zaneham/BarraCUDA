@@ -105,42 +105,12 @@ static void load_val(cpu_mod_t *X,int reg,uint32_t v){
     else ld_slot(X,reg,slot(X,BIR_VAL_INDEX(v)));
 }
 
-/* element size in bytes of a pointer's pointee, default 4 (i32/f32).
- * Drives GEP stride, so it must be width-accurate: i8->1, i16->2,
- * i32/f32->4, i64/f64->8, ptr-to-ptr->8. */
-static int type_size(const cpu_mod_t *X,uint32_t ty);
-
-static int pointee_sz(cpu_mod_t *X,uint32_t ty){
-    if (ty<X->M->num_types && X->M->types[ty].kind==BIR_TYPE_PTR){
-        uint32_t in=X->M->types[ty].inner;
-        if (in<X->M->num_types){
-            uint8_t k=X->M->types[in].kind;
-            if (k==BIR_TYPE_PTR) return 8;
-            /* an array of structs strides by the whole struct, not by 4: a
-             * struct pointee has no width field, so size it properly or every
-             * index past the first lands in the wrong element. */
-            if (k==BIR_TYPE_STRUCT || k==BIR_TYPE_ARRAY || k==BIR_TYPE_VECTOR) return type_size(X,in);
-            uint32_t w=X->M->types[in].width;
-            if (w>=8) return (int)(w/8);
-        }
-    }
-    return 4;
+static int type_size(const cpu_mod_t *X,uint32_t ty){
+    return (int)bir_bsz(X->M,ty,8);
 }
 
-/* size in bytes of a type. Aggregate layout is naive (no padding),
- * which is fine here: the only aggregates we size are tiles, and a tile
- * is a run of one uniform scalar, so the plain sum lands exactly right. */
-static int type_size(const cpu_mod_t *X,uint32_t ty){
-    if (ty>=X->M->num_types) return 8;
-    const bir_type_t *t=&X->M->types[ty];
-    switch (t->kind){
-    case BIR_TYPE_INT: case BIR_TYPE_FLOAT: case BIR_TYPE_BFLOAT: return t->width?(int)(t->width/8):4;
-    case BIR_TYPE_PTR: return 8;
-    case BIR_TYPE_ARRAY: return (int)t->count*type_size(X,t->inner);
-    case BIR_TYPE_VECTOR: return (int)t->width*type_size(X,t->inner);
-    case BIR_TYPE_STRUCT: { int s=0; for(uint16_t i=0;i<t->num_fields;i++) s+=type_size(X,X->M->type_fields[t->count+i]); return s; }
-    default: return 8;
-    }
+static int pointee_sz(cpu_mod_t *X,uint32_t ty){
+    return (int)bir_gsz(X->M,ty,8);
 }
 
 /* type index of a value (const or inst result); 0 if unknown. */
@@ -369,7 +339,9 @@ static void cpu_func(cpu_mod_t *X,const bir_func_t *F){
             const bir_inst_t*I=&X->M->insts[ix];
             if ((I->op==BIR_ALLOCA||I->op==BIR_SHARED_ALLOC) && na<CPU_ALLOCA_MAX){
                 uint32_t pte=(I->type<X->M->num_types)?X->M->types[I->type].inner:0;
-                int sz=(type_size(X,pte)+7)&~7; if(sz<8)sz=8;
+                int sz=type_size(X,pte);
+                if(!sz){ fprintf(stderr,"kath: alloca of a type with no storage size\n"); X->n_errs++; }
+                sz=(sz+7)&~7; if(sz<8)sz=8;
                 off-=sz; X->alloca_off[na++]=off;
             }
         }
@@ -509,7 +481,9 @@ static void cpu_func(cpu_mod_t *X,const bir_func_t *F){
             else { eb(X,0x31);modrm(X,3,X_RDX,X_RDX); eb(X,0xF7);modrm(X,3,6,X_RCX); }
             if (I->op==BIR_UREM){ rexw(X,X_RDX,X_RAX);eb(X,0x89);modrm(X,3,X_RDX,X_RAX); }
             st_slot(X,X_RAX,s); break; }
-        case BIR_GEP: { int sz=pointee_sz(X,I->type); load_val(X,X_RCX,I->operands[1]); mov_imm(X,X_RAX,sz); eb(X,0x48);eb(X,0x0F);eb(X,0xAF);modrm(X,3,X_RCX,X_RAX); load_val(X,X_RAX,I->operands[0]); rexw(X,X_RCX,X_RAX);eb(X,0x01);modrm(X,3,X_RCX,X_RAX); st_slot(X,X_RAX,s); break; }
+        case BIR_GEP: { int sz=pointee_sz(X,I->type);
+            if(!sz){ fprintf(stderr,"kath: gep through a pointer with no storage size\n"); X->n_errs++; break; }
+            load_val(X,X_RCX,I->operands[1]); mov_imm(X,X_RAX,sz); eb(X,0x48);eb(X,0x0F);eb(X,0xAF);modrm(X,3,X_RCX,X_RAX); load_val(X,X_RAX,I->operands[0]); rexw(X,X_RCX,X_RAX);eb(X,0x01);modrm(X,3,X_RCX,X_RAX); st_slot(X,X_RAX,s); break; }
         case BIR_LOAD: { load_val(X,X_RAX,I->operands[0]); /* addr in rax */
             const bir_type_t *t=(I->type<X->M->num_types)?&X->M->types[I->type]:0;
             int isflt=t&&(t->kind==BIR_TYPE_FLOAT||t->kind==BIR_TYPE_BFLOAT);
@@ -777,6 +751,9 @@ static void cpu_func(cpu_mod_t *X,const bir_func_t *F){
             if (is_float_ty(X,I->type)){ int w64=(I->type<X->M->num_types&&X->M->types[I->type].width==64); st_xmm_slot(X,X_XMM0,s,w64); }
             else st_slot(X,X_RAX,s);
             break; }
+        case BIR_MMA: case BIR_MFRG:
+            fprintf(stderr,"kath: warp-collective mma not supported on the x86-64 backend\n");
+            X->n_errs++; break;
         default: mov_imm(X,X_RAX,0); st_slot(X,X_RAX,s); break;
         }}
     }

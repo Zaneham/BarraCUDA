@@ -32,6 +32,9 @@ typedef struct parser_s {
     uint32_t        anon_len;
     uint32_t        anon_cnt;
 
+    struct { uint32_t off; uint32_t len; } packs[32];
+    int             npacks;
+
     /* Enclosing struct name, so a constructor can be told apart from a
      * declaration that happens to start with a type name. len 0 = not in one. */
     uint32_t        cs_off;

@@ -597,6 +597,8 @@ const amd_enc_entry_t amd_enc_table_gfx9[AMD_OP_COUNT] = {
     [AMD_V_MFMA_F32_32X32X16_FP8_BF8] = { AMD_FMT_VOP3P_MAI, 0x76, "v_mfma_f32_32x32x16_fp8_bf8" },
     [AMD_V_MFMA_F32_32X32X16_BF8_FP8] = { AMD_FMT_VOP3P_MAI, 0x75, "v_mfma_f32_32x32x16_bf8_fp8" },
     [AMD_V_MFMA_F32_32X32X16_BF8_BF8] = { AMD_FMT_VOP3P_MAI, 0x74, "v_mfma_f32_32x32x16_bf8_bf8" },
+    [AMD_V_MFMA_I32_16X16X32_I8]      = { AMD_FMT_VOP3P_MAI, 0x57, "v_mfma_i32_16x16x32_i8" },
+    [AMD_V_MFMA_I32_32X32X16_I8]      = { AMD_FMT_VOP3P_MAI, 0x56, "v_mfma_i32_32x32x16_i8" },
     /* F64 — for when your matrix really needs 52 bits of mantissa */
     [AMD_V_MFMA_F64_4X4X4_F64]        = { AMD_FMT_VOP3P_MAI, 0x6F, "v_mfma_f64_4x4x4f64"         },
     [AMD_V_MFMA_F64_16X16X4_F64]      = { AMD_FMT_VOP3P_MAI, 0x6E, "v_mfma_f64_16x16x4f64"       },
@@ -606,3 +608,45 @@ const amd_enc_entry_t amd_enc_table_gfx9[AMD_OP_COUNT] = {
     [AMD_PSEUDO_COPY]            = { AMD_FMT_PSEUDO, 0, "PSEUDO_COPY" },
     [AMD_PSEUDO_DEF]             = { AMD_FMT_PSEUDO, 0, "PSEUDO_DEF"  },
 };
+
+static const amd_mfma_t mfma_shapes[] = {
+    { AMD_V_MFMA_F32_4X4X4_F16,           2, 2,  4, 0x4A, 0x4A },
+    { AMD_V_MFMA_F32_16X16X16_F16,        2, 2,  4, 0x4D, 0x4D },
+    { AMD_V_MFMA_F32_32X32X8_F16,         2, 2, 16, 0x4C, 0x4C },
+    { AMD_V_MFMA_F32_4X4X4_BF16_1K,       2, 2,  4, 0x65, 0x5F },
+    { AMD_V_MFMA_F32_16X16X16_BF16_1K,    2, 2,  4, 0x67, 0x61 },
+    { AMD_V_MFMA_F32_32X32X8_BF16_1K,     2, 2, 16, 0x66, 0x60 },
+    { AMD_V_MFMA_F32_4X4X1_F32,           1, 1,  4, 0x42, 0x42 },
+    { AMD_V_MFMA_F32_16X16X4_F32,         1, 1,  4, 0x45, 0x45 },
+    { AMD_V_MFMA_F32_32X32X2_F32,         1, 1, 16, 0x44, 0x44 },
+    { AMD_V_MFMA_I32_4X4X4_I8,            1, 1,  4, 0x52, 0x52 },
+    { AMD_V_MFMA_I32_16X16X16_I8,         1, 1,  4, 0x55, MFMA_NONE },
+    { AMD_V_MFMA_I32_32X32X8_I8,          1, 1, 16, 0x54, MFMA_NONE },
+    { AMD_V_MFMA_I32_16X16X32_I8,         2, 2,  4, MFMA_NONE, 0x57 },
+    { AMD_V_MFMA_I32_32X32X16_I8,         2, 2, 16, MFMA_NONE, 0x56 },
+    { AMD_V_MFMA_F32_16X16X32_FP8_FP8,    2, 2,  4, MFMA_NONE, 0x73 },
+    { AMD_V_MFMA_F32_16X16X32_FP8_BF8,    2, 2,  4, MFMA_NONE, 0x72 },
+    { AMD_V_MFMA_F32_16X16X32_BF8_FP8,    2, 2,  4, MFMA_NONE, 0x71 },
+    { AMD_V_MFMA_F32_16X16X32_BF8_BF8,    2, 2,  4, MFMA_NONE, 0x70 },
+    { AMD_V_MFMA_F32_32X32X16_FP8_FP8,    2, 2, 16, MFMA_NONE, 0x77 },
+    { AMD_V_MFMA_F32_32X32X16_FP8_BF8,    2, 2, 16, MFMA_NONE, 0x76 },
+    { AMD_V_MFMA_F32_32X32X16_BF8_FP8,    2, 2, 16, MFMA_NONE, 0x75 },
+    { AMD_V_MFMA_F32_32X32X16_BF8_BF8,    2, 2, 16, MFMA_NONE, 0x74 },
+    { AMD_V_MFMA_F64_4X4X4_F64,           2, 2,  2, 0x6F, 0x6F },
+    { AMD_V_MFMA_F64_16X16X4_F64,         2, 2,  8, 0x6E, 0x6E },
+};
+
+const amd_mfma_t *amd_mfsh(uint16_t op)
+{
+    for (unsigned i = 0; i < sizeof mfma_shapes / sizeof mfma_shapes[0]; i++)
+        if (mfma_shapes[i].op == op) return &mfma_shapes[i];
+    return NULL;
+}
+
+uint8_t amd_mfop(const amd_mfma_t *sh, int target)
+{
+    if (!sh) return MFMA_NONE;
+    if (target == AMD_TARGET_GFX90A) return sh->op90a;
+    if (target == AMD_TARGET_GFX942) return sh->op942;
+    return MFMA_NONE;
+}

@@ -491,6 +491,9 @@ typedef struct {
      * declaring node generated. */
     uint32_t        node_val[TN_MAX_NODES];
 
+    int             loopd;
+    uint8_t         vald[TN_MAX_NODES];
+
     /* Rank-2 (and rank-1) tiles in a kernel that uses tl.dot are
      * materialised and fully unrolled: each tile is an array of
      * per-element BIR scalar values. tile_mode turns the whole kernel

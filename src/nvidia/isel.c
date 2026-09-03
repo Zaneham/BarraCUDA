@@ -13,10 +13,19 @@ static struct {
     uint32_t            lcl_off;   /* local (alloca) byte offset */
     uint32_t            shr_off;   /* shared memory byte offset */
     uint32_t            cur_func;  /* current nv_mfunc_t index */
+    int                 unsz;      /* a type with no storage size was met */
+    int                 had_error; /* an op we refuse to fake; fail the compile */
 } S;
+
+static void nv_refuse(const char *what)
+{
+    fprintf(stderr, "kath: %s not supported on this backend\n", what);
+    S.had_error = 1;
+}
 
 /* Forward declaration — rslv needs em1 for f64 constant materialisation */
 static void em1(uint16_t op, nv_opnd_t d, nv_opnd_t a, nv_opnd_t b);
+static nv_opnd_t mat_pred(nv_opnd_t op);
 
 /* ---- Deferred PHI Copies ----
  * PHI elimination requires inserting MOV copies into predecessor
@@ -105,7 +114,7 @@ static uint8_t bir_rfile(uint32_t type_idx)
 
     switch (T->kind) {
     case BIR_TYPE_INT:
-        if (T->width <= 1)  return NV_RF_PRED;
+        if (T->width <= 1)  return NV_RF_U32;
         if (T->width <= 16) return NV_RF_U16;
         if (T->width <= 32) return NV_RF_U32;
         return NV_RF_U64;
@@ -122,6 +131,17 @@ static uint8_t bir_rfile(uint32_t type_idx)
     }
 }
 
+static uint8_t def_rf(uint32_t idx, uint32_t type_idx)
+{
+    if (idx < S.bir->num_insts) {
+        uint16_t o = S.bir->insts[idx].op;
+        if (o == BIR_ICMP || o == BIR_FCMP
+         || o == BIR_VOTE_ANY || o == BIR_VOTE_ALL)
+            return NV_RF_PRED;
+    }
+    return bir_rfile(type_idx);
+}
+
 /* Map a BIR instruction to a vreg, creating one if needed */
 static nv_opnd_t map_val(uint32_t idx, uint32_t type_idx)
 {
@@ -129,15 +149,14 @@ static nv_opnd_t map_val(uint32_t idx, uint32_t type_idx)
     if (S.nv->val_vreg[idx] != 0)
         return mop_reg(S.nv->val_rfile[idx], S.nv->val_vreg[idx]);
 
-    uint8_t rf = bir_rfile(type_idx);
+    uint8_t rf = def_rf(idx, type_idx);
     uint16_t rn = new_vreg(rf);
     S.nv->val_vreg[idx] = rn;
     S.nv->val_rfile[idx] = rf;
     return mop_reg(rf, rn);
 }
 
-/* Resolve a BIR operand (instruction ref or constant) */
-static nv_opnd_t rslv(uint32_t val)
+static nv_opnd_t rslv_p(uint32_t val)
 {
     if (val == BIR_VAL_NONE) return mop_imm(0);
 
@@ -185,6 +204,11 @@ static nv_opnd_t rslv(uint32_t val)
     return map_val(si, S.bir->insts[si].type);
 }
 
+static nv_opnd_t rslv(uint32_t val)
+{
+    return mat_pred(rslv_p(val));
+}
+
 /* Resolve, but return the register file for the BIR value */
 static uint8_t rslv_rf(uint32_t val)
 {
@@ -197,9 +221,10 @@ static uint8_t rslv_rf(uint32_t val)
     }
     uint32_t si = BIR_VAL_INDEX(val);
     if (si < S.bir->num_insts) {
-        if (S.nv->val_rfile[si] != 0 || S.nv->val_vreg[si] != 0)
-            return S.nv->val_rfile[si];
-        return bir_rfile(S.bir->insts[si].type);
+        uint8_t rf = (S.nv->val_rfile[si] != 0 || S.nv->val_vreg[si] != 0)
+                     ? S.nv->val_rfile[si]
+                     : def_rf(si, S.bir->insts[si].type);
+        return rf == NV_RF_PRED ? NV_RF_U32 : rf;
     }
     return NV_RF_U32;
 }
@@ -225,40 +250,27 @@ static uint32_t get_op(const bir_inst_t *I, uint32_t k)
     return BIR_VAL_NONE;
 }
 
-/* Type size in bytes for load/store width selection.
- * Structs need the full sum-of-fields treatment — GEP strides
- * depend on it. Without this, parts[tid] computes base + tid*4
- * instead of base + tid*40 and you read someone else's neutron.
- * Which is bad nuclear physics even by Monte Carlo standards. */
 static uint32_t type_bytes(uint32_t type_idx)
 {
-    if (type_idx >= S.bir->num_types) return 4;
-    const bir_type_t *T = &S.bir->types[type_idx];
-    switch (T->kind) {
-    case BIR_TYPE_INT:
-    case BIR_TYPE_FLOAT:
-    case BIR_TYPE_BFLOAT:
-        return ((uint32_t)T->width + 7u) / 8u;
-    case BIR_TYPE_PTR:
-        return 8;
-    case BIR_TYPE_STRUCT: {
-        uint32_t sz = 0;
-        int guard = 64;
-        for (uint16_t i = 0; i < T->num_fields && guard > 0;
-             i++, guard--) {
-            uint32_t fi = T->count + (uint32_t)i;
-            if (fi < S.bir->num_type_fields)
-                sz += type_bytes(S.bir->type_fields[fi]);
-        }
-        return sz ? sz : 4;
-    }
-    case BIR_TYPE_ARRAY: {
-        uint32_t esz = type_bytes(T->inner);
-        return T->count * esz;
-    }
-    default:
-        return 4;
-    }
+    return bir_bsz(S.bir, type_idx, 8);
+}
+
+static uint32_t pntsz(uint32_t ptr_val)
+{
+    uint32_t si, pt;
+    if (ptr_val == BIR_VAL_NONE || BIR_VAL_IS_CONST(ptr_val)) return 0;
+    si = BIR_VAL_INDEX(ptr_val);
+    if (si >= S.bir->num_insts) return 0;
+    pt = S.bir->insts[si].type;
+    return bir_gsz(S.bir, pt, 8);
+}
+
+static void unsz(const char *what, uint32_t ty)
+{
+    char buf[128];
+    if (bir_type_str(S.bir, ty, buf, (int)sizeof buf) <= 0) buf[0] = 0;
+    fprintf(stderr, "kath: %s of %s has no storage size\n", what, buf);
+    S.unsz = 1;
 }
 
 /* ---- Emission ---- */
@@ -477,10 +489,6 @@ static void is_frem(uint32_t idx, const bir_inst_t *I)
 
 /* ---- Comparison ---- */
 
-/* Predicate registers are 1-bit — they can't appear as operands to
- * setp.*.u32. If we're comparing a predicate (e.g. branch on icmp
- * result), materialise it into a u32 register first. The PTX assembler
- * is surprisingly strict about this. Who knew. */
 static nv_opnd_t mat_pred(nv_opnd_t op)
 {
     if (op.kind == NV_MOP_REG && op.rfile == NV_RF_PRED) {
@@ -496,16 +504,8 @@ static nv_opnd_t mat_pred(nv_opnd_t op)
 static void is_icmp(uint32_t idx, const bir_inst_t *I)
 {
     nv_opnd_t d = map_val(idx, I->type);
-    /* Override: comparison result is a predicate */
-    S.nv->val_rfile[idx] = NV_RF_PRED;
-    d.rfile = NV_RF_PRED;
-
     nv_opnd_t a = rslv(I->operands[0]);
     nv_opnd_t b = rslv(I->operands[1]);
-
-    /* Predicates can't be setp source operands — widen to u32 */
-    a = mat_pred(a);
-    b = mat_pred(b);
 
     uint16_t op;
     switch (I->subop) {
@@ -527,9 +527,6 @@ static void is_icmp(uint32_t idx, const bir_inst_t *I)
 static void is_fcmp(uint32_t idx, const bir_inst_t *I)
 {
     nv_opnd_t d = map_val(idx, I->type);
-    S.nv->val_rfile[idx] = NV_RF_PRED;
-    d.rfile = NV_RF_PRED;
-
     uint8_t rf = rslv_rf(I->operands[0]);
     nv_opnd_t a = rslv(I->operands[0]);
     nv_opnd_t b = rslv(I->operands[1]);
@@ -561,7 +558,7 @@ static void is_selp(uint32_t idx, const bir_inst_t *I)
 {
     uint8_t rf = bir_rfile(I->type);
     nv_opnd_t d = map_val(idx, I->type);
-    nv_opnd_t cond = rslv(I->operands[0]);
+    nv_opnd_t cond = rslv_p(I->operands[0]);
     nv_opnd_t tv   = rslv(I->operands[1]);
     nv_opnd_t fv   = rslv(I->operands[2]);
 
@@ -610,9 +607,24 @@ static void is_cvt(uint32_t idx, const bir_inst_t *I)
     case BIR_UITOFP:  op = (bir_rfile(I->type) == NV_RF_F64) ? NV_CVT_F64_U32 : NV_CVT_F32_U32; break;
     case BIR_FPTRUNC: op = NV_CVT_F32_F64; break;
     case BIR_FPEXT:   op = NV_CVT_F64_F32; break;
-    case BIR_ZEXT:    op = NV_CVT_U64_U32; break;
-    case BIR_SEXT:    op = NV_CVT_S64_S32; break;
-    case BIR_TRUNC:   op = NV_CVT_U32_U64; break;
+    case BIR_ZEXT:
+    case BIR_SEXT:
+    case BIR_TRUNC: {
+        uint8_t drf = S.nv->val_rfile[idx];
+        uint8_t srf = rslv_rf(I->operands[0]);
+        if (drf == srf) {
+            em1u(drf == NV_RF_U64 ? NV_MOV_U64 : NV_MOV_U32, d, s);
+            return;
+        }
+        if (drf == NV_RF_U64 && srf == NV_RF_U32)
+            op = (I->op == BIR_SEXT) ? NV_CVT_S64_S32 : NV_CVT_U64_U32;
+        else if (drf == NV_RF_U32 && srf == NV_RF_U64)
+            op = NV_CVT_U32_U64;
+        else
+            op = (I->op == BIR_TRUNC) ? NV_CVT_U32_U64 :
+                 (I->op == BIR_SEXT)  ? NV_CVT_S64_S32 : NV_CVT_U64_U32;
+        break;
+    }
     case BIR_PTRTOINT:
     case BIR_INTTOPTR:
     case BIR_BITCAST:
@@ -648,17 +660,21 @@ static void is_load(uint32_t idx, const bir_inst_t *I)
 
     nv_opnd_t addr = mat_const(ptr_val, NV_RF_U64);
 
+    uint32_t psz = pntsz(ptr_val);
     uint16_t op;
     switch (as) {
     case BIR_AS_SHARED:
-        op = (drf == NV_RF_F32) ? NV_LD_SHR_F32 : NV_LD_SHR_U32;
+        op = (psz == 1)        ? NV_LD_SHR_U8  :
+             (drf == NV_RF_F32) ? NV_LD_SHR_F32 : NV_LD_SHR_U32;
         break;
     case BIR_AS_PRIVATE:
-        op = (drf == NV_RF_F64) ? NV_LD_LOC_F64 :
+        op = (psz == 1)        ? NV_LD_LOC_U8  :
+             (drf == NV_RF_F64) ? NV_LD_LOC_F64 :
              (drf == NV_RF_F32) ? NV_LD_LOC_F32 :
              (drf == NV_RF_U64) ? NV_LD_LOC_U64 : NV_LD_LOC_U32;
         break;
     default: /* global */
+        if (psz == 1) { op = NV_LD_GLB_U8; break; }
         switch (drf) {
         case NV_RF_F32:  op = NV_LD_GLB_F32; break;
         case NV_RF_F64:  op = NV_LD_GLB_F64; break;
@@ -698,17 +714,21 @@ static void is_store(const bir_inst_t *I)
     if (val.kind != NV_MOP_REG)
         val = mat_const(I->operands[0], vrf);
 
+    uint32_t psz = pntsz(ptr_val);
     uint16_t op;
     switch (as) {
     case BIR_AS_SHARED:
-        op = (vrf == NV_RF_F32) ? NV_ST_SHR_F32 : NV_ST_SHR_U32;
+        op = (psz == 1)        ? NV_ST_SHR_U8  :
+             (vrf == NV_RF_F32) ? NV_ST_SHR_F32 : NV_ST_SHR_U32;
         break;
     case BIR_AS_PRIVATE:
-        op = (vrf == NV_RF_F64) ? NV_ST_LOC_F64 :
+        op = (psz == 1)        ? NV_ST_LOC_U8  :
+             (vrf == NV_RF_F64) ? NV_ST_LOC_F64 :
              (vrf == NV_RF_F32) ? NV_ST_LOC_F32 :
              (vrf == NV_RF_U64) ? NV_ST_LOC_U64 : NV_ST_LOC_U32;
         break;
     default:
+        if (psz == 1) { op = NV_ST_GLB_U8; break; }
         switch (vrf) {
         case NV_RF_F32:  op = NV_ST_GLB_F32; break;
         case NV_RF_F64:  op = NV_ST_GLB_F64; break;
@@ -733,12 +753,13 @@ static void is_alloca(uint32_t idx, const bir_inst_t *I)
      * reference these as local memory. */
     nv_opnd_t d = map_val(idx, I->type);
 
-    uint32_t sz = 4; /* default 4 bytes */
+    uint32_t sz = 0;
     if (I->type < S.bir->num_types) {
         const bir_type_t *T = &S.bir->types[I->type];
-        if (T->kind == BIR_TYPE_PTR && T->inner < S.bir->num_types)
+        if (T->kind == BIR_TYPE_PTR)
             sz = type_bytes(T->inner);
     }
+    if (!sz) { unsz("alloca", I->type); return; }
     uint32_t off = S.lcl_off;
     S.lcl_off += sz;
 
@@ -753,12 +774,13 @@ static void is_shralloc(uint32_t idx, const bir_inst_t *I)
 {
     nv_opnd_t d = map_val(idx, I->type);
 
-    uint32_t sz = 4;
+    uint32_t sz = 0;
     if (I->type < S.bir->num_types) {
         const bir_type_t *T = &S.bir->types[I->type];
-        if (T->kind == BIR_TYPE_PTR && T->inner < S.bir->num_types)
+        if (T->kind == BIR_TYPE_PTR)
             sz = type_bytes(T->inner);
     }
+    if (!sz) { unsz("shared_alloc", I->type); return; }
     uint32_t off = S.shr_off;
     S.shr_off += sz;
 
@@ -784,13 +806,8 @@ static void is_gep(uint32_t idx, const bir_inst_t *I)
 
     nv_opnd_t offset = rslv(I->operands[1]);
 
-    /* Compute stride from pointee type */
-    uint32_t stride = 4;
-    if (I->type < S.bir->num_types) {
-        const bir_type_t *T = &S.bir->types[I->type];
-        if (T->kind == BIR_TYPE_PTR && T->inner < S.bir->num_types)
-            stride = type_bytes(T->inner);
-    }
+    uint32_t stride = bir_gsz(S.bir, I->type, 8);
+    if (!stride) { unsz("gep", I->type); return; }
 
     /* mad.lo.u64 %rd, index, stride, base */
     if (offset.kind == NV_MOP_REG) {
@@ -875,7 +892,7 @@ static void is_br(const bir_inst_t *I)
 
 static void is_brcond(const bir_inst_t *I)
 {
-    nv_opnd_t cond = rslv(I->operands[0]);
+    nv_opnd_t cond = rslv_p(I->operands[0]);
     uint32_t true_bir  = I->operands[1];
     uint32_t false_bir = I->operands[2];
 
@@ -937,7 +954,7 @@ static void is_phi(uint32_t idx, const bir_inst_t *I,
          * Only reject genuinely out-of-range values. */
         if (m_pred >= NV_MAX_MBLK) continue;
 
-        nv_opnd_t src = rslv(val);
+        nv_opnd_t src = rslv_p(val);
 
         /* Self-copy: skip */
         if (src.kind == NV_MOP_REG && src.rfile == d.rfile &&
@@ -1036,7 +1053,7 @@ static void is_vote(uint32_t idx, const bir_inst_t *I)
 {
     nv_opnd_t d = map_val(idx, I->type);
     uint32_t pred_op = I->operands[1];
-    nv_opnd_t pred = rslv(pred_op);
+    nv_opnd_t pred = rslv_p(pred_op);
 
     if (pred.kind != NV_MOP_REG || pred.rfile != NV_RF_PRED) {
         uint16_t prn = new_vreg(NV_RF_PRED);
@@ -1129,6 +1146,121 @@ static void is_ret(const bir_inst_t *I)
 }
 
 /* ---- Per-Block Instruction Selection ---- */
+
+
+#define MMA_N 16
+
+static nv_opnd_t mma_u32(void)
+{
+    return mop_reg(NV_RF_U32, new_vreg(NV_RF_U32));
+}
+
+static nv_opnd_t mma_off(nv_opnd_t a, int32_t k)
+{
+    if (k == 0) return a;
+    nv_opnd_t d = mma_u32();
+    em1(NV_ADD_U32, d, a, mop_imm(k));
+    return d;
+}
+
+static nv_opnd_t mma_adr(nv_opnd_t base, nv_opnd_t ld,
+                         nv_opnd_t row, nv_opnd_t col, int32_t esz)
+{
+    nv_opnd_t t = mma_u32();
+    em1(NV_MUL_LO_U32, t, row, ld);
+    nv_opnd_t e = mma_u32();
+    em1(NV_ADD_U32, e, t, col);
+    nv_opnd_t w = mop_reg(NV_RF_U64, new_vreg(NV_RF_U64));
+    em1u(NV_CVT_U64_U32, w, e);
+    nv_opnd_t a = mop_reg(NV_RF_U64, new_vreg(NV_RF_U64));
+    nv_opnd_t ops[4] = { a, w, mop_imm(esz), base };
+    emit(NV_MAD_LO_U64, 1, 3, ops, 0);
+    return a;
+}
+
+static uint16_t mma_frag(uint8_t rf, int n)
+{
+    uint16_t b = new_vreg(rf);
+    for (int i = 1; i < n; i++) (void)new_vreg(rf);
+    return b;
+}
+
+static void is_mma(const bir_inst_t *I)
+{
+    const nv_mmash_t *sh = &nv_mmash[I->subop % NV_MMA_NSHAPE];
+    nv_opnd_t ap = mat_const(I->operands[0], NV_RF_U64);
+    nv_opnd_t la = mat_const(I->operands[1], NV_RF_U32);
+    nv_opnd_t bp = mat_const(I->operands[2], NV_RF_U64);
+    nv_opnd_t lb = mat_const(I->operands[3], NV_RF_U32);
+    nv_opnd_t dp = mat_const(I->operands[4], NV_RF_U64);
+    nv_opnd_t ld = mat_const(I->operands[5], NV_RF_U32);
+
+    em0(NV_BARWARP);
+
+    nv_opnd_t lane = mma_u32();
+    em1u(NV_MOV_U32, lane, mop_spec(NV_SPEC_LANEID));
+    nv_opnd_t gid = mma_u32();
+    em1(NV_SHR_U32, gid, lane, mop_imm(2));
+    nv_opnd_t tig = mma_u32();
+    em1(NV_AND_B32, tig, lane, mop_imm(3));
+    nv_opnd_t t2 = mma_u32();
+    em1(NV_SHL_B32, t2, tig, mop_imm(1));
+
+    uint16_t abase = mma_frag(NV_RF_B32, sh->na / 2);
+    for (uint8_t i = 0; i < sh->na; i += 2) {
+        nv_opnd_t h[2];
+        for (uint8_t j = 0; j < 2; j++) {
+            uint8_t e = (uint8_t)(i + j);
+            nv_opnd_t row = mma_off(gid, ((e & 2) != 0) ? 8 : 0);
+            nv_opnd_t col = mma_off(t2, (e & 1) + ((e >= 4) ? 8 : 0));
+            nv_opnd_t a = mma_adr(ap, la, row, col, 2);
+            h[j] = mop_reg(NV_RF_U16, new_vreg(NV_RF_U16));
+            em1u(NV_LD_GLB_U16, h[j], a);
+        }
+        nv_opnd_t pk[3] = { mop_reg(NV_RF_B32, (uint16_t)(abase + i / 2)),
+                            h[0], h[1] };
+        emit(NV_MOV_PK16, 1, 2, pk, 0);
+    }
+
+    for (int nb = 0; nb < MMA_N; nb += 8) {
+        uint16_t bbase = mma_frag(NV_RF_B32, sh->nb / 2);
+        for (uint8_t i = 0; i < sh->nb; i += 2) {
+            nv_opnd_t h[2];
+            for (uint8_t j = 0; j < 2; j++) {
+                uint8_t e = (uint8_t)(i + j);
+                nv_opnd_t row = mma_off(t2, (e & 1) + ((e >= 2) ? 8 : 0));
+                nv_opnd_t col = mma_off(gid, nb);
+                nv_opnd_t a = mma_adr(bp, lb, row, col, 2);
+                h[j] = mop_reg(NV_RF_U16, new_vreg(NV_RF_U16));
+                em1u(NV_LD_GLB_U16, h[j], a);
+            }
+            nv_opnd_t pk[3] = { mop_reg(NV_RF_B32, (uint16_t)(bbase + i / 2)),
+                                h[0], h[1] };
+            emit(NV_MOV_PK16, 1, 2, pk, 0);
+        }
+
+        nv_opnd_t da[4];
+        uint16_t cbase = mma_frag(NV_RF_F32, 4);
+        for (int i = 0; i < 4; i++) {
+            nv_opnd_t row = mma_off(gid, (i >= 2) ? 8 : 0);
+            nv_opnd_t col = mma_off(t2, (i & 1) + nb);
+            da[i] = mma_adr(dp, ld, row, col, 4);
+            em1u(NV_LD_GLB_F32, mop_reg(NV_RF_F32, (uint16_t)(cbase + i)),
+                 da[i]);
+        }
+        uint16_t dbase = mma_frag(NV_RF_F32, 4);
+        nv_opnd_t mo[4] = { mop_reg(NV_RF_F32, dbase),
+                            mop_reg(NV_RF_B32, abase),
+                            mop_reg(NV_RF_B32, bbase),
+                            mop_reg(NV_RF_F32, cbase) };
+        emit(NV_MMA, 1, 3, mo, (uint16_t)(I->subop % NV_MMA_NSHAPE));
+        for (int i = 0; i < 4; i++) {
+            nv_opnd_t st[2] = { da[i],
+                                mop_reg(NV_RF_F32, (uint16_t)(dbase + i)) };
+            emit(NV_ST_GLB_F32, 0, 2, st, 0);
+        }
+    }
+}
 
 static void isel_blk(uint32_t bir_bi)
 {
@@ -1254,7 +1386,16 @@ static void isel_blk(uint32_t bir_bi)
 
         /* ---- Stubs ---- */
         case BIR_CALL: case BIR_INLINE_ASM:
-        case BIR_GLOBAL_REF: case BIR_MFMA:
+        case BIR_GLOBAL_REF:
+            break;
+
+        case BIR_MFMA:
+        case BIR_MFRG:
+            nv_refuse("MFMA (AMD matrix intrinsic on a PTX target)");
+            break;
+
+        case BIR_MMA:
+            is_mma(I);
             break;
 
         default:
@@ -1319,11 +1460,38 @@ static nv_minst_t mk_setp(nv_opnd_t dst, nv_opnd_t a, nv_opnd_t b)
     return I;
 }
 
+static nv_minst_t mk_selp(nv_opnd_t dst, nv_opnd_t src)
+{
+    nv_minst_t I;
+    memset(&I, 0, sizeof(I));
+    I.op = NV_SELP_U32;
+    I.num_defs = 1;
+    I.num_uses = 3;
+    I.ops[0] = dst;
+    I.ops[1] = mop_imm(1);
+    I.ops[2] = mop_imm(0);
+    I.ops[3] = src;
+    return I;
+}
+
 /* ---- Emit one PHI copy into a bridge block ----
  * Appends the copy instruction(s) to the bridge block.
  * Called BEFORE the bridge's terminating bra is emitted. */
 static void brg_copy(nv_pcopy_t *pc)
 {
+    if (pc->src.kind == NV_MOP_REG && pc->src.rfile == NV_RF_PRED
+        && pc->mop != NV_MOV_PRED) {
+        nv_opnd_t tmp = pc->dst;
+        if (tmp.rfile != NV_RF_U32)
+            tmp = mop_reg(NV_RF_U32, new_vreg(NV_RF_U32));
+        nv_opnd_t s_ops[4] = { tmp, mop_imm(1), mop_imm(0), pc->src };
+        emit(NV_SELP_U32, 1, 3, s_ops, 0);
+        if (tmp.reg_num != pc->dst.reg_num || tmp.rfile != pc->dst.rfile) {
+            nv_opnd_t c_ops[2] = { pc->dst, tmp };
+            emit(pc->mop, 1, 1, c_ops, 0);
+        }
+        return;
+    }
     if (pc->mop == NV_MOV_PRED && pc->src.kind == NV_MOP_IMM) {
         nv_opnd_t ops[3] = { pc->dst, pc->src, mop_imm(0) };
         emit(NV_SETP_NE_U32, 1, 2, ops, 0);
@@ -1497,7 +1665,19 @@ static void phi_fix(void)
         nv_minst_t insts[2];
         uint32_t count = 0;
 
-        if (pc->mop == NV_MOV_PRED && pc->src.kind == NV_MOP_IMM) {
+        if (pc->src.kind == NV_MOP_REG && pc->src.rfile == NV_RF_PRED
+            && pc->mop != NV_MOV_PRED) {
+            nv_opnd_t tmp = pc->dst;
+            if (tmp.rfile != NV_RF_U32)
+                tmp = mop_reg(NV_RF_U32, new_vreg(NV_RF_U32));
+            insts[0] = mk_selp(tmp, pc->src);
+            count = 1;
+            if (tmp.reg_num != pc->dst.reg_num
+                || tmp.rfile != pc->dst.rfile) {
+                insts[1] = mk_mov(pc->mop, pc->dst, tmp);
+                count = 2;
+            }
+        } else if (pc->mop == NV_MOV_PRED && pc->src.kind == NV_MOP_IMM) {
             insts[0] = mk_setp(pc->dst, pc->src, mop_imm(0));
             count = 1;
         } else if (pc->mop == NV_MOV_PRED &&
@@ -1639,5 +1819,5 @@ int nv_compile(const bir_module_t *bir, nv_module_t *nv)
         if (rc != BC_OK) return rc;
     }
 
-    return BC_OK;
+    return (S.unsz || S.had_error) ? BC_ERR_NVIDIA : BC_OK;
 }

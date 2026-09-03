@@ -215,6 +215,158 @@ static void dump_tokens(const lexer_t *L)
     }
 }
 
+
+typedef struct {
+    int mode_pp, mode_lex, mode_parse, mode_sema, mode_hip, no_pp;
+    int want_ast, want_sema, want_bir;
+    const char *const *incs; int nincs;
+    const char *const *defs; int ndefs;
+    bir_module_t *M;
+    uint16_t tu;
+} tuc_t;
+
+static int comp_tu(const char *file, const tuc_t *c)
+{
+    static bc_error_t lower_errs[BC_MAX_ERRORS];
+    uint32_t src_len = 0;
+
+    if (read_file(file, source_buf, BC_MAX_SOURCE, &src_len) != BC_OK)
+        return BC_ERR_IO;
+
+    const char *lex_src = source_buf;
+    uint32_t    lex_len = src_len;
+
+    if (!c->no_pp) {
+        preproc_t *pp = (preproc_t *)malloc(sizeof(preproc_t));
+        if (!pp) {
+            fprintf(stderr, "error: failed to allocate preprocessor\n");
+            return BC_ERR_IO;
+        }
+        pp_init(pp, source_buf, src_len, pp_out_buf, BC_MAX_SOURCE, file);
+
+        if (c->mode_hip) {
+            pp_define(pp, "__HIPCC__", "1");
+            pp_define(pp, "__HIP_DEVICE_COMPILE__", "1");
+            /* Which platform HIP thinks it is compiling for follows the
+             * selected target, so ask the registry rather than keep a
+             * copy of the mode flag here. */
+            const be_desc_t *hb = be_active();
+            if (hb != NULL && strcmp(hb->name, "nvptx") == 0)
+                pp_define(pp, "__HIP_PLATFORM_NVIDIA__", "1");
+            else
+                pp_define(pp, "__HIP_PLATFORM_AMD__", "1");
+        }
+
+        for (int i = 0; i < c->nincs; i++)
+            pp_add_include_path(pp, c->incs[i]);
+        for (int i = 0; i < c->ndefs; i++) {
+            char dname[BC_MAX_IDENT];
+            const char *eq = strchr(c->defs[i], '=');
+            if (eq) {
+                uint32_t nlen = (uint32_t)(eq - c->defs[i]);
+                if (nlen >= BC_MAX_IDENT) nlen = BC_MAX_IDENT - 1;
+                memcpy(dname, c->defs[i], nlen);
+                dname[nlen] = '\0';
+                pp_define(pp, dname, eq + 1);
+            } else {
+                pp_define(pp, c->defs[i], "1");
+            }
+        }
+
+        int prc = pp_process(pp);
+
+        bc_diag(file, source_buf, pp->errors, pp->num_errors);
+
+        if (c->mode_pp) {
+            fwrite(pp_out_buf, 1, pp->out_len, stdout);
+            free(pp);
+            return prc;
+        }
+
+        /* A truncated expansion is not shorter source, it is different
+         * source, and every phase after this would be reading a lie. */
+        if (pp->ovflw) {
+            free(pp);
+            return 1;
+        }
+
+        lex_src = pp_out_buf;
+        lex_len = pp->out_len;
+        free(pp);
+    }
+
+    lexer_t L;
+    lexer_init(&L, lex_src, lex_len, token_buf, BC_MAX_TOKENS);
+    int rc = lexer_tokenize(&L);
+
+    bc_diag(file, lex_src, L.errors, L.num_errors);
+
+    if (c->mode_lex) {
+        dump_tokens(&L);
+        printf("\n%u tokens, %d error(s)\n", L.num_tokens, L.num_errors);
+    }
+
+    if (!c->want_ast) return rc;
+
+    parser_t P;
+    parser_init(&P, token_buf, L.num_tokens, lex_src,
+                node_buf, BC_MAX_NODES);
+    uint32_t root = parser_parse(&P);
+
+    bc_diag(file, lex_src, P.errors, P.num_errors);
+
+    if (c->mode_parse) {
+        ast_dump(&P, root, 0);
+        printf("\n%u nodes, %d parse error(s)\n",
+               P.num_nodes, P.num_errors);
+    }
+
+    /* Semantic analysis */
+    sema_ctx_t *sema_ctx = NULL;
+    if (c->want_sema && P.num_errors == 0)
+    {
+        sema_ctx = (sema_ctx_t *)malloc(sizeof(sema_ctx_t));
+        if (!sema_ctx) {
+            fprintf(stderr, "error: failed to allocate sema context\n");
+            return BC_ERR_IO;
+        }
+        sema_init(sema_ctx, &P, root, (int)be_warp_size());
+        sema_check(sema_ctx, root);
+
+        bc_diag(file, lex_src, sema_ctx->errors, sema_ctx->num_errors);
+
+        if (c->mode_sema) {
+            sema_dump(sema_ctx, root);
+            int sema_rc = sema_ctx->num_errors > 0 ? BC_ERR_SEMA : BC_OK;
+            free(sema_ctx);
+            return sema_rc;
+        }
+
+        if (sema_ctx->num_errors > 0) {
+            free(sema_ctx);
+            return BC_ERR_SEMA;
+        }
+    }
+
+    if (c->want_bir && P.num_errors == 0) {
+        int num_lower_errs = 0;
+        int lrc = bir_ltu(&P, root, c->M, sema_ctx, c->tu,
+                          lower_errs, &num_lower_errs);
+        for (int i = 0; i < num_lower_errs; i++) {
+            fprintf(stderr, "%s:%u:%u: E%03u: %s\n",
+                    file, lower_errs[i].loc.line,
+                    lower_errs[i].loc.col,
+                    lower_errs[i].eid, lower_errs[i].msg);
+        }
+        if (lrc != BC_OK) rc = lrc;
+    }
+
+    if (sema_ctx) free(sema_ctx);
+    if (P.num_errors > 0) rc = BC_ERR_PARSE;
+
+    return rc;
+}
+
 static void usage(const char *prog)
 {
     fprintf(stderr,
@@ -286,7 +438,8 @@ static void usage(const char *prog)
 
 int main(int argc, char *argv[])
 {
-    const char *file = NULL;
+    const char *files[BC_MAX_TUS];
+    int nfile = 0;
     const char *output_file = NULL;
     const char *lang_file = NULL;
     int mode_pp = 0;
@@ -296,7 +449,7 @@ int main(int argc, char *argv[])
     int mode_ir = 0;
     int mode_tdf = 0;
     int mode_tdf_fission = 0;
-    int mode_hip = 0;           /* HIP frontend: see HIP NOTES below */
+    int mode_hip = 0;
     int mode_triton = 0;        /* Triton frontend: see TRITON NOTES below */
     int mode_mlir = 0;          /* MLIR frontend: see MLIR NOTES below */
     int mode_bir_in = 0;        /* BIR text in: see BIR NOTES below */
@@ -387,8 +540,13 @@ int main(int argc, char *argv[])
         else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             usage(argv[0]);
             return 0;
-        } else if (argv[i][0] != '-')
-            file = argv[i];
+        } else if (argv[i][0] != '-') {
+            if (nfile >= BC_MAX_TUS) {
+                fprintf(stderr, "too many input files (max %d)\n", BC_MAX_TUS);
+                return 1;
+            }
+            files[nfile++] = argv[i];
+        }
         else {
             /* Not one of the driver's, so offer it round the backend
              * registry before calling it unknown. Target selection and
@@ -411,7 +569,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (!file) {
+    if (nfile == 0) {
         usage(argv[0]);
         return 1;
     }
@@ -438,32 +596,25 @@ int main(int argc, char *argv[])
 
     int want_ast = mode_parse || want_sema;
 
-    /* ---- HIP NOTES (1 of 2) -------------------------------------------
-     * HIP is a frontend-only mode, not a separate parser. The HIP source
-     * language is, in practice, a syntactic superset of CUDA: the same
-     * __global__ / __device__ / __shared__ qualifiers, the same
-     * threadIdx / blockIdx / blockDim builtins, and the same arithmetic
-     * happens with the same syntax. What changes when you flip --hip on
-     * is the set of preprocessor macros we predefine, so that any
-     * #if defined(__HIPCC__) or __HIP_PLATFORM_AMD__ guards in the source
-     * pick the HIP branch instead of falling through to whatever the
-     * source thought the default platform was.
-     *
-     * Auto-detection: if the filename ends in ".hip", we assume HIP mode
-     * without making the user say so on the command line, since the
-     * extension is a strong enough signal for anyone using a HIP build
-     * pipeline to drop their files into Booth unchanged. */
-    if (file) {
-        size_t flen = strlen(file);
-        if (flen >= 4 && strcmp(file + flen - 4, ".hip") == 0)
+    for (int i = 0; i < nfile; i++) {
+        size_t flen = strlen(files[i]);
+        if (flen >= 4 && strcmp(files[i] + flen - 4, ".hip") == 0)
             mode_hip = 1;
     }
 
     /* Load translation file before any diagnostics fire */
     if (lang_file) bc_eload(lang_file);
 
+    if (nfile > 1 && (mode_bir_in || mode_mlir || mode_triton)) {
+        fprintf(stderr, "only one input file for --bir-in, --mlir "
+                        "and --triton (%d given)\n", nfile);
+        return 1;
+    }
+
+    const char *file = files[0];
     uint32_t src_len = 0;
-    if (read_file(file, source_buf, BC_MAX_SOURCE, &src_len) != BC_OK)
+    if (nfile == 1 &&
+        read_file(file, source_buf, BC_MAX_SOURCE, &src_len) != BC_OK)
         return 1;
 
     /* ---- BIR NOTES ----------------------------------------------------
@@ -656,184 +807,55 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    /* Preprocessing */
-    const char *lex_src = source_buf;
-    uint32_t    lex_len = src_len;
+    tuc_t tc;
+    tc.mode_pp    = mode_pp;
+    tc.mode_lex   = mode_lex;
+    tc.mode_parse = mode_parse;
+    tc.mode_sema  = mode_sema;
+    tc.mode_hip   = mode_hip;
+    tc.no_pp      = no_pp;
+    tc.want_ast   = want_ast;
+    tc.want_sema  = want_sema;
+    tc.want_bir   = want_bir;
+    tc.incs       = include_paths;
+    tc.nincs      = num_include_paths;
+    tc.defs       = defines;
+    tc.ndefs      = num_defines;
+    tc.M          = NULL;
+    tc.tu         = BIR_TU_EXT;
 
-    if (!no_pp) {
-        preproc_t *pp = (preproc_t *)malloc(sizeof(preproc_t));
-        if (!pp) {
-            fprintf(stderr, "error: failed to allocate preprocessor\n");
+    if (want_bir) {
+        bir_module = (bir_module_t *)malloc(sizeof(bir_module_t));
+        if (!bir_module) {
+            fprintf(stderr, "error: failed to allocate BIR module\n");
             return 1;
         }
-        pp_init(pp, source_buf, src_len, pp_out_buf, BC_MAX_SOURCE, file);
-
-        /* ---- HIP NOTES (2 of 2) ---------------------------------------
-         * This is the only spot in the pipeline that knows or cares
-         * whether we are compiling CUDA or HIP. pp_init has just defined
-         * the CUDA defaults (__BARRACUDA__, __CUDA_ARCH__, __CUDACC__)
-         * unconditionally, which is correct for CUDA and harmless for
-         * HIP because real HIP source files distinguish platforms with
-         * __HIP_PLATFORM_AMD__ versus __HIP_PLATFORM_NVIDIA__ rather
-         * than by the presence or absence of __CUDACC__.
-         *
-         * When --hip is on, we additively define the HIP-specific
-         * macros so that the preprocessor takes the HIP branch wherever
-         * the source asks for it:
-         *   __HIPCC__               compiler identity, "we are a HIP compiler"
-         *   __HIP_DEVICE_COMPILE__  we are compiling device code (always true here)
-         *   __HIP_PLATFORM_AMD__    target is AMD silicon (the common case)
-         *   __HIP_PLATFORM_NVIDIA__ target is NVIDIA via the HIP-on-CUDA path
-         *
-         * Beyond these macros, nothing in the parser, sema, IR, or
-         * backends needs to know about HIP. The pipeline downstream of
-         * here is identical to a CUDA compile. */
-        if (mode_hip) {
-            pp_define(pp, "__HIPCC__", "1");
-            pp_define(pp, "__HIP_DEVICE_COMPILE__", "1");
-            /* Which platform HIP thinks it is compiling for follows the
-             * selected target, so ask the registry rather than keep a
-             * copy of the mode flag here. */
-            const be_desc_t *hb = be_active();
-            if (hb != NULL && strcmp(hb->name, "nvptx") == 0)
-                pp_define(pp, "__HIP_PLATFORM_NVIDIA__", "1");
-            else
-                pp_define(pp, "__HIP_PLATFORM_AMD__", "1");
-        }
-
-        for (int i = 0; i < num_include_paths; i++)
-            pp_add_include_path(pp, include_paths[i]);
-        for (int i = 0; i < num_defines; i++) {
-            char dname[BC_MAX_IDENT];
-            const char *eq = strchr(defines[i], '=');
-            if (eq) {
-                uint32_t nlen = (uint32_t)(eq - defines[i]);
-                if (nlen >= BC_MAX_IDENT) nlen = BC_MAX_IDENT - 1;
-                memcpy(dname, defines[i], nlen);
-                dname[nlen] = '\0';
-                pp_define(pp, dname, eq + 1);
-            } else {
-                pp_define(pp, defines[i], "1");
-            }
-        }
-
-        int prc = pp_process(pp);
-
-        bc_diag(file, source_buf, pp->errors, pp->num_errors);
-
-        if (mode_pp) {
-            fwrite(pp_out_buf, 1, pp->out_len, stdout);
-            free(pp);
-            return prc != BC_OK ? 1 : 0;
-        }
-
-        /* A truncated expansion is not shorter source, it is different
-         * source, and every phase after this would be reading a lie. */
-        if (pp->ovflw) {
-            free(pp);
-            return 1;
-        }
-
-        lex_src = pp_out_buf;
-        lex_len = pp->out_len;
-        free(pp);
+        bir_module_init(bir_module);
+        tc.M = bir_module;
     }
 
-    lexer_t L;
-    lexer_init(&L, lex_src, lex_len, token_buf, BC_MAX_TOKENS);
-    int rc = lexer_tokenize(&L);
-
-    bc_diag(file, lex_src, L.errors, L.num_errors);
-
-    if (mode_lex) {
-        dump_tokens(&L);
-        printf("\n%u tokens, %d error(s)\n", L.num_tokens, L.num_errors);
+    int rc = BC_OK;
+    for (int t = 0; t < nfile; t++) {
+        tc.tu = (nfile > 1) ? (uint16_t)t : BIR_TU_EXT;
+        rc = comp_tu(files[t], &tc);
+        if (rc != BC_OK) break;
     }
 
-    if (want_ast) {
-        parser_t P;
-        parser_init(&P, token_buf, L.num_tokens, lex_src,
-                    node_buf, BC_MAX_NODES);
-        uint32_t root = parser_parse(&P);
-
-        bc_diag(file, lex_src, P.errors, P.num_errors);
-
-        if (mode_parse) {
-            ast_dump(&P, root, 0);
-            printf("\n%u nodes, %d parse error(s)\n",
-                   P.num_nodes, P.num_errors);
-        }
-
-        /* Semantic analysis */
-        sema_ctx_t *sema_ctx = NULL;
-        if (want_sema && P.num_errors == 0)
-        {
-            sema_ctx = (sema_ctx_t *)malloc(sizeof(sema_ctx_t));
-            if (!sema_ctx) {
-                fprintf(stderr, "error: failed to allocate sema context\n");
-                return 1;
-            }
-            sema_init(sema_ctx, &P, root, (int)be_warp_size());
-            sema_check(sema_ctx, root);
-
-            bc_diag(file, lex_src, sema_ctx->errors, sema_ctx->num_errors);
-
-            if (mode_sema) {
-                sema_dump(sema_ctx, root);
-                int sema_rc = sema_ctx->num_errors > 0 ? 1 : 0;
-                free(sema_ctx);
-                return sema_rc;
-            }
-
-            /* Only --sema used to act on these. Every other mode printed the
-             * errors, carried on into codegen, wrote an output file and exited
-             * zero, so a build system saw a clean compile and a kernel that
-             * had been lowered from source we had already rejected. */
-            if (sema_ctx->num_errors > 0) {
-                free(sema_ctx);
-                return 1;
-            }
-        }
-
-        if (want_bir && P.num_errors == 0) {
-            bc_error_t lower_errs[BC_MAX_ERRORS];
-            int num_lower_errs = 0;
-            bir_module = (bir_module_t *)malloc(sizeof(bir_module_t));
-            if (!bir_module) {
-                fprintf(stderr, "error: failed to allocate BIR module\n");
-                return 1;
-            }
-            int lrc = bir_lower(&P, root, bir_module, sema_ctx,
-                                lower_errs, &num_lower_errs);
-            if (num_lower_errs > 0) {
-                for (int i = 0; i < num_lower_errs; i++) {
-                    fprintf(stderr, "%s:%u:%u: E%03u: %s\n",
-                            file, lower_errs[i].loc.line,
-                            lower_errs[i].loc.col,
-                            lower_errs[i].eid, lower_errs[i].msg);
-                }
-            }
-            if (lrc == BC_OK) {
-                backend_cfg_t cfg = {0};
-                cfg.no_mem2reg = no_mem2reg;
-                cfg.no_cfold   = no_cfold;
-                cfg.no_dce     = no_dce;
-                cfg.no_sched   = no_sched;
-                cfg.no_sroa    = no_sroa;
-                cfg.mode_ir    = mode_ir;
-                cfg.mode_tdf   = mode_tdf;
-                cfg.mode_tdf_fission = mode_tdf_fission;
-                cfg.output_file     = output_file;
-                int brc = run_bir_backends(bir_module, &cfg);
-                if (brc != BC_OK) rc = brc;
-            }
-            free(bir_module);
-            if (lrc != BC_OK) rc = lrc;
-        }
-
-        if (sema_ctx) free(sema_ctx);
-        if (P.num_errors > 0) rc = BC_ERR_PARSE;
+    if (rc == BC_OK && want_bir) {
+        backend_cfg_t cfg = {0};
+        cfg.no_mem2reg = no_mem2reg;
+        cfg.no_cfold   = no_cfold;
+        cfg.no_dce     = no_dce;
+        cfg.no_sched   = no_sched;
+        cfg.no_sroa    = no_sroa;
+        cfg.mode_ir    = mode_ir;
+        cfg.mode_tdf   = mode_tdf;
+        cfg.mode_tdf_fission = mode_tdf_fission;
+        cfg.output_file     = output_file;
+        rc = run_bir_backends(bir_module, &cfg);
     }
+
+    if (bir_module) free(bir_module);
 
     return rc != BC_OK ? 1 : 0;
 }

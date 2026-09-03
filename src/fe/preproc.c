@@ -72,6 +72,21 @@ static void pp_skip_to_eol(preproc_t *pp)
         pp_advance(pp);
 }
 
+static uint32_t pp_nlsz(const preproc_t *pp)
+{
+    if (pp_cur(pp) == '\n') return 1;
+    if (pp_cur(pp) == '\r' && pp_peek(pp, 1) == '\n') return 2;
+    return 0;
+}
+
+static uint32_t pp_splc(const preproc_t *pp)
+{
+    if (pp_cur(pp) != '\\') return 0;
+    if (pp_peek(pp, 1) == '\n') return 2;
+    if (pp_peek(pp, 1) == '\r' && pp_peek(pp, 2) == '\n') return 3;
+    return 0;
+}
+
 static int pp_is_ident_start(char c)
 {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
@@ -140,6 +155,16 @@ static void pp_emit_str(preproc_t *pp, const char *s, uint32_t len)
     if (!pp_room(pp, len)) return;
     memcpy(pp->out + pp->out_len, s, len);
     pp->out_len += len;
+}
+
+static void pp_eatnl(preproc_t *pp)
+{
+    uint32_t n = pp_nlsz(pp);
+    if (n == 0) return;
+    for (uint32_t i = 0; i < n; i++)
+        pp_advance(pp);
+    for (uint32_t i = 0; i <= pp->nspl; i++)
+        pp_emit_char(pp, '\n');
 }
 
 /* ---- String pool ---- */
@@ -301,10 +326,12 @@ static uint32_t pp_read_ident(const preproc_t *pp, char *buf, uint32_t max)
 static uint32_t pp_collect_line(preproc_t *pp, char *buf, uint32_t max)
 {
     uint32_t len = 0;
-    while (!pp_at_end(pp) && pp_cur(pp) != '\n') {
-        if (pp_cur(pp) == '\\' && pp_peek(pp, 1) == '\n') {
-            pp_advance(pp); /* skip backslash */
-            pp_advance(pp); /* skip newline (counts line) */
+    while (!pp_at_end(pp) && pp_nlsz(pp) == 0) {
+        uint32_t n = pp_splc(pp);
+        if (n > 0) {
+            for (uint32_t i = 0; i < n; i++)
+                pp_advance(pp);
+            pp->nspl++;
             continue;
         }
         if (len + 1 < max)
@@ -1471,17 +1498,14 @@ int pp_process(preproc_t *pp)
 
         /* Check for start of line — skip horizontal whitespace, look for '#' */
         uint32_t line_start = pp->pos;
+        pp->nspl = 0;
         pp_skip_hspace(pp);
 
         if (pp_at_end(pp)) continue;
 
         if (pp_cur(pp) == '#' && pp_peek(pp, 1) != '#') {
             pp_process_directive(pp);
-            /* Eat the trailing newline after the directive */
-            if (!pp_at_end(pp) && pp_cur(pp) == '\n') {
-                pp_emit_char(pp, '\n'); /* preserve line count */
-                pp_advance(pp);
-            }
+            pp_eatnl(pp);
             continue;
         }
 
@@ -1489,10 +1513,7 @@ int pp_process(preproc_t *pp)
         if (!pp_is_active(pp)) {
             /* In inactive conditional block — skip line, emit newline */
             pp_skip_to_eol(pp);
-            if (!pp_at_end(pp) && pp_cur(pp) == '\n') {
-                pp_emit_char(pp, '\n');
-                pp_advance(pp);
-            }
+            pp_eatnl(pp);
             continue;
         }
 
@@ -1520,10 +1541,7 @@ int pp_process(preproc_t *pp)
         pp_expand_and_emit(pp, line, llen);
         while (joins--) pp_emit_char(pp, '\n');
 
-        if (!pp_at_end(pp) && pp_cur(pp) == '\n') {
-            pp_emit_char(pp, '\n');
-            pp_advance(pp);
-        }
+        pp_eatnl(pp);
     }
 
     /* Abandoning the run leaves the include stack loaded, and every entry

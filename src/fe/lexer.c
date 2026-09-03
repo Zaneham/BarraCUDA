@@ -366,6 +366,14 @@ int lexer_token_text(const lexer_t *L, const token_t *tok,
     return len;
 }
 
+static uint32_t lx_splc(const lexer_t *L)
+{
+    if (cur(L) != '\\') return 0;
+    if (peek(L, 1) == '\n') return 2;
+    if (peek(L, 1) == '\r' && peek(L, 2) == '\n') return 3;
+    return 0;
+}
+
 static void skip_whitespace(lexer_t *L)
 {
     while (!at_end(L)) {
@@ -514,12 +522,10 @@ static void scan_pp_line(lexer_t *L)
     uint16_t start_col = (uint16_t)(L->pos - L->line_start + 1);
 
     while (!at_end(L) && cur(L) != '\n') {
-        if (cur(L) == '\\' && peek(L, 1) == '\n') {
-            advance(L); /* skip backslash */
-            advance(L); /* skip newline (line continuation) */
-        } else {
+        uint32_t n = lx_splc(L);
+        if (n == 0) n = 1;
+        for (uint32_t i = 0; i < n; i++)
             advance(L);
-        }
     }
 
     emit(L, TOK_PP_LINE, start, L->pos - start, start_line, start_col);

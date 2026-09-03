@@ -24,6 +24,9 @@
 #define MAX_ENUMS       256
 #define MAX_TYPEDEFS    64
 #define MAX_TEMPLATES   32
+#define MAX_PKELM       16
+#define MAX_FPACKS      4
+#define MAX_INSTS       16
 #define MAX_SCOPES      64
 #define MAX_LOOPS       32
 
@@ -64,7 +67,15 @@ typedef struct {
     uint32_t    type;       /* BIR type index */
     int64_t     ival;       /* for non-type params */
     int         is_type;    /* 1 = typename, 0 = int param */
+    int         is_pack;
+    int         npk;
+    uint32_t    pk_t[MAX_PKELM];
 } binding_t;
+
+typedef struct {
+    char        name[64];
+    int         n;
+} fpack_t;
 
 typedef struct {
     const parser_t  *P;
@@ -87,6 +98,12 @@ typedef struct {
     int             ntemplates;
     binding_t       bindings[8];
     int             nbindings;
+    struct { char key[256]; char sym[128]; } inst[MAX_INSTS];
+    int             ninst;
+    fpack_t         fpk[MAX_FPACKS];
+    int             nfpk;
+    struct { char name[64]; int idx; } pkact[MAX_FPACKS];
+    int             npkact;
 
     /* Current function state */
     uint32_t        cur_func;
@@ -107,11 +124,24 @@ typedef struct {
 
     const sema_ctx_t *sema;   /* NULL if sema didn't run */
 
+    uint16_t        tu;
+
     uint32_t        cur_node;   /* AST node being lowered — for source loc tracking */
 
     bc_error_t      errors[BC_MAX_ERRORS];
     int             nerrors;
 } lower_t;
+
+/* ---- Names ---- */
+
+static void ncpy(char *d, size_t n, const char *s)
+{
+    size_t k = strlen(s);
+
+    if (k >= n) k = n - 1;
+    memcpy(d, s, k);
+    d[k] = '\0';
+}
 
 /* ---- AST Navigation ---- */
 
@@ -171,6 +201,25 @@ static void lower_error(lower_t *L, uint32_t node, bc_eid_t eid, ...)
     }
 }
 
+
+static uint32_t sym_fx(const lower_t *L, const char *name)
+{
+    for (uint32_t i = 0; i < L->M->num_funcs; i++)
+        if (L->M->funcs[i].name < L->M->string_len
+            && strcmp(&L->M->strings[L->M->funcs[i].name], name) == 0)
+            return i;
+    return BIR_SYM_NONE;
+}
+
+static uint32_t sym_gx(const lower_t *L, const char *name)
+{
+    for (uint32_t i = 0; i < L->M->num_globals; i++)
+        if (L->M->globals[i].name < L->M->string_len
+            && strcmp(&L->M->strings[L->M->globals[i].name], name) == 0)
+            return i;
+    return BIR_SYM_NONE;
+}
+
 /* ---- Scope ---- */
 
 static void push_scope(lower_t *L)
@@ -190,7 +239,7 @@ static void add_sym(lower_t *L, const char *name, uint32_t ref,
 {
     if (L->nsyms >= MAX_SYMS) return;
     sym_t *s = &L->syms[L->nsyms++];
-    snprintf(s->name, sizeof(s->name), "%s", name);
+    ncpy(s->name, sizeof(s->name), name);
     s->ref = ref;
     s->type = type;
     s->is_alloca = is_alloca;
@@ -229,7 +278,7 @@ static int find_typedef(lower_t *L, const char *name, uint32_t *type)
 static int find_binding(lower_t *L, const char *name, uint32_t *type)
 {
     for (int i = 0; i < L->nbindings; i++)
-        if (L->bindings[i].is_type
+        if (L->bindings[i].is_type && !L->bindings[i].is_pack
             && strcmp(L->bindings[i].name, name) == 0) {
             *type = L->bindings[i].type;
             return 1;
@@ -240,12 +289,53 @@ static int find_binding(lower_t *L, const char *name, uint32_t *type)
 static int find_binding_int(lower_t *L, const char *name, int64_t *val)
 {
     for (int i = 0; i < L->nbindings; i++)
-        if (!L->bindings[i].is_type
+        if (!L->bindings[i].is_type && !L->bindings[i].is_pack
             && strcmp(L->bindings[i].name, name) == 0) {
             *val = L->bindings[i].ival;
             return 1;
         }
     return 0;
+}
+
+static void pk_nm(char *out, size_t n, const char *base, int i)
+{
+    snprintf(out, n, "%s#%d", base, i);
+}
+
+static const fpack_t *find_fpk(const lower_t *L, const char *name)
+{
+    for (int i = 0; i < L->nfpk; i++)
+        if (strcmp(L->fpk[i].name, name) == 0) return &L->fpk[i];
+    return NULL;
+}
+
+static const binding_t *find_tpk(const lower_t *L, const char *name)
+{
+    for (int i = 0; i < L->nbindings; i++)
+        if (L->bindings[i].is_pack
+            && strcmp(L->bindings[i].name, name) == 0)
+            return &L->bindings[i];
+    return NULL;
+}
+
+static int pk_cnt(const lower_t *L, const char *name)
+{
+    const fpack_t *f = find_fpk(L, name);
+    if (f) return f->n;
+    const binding_t *b = find_tpk(L, name);
+    if (b) return b->npk;
+    return -1;
+}
+
+static void pk_rw(const lower_t *L, char *name, size_t n)
+{
+    for (int i = L->npkact - 1; i >= 0; i--)
+        if (strcmp(L->pkact[i].name, name) == 0) {
+            char tmp[128];
+            pk_nm(tmp, sizeof tmp, name, L->pkact[i].idx);
+            snprintf(name, n, "%s", tmp);
+            return;
+        }
 }
 
 static template_def_t *find_template(lower_t *L, const char *name)
@@ -565,6 +655,13 @@ static uint32_t coerce_to(lower_t *L, uint32_t val, uint32_t dst_t,
     return BIR_MAKE_VAL(inst);
 }
 
+static int is_i1(const lower_t *L, uint32_t t)
+{
+    return t < L->M->num_types
+        && L->M->types[t].kind == BIR_TYPE_INT
+        && L->M->types[t].width == 1;
+}
+
 static int is_ptr_type(const lower_t *L, uint32_t t)
 {
     return t < L->M->num_types && L->M->types[t].kind == BIR_TYPE_PTR;
@@ -707,7 +804,222 @@ static int is_compound_assign(int tok)
 
 /* ---- Forward Declarations ---- */
 
+static uint32_t bin_val(lower_t *L, uint32_t node, int op,
+                        uint32_t lhs, uint32_t lhs_n,
+                        uint32_t rhs, uint32_t rhs_n)
+{
+    uint32_t lt = ref_type(L, lhs), rt = ref_type(L, rhs);
+
+    uint32_t t32 = bir_type_int(L->M, 32);
+    if (is_i1(L, lt)) { lhs = coerce_to(L, lhs, t32, 1); lt = t32; }
+    if (is_i1(L, rt)) { rhs = coerce_to(L, rhs, t32, 1); rt = t32; }
+
+    uint32_t res_t = lt;
+    int lf = is_float_type(L, lt), rf = is_float_type(L, rt);
+    if (lf && !rf) {
+        rhs = coerce_to(L, rhs, lt, node_is_unsigned(L, rhs_n));
+        res_t = lt;
+    } else if (!lf && rf) {
+        lhs = coerce_to(L, lhs, rt, node_is_unsigned(L, lhs_n));
+        res_t = rt;
+    } else if (lf && rf) {
+        if (lt < L->M->num_types && rt < L->M->num_types
+            && L->M->types[rt].width > L->M->types[lt].width) {
+            lhs = coerce_to(L, lhs, rt, 0);
+            res_t = rt;
+        } else if (lt < L->M->num_types && rt < L->M->num_types
+                   && L->M->types[lt].width > L->M->types[rt].width) {
+            rhs = coerce_to(L, rhs, lt, 0);
+            res_t = lt;
+        }
+    }
+    int fp  = is_float_type(L, res_t);
+    int opc = bin_op_code(op, fp, node_is_unsigned(L, node));
+    if (opc < 0) {
+        lower_error(L, node, BC_E102);
+        return lhs;
+    }
+    uint32_t inst = emit(L, (uint16_t)opc, res_t, 2, 0);
+    set_op(L, inst, 0, lhs);
+    set_op(L, inst, 1, rhs);
+    return BIR_MAKE_VAL(inst);
+}
+
 static uint32_t lower_expr(lower_t *L, uint32_t node);
+
+/* ---- Pack expansion ---- */
+
+static int pk_scan(const lower_t *L, uint32_t node,
+                   char out[][64], int max, int nfound, int depth)
+{
+    if (!node || depth > 64 || nfound >= max) return nfound;
+    const ast_node_t *n = ND(L, node);
+    if (n->type == AST_IDENT) {
+        char nm[64];
+        get_text(L, node, nm, sizeof(nm));
+        if (pk_cnt(L, nm) >= 0) {
+            for (int i = 0; i < nfound; i++)
+                if (strcmp(out[i], nm) == 0) return nfound;
+            snprintf(out[nfound++], 64, "%s", nm);
+            return nfound;
+        }
+    }
+    for (uint32_t c = n->first_child; c; c = ND(L, c)->next_sibling)
+        nfound = pk_scan(L, c, out, max, nfound, depth + 1);
+    return nfound;
+}
+
+static int pk_len(lower_t *L, uint32_t pat, char nms[][64], int *nn)
+{
+    *nn = pk_scan(L, pat, nms, MAX_FPACKS, 0, 0);
+    if (*nn == 0) return -1;
+    int len = pk_cnt(L, nms[0]);
+    for (int i = 1; i < *nn; i++)
+        if (pk_cnt(L, nms[i]) != len) {
+            lower_error(L, pat, BC_E030, "pack lengths differ in one pattern");
+            return -1;
+        }
+    return len;
+}
+
+static uint32_t pk_at(lower_t *L, uint32_t pat, char nms[][64], int nn, int i)
+{
+    int sv = L->npkact;
+    for (int k = 0; k < nn && L->npkact < MAX_FPACKS; k++) {
+        ncpy(L->pkact[L->npkact].name,
+             sizeof(L->pkact[0].name), nms[k]);
+        L->pkact[L->npkact].idx = i;
+        L->npkact++;
+    }
+    uint32_t v = lower_expr(L, pat);
+    L->npkact = sv;
+    return v;
+}
+
+static int pk_exp(lower_t *L, uint32_t node, uint32_t *out, int max)
+{
+    uint32_t pat = ND(L, node)->first_child;
+    char nms[MAX_FPACKS][64];
+    int nn = 0;
+    int len = pk_len(L, pat, nms, &nn);
+    if (len < 0) {
+        lower_error(L, node, BC_E030, "pack expansion over an unbound pack");
+        return -1;
+    }
+    if (len > max) {
+        lower_error(L, node, BC_E030, "pack longer than the argument list");
+        return -1;
+    }
+    for (int i = 0; i < len; i++)
+        out[i] = pk_at(L, pat, nms, nn, i);
+    return len;
+}
+
+static uint32_t lfold(lower_t *L, uint32_t node)
+{
+    const ast_node_t *n = ND(L, node);
+    int op   = n->d.oper.op;
+    int form = n->d.oper.flags;
+    uint32_t a = n->first_child;
+    uint32_t b = a ? ND(L, a)->next_sibling : 0;
+    uint32_t pat, init = 0;
+    int init_1st = 0;
+
+    switch (form) {
+    case FLD_UL: case FLD_UR: pat = a; break;
+    case FLD_BL: pat = b; init = a; init_1st = 1; break;
+    case FLD_BR: pat = a; init = b; break;
+    default: lower_error(L, node, BC_E106); return BIR_VAL_NONE;
+    }
+
+    char nms[MAX_FPACKS][64];
+    int nn = 0;
+    int len = pk_len(L, pat, nms, &nn);
+    if (len < 0) {
+        lower_error(L, node, BC_E030, "fold over an unbound pack");
+        return BIR_VAL_NONE;
+    }
+
+    uint32_t t1 = bir_type_int(L->M, 1);
+    if (op == TOK_LAND || op == TOK_LOR) {
+        int is_and = (op == TOK_LAND);
+        uint32_t pt = bir_type_ptr(L->M, t1, BIR_AS_PRIVATE);
+        uint32_t al = emit(L, BIR_ALLOCA, pt, 0, 0);
+        uint32_t seed = BIR_MAKE_CONST(bir_const_int(L->M, t1, is_and ? 0 : 1));
+        uint32_t s0 = emit(L, BIR_STORE, bir_type_void(L->M), 2, 0);
+        set_op(L, s0, 0, seed);
+        set_op(L, s0, 1, BIR_MAKE_VAL(al));
+        uint32_t end_b = new_block(L, "fold.end");
+        int m = len + (init ? 1 : 0);
+        for (int k = 0; k < m; k++) {
+            uint32_t v;
+            if (init && ((init_1st && k == 0) || (!init_1st && k == m - 1)))
+                v = lower_expr(L, init);
+            else
+                v = pk_at(L, pat, nms, nn, init_1st && init ? k - 1 : k);
+            uint32_t nxt = new_block(L, "fold.on");
+            uint32_t br = emit(L, BIR_BR_COND, bir_type_void(L->M), 4, 0);
+            set_op(L, br, 0, v);
+            set_op(L, br, 1, is_and ? nxt : end_b);
+            set_op(L, br, 2, is_and ? end_b : nxt);
+            set_op(L, br, 3, end_b);
+            set_block(L, nxt);
+        }
+        uint32_t done = BIR_MAKE_CONST(bir_const_int(L->M, t1, is_and ? 1 : 0));
+        uint32_t s1 = emit(L, BIR_STORE, bir_type_void(L->M), 2, 0);
+        set_op(L, s1, 0, done);
+        set_op(L, s1, 1, BIR_MAKE_VAL(al));
+        uint32_t j = emit(L, BIR_BR, bir_type_void(L->M), 1, 0);
+        set_op(L, j, 0, end_b);
+        set_block(L, end_b);
+        uint32_t ld = emit(L, BIR_LOAD, t1, 1, 0);
+        set_op(L, ld, 0, BIR_MAKE_VAL(al));
+        return BIR_MAKE_VAL(ld);
+    }
+
+    if (op == TOK_COMMA) {
+        uint32_t last = BIR_VAL_NONE;
+        int m = len + (init ? 1 : 0);
+        for (int k = 0; k < m; k++) {
+            if (init && ((init_1st && k == 0) || (!init_1st && k == m - 1)))
+                last = lower_expr(L, init);
+            else
+                last = pk_at(L, pat, nms, nn, init_1st && init ? k - 1 : k);
+        }
+        return last;
+    }
+
+    if (len == 0) {
+        if (init) return lower_expr(L, init);
+        lower_error(L, node, BC_E030, "empty pack folded over this operator");
+        return BIR_VAL_NONE;
+    }
+    if (len > MAX_PKELM) {
+        lower_error(L, node, BC_E030, "fold longer than the pack limit");
+        return BIR_VAL_NONE;
+    }
+
+    uint32_t v[MAX_PKELM];
+    for (int i = 0; i < len; i++)
+        v[i] = pk_at(L, pat, nms, nn, i);
+
+    if (form == FLD_UL || form == FLD_BL) {
+        uint32_t acc = init ? lower_expr(L, init) : v[0];
+        uint32_t acc_n = init ? init : pat;
+        for (int i = init ? 0 : 1; i < len; i++) {
+            acc = bin_val(L, node, op, acc, acc_n, v[i], pat);
+            acc_n = pat;
+        }
+        return acc;
+    }
+    uint32_t acc = init ? lower_expr(L, init) : v[len - 1];
+    uint32_t acc_n = init ? init : pat;
+    for (int i = init ? len - 1 : len - 2; i >= 0; i--) {
+        acc = bin_val(L, node, op, v[i], pat, acc, acc_n);
+        acc_n = pat;
+    }
+    return acc;
+}
 static uint32_t lower_lvalue(lower_t *L, uint32_t node);
 static void     lower_stmt(lower_t *L, uint32_t node);
 static void     lower_block_stmts(lower_t *L, uint32_t node);
@@ -796,6 +1108,7 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
     case AST_IDENT: {
         char name[128];
         get_text(L, node, name, sizeof(name));
+        pk_rw(L, name, sizeof(name));
 
         /* Builtin constant: warpSize (HIP) */
         if (strcmp(name, "warpSize") == 0 && L->sema) {
@@ -819,23 +1132,23 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
         sym_t *s = find_sym(L, name);
         if (!s) {
             /* Check file-scope globals (__shared__, __device__, __constant__) */
-            for (uint32_t gi = 0; gi < L->M->num_globals; gi++) {
+            uint32_t gi = bir_gsym(L->M, name, L->tu);
+            if (gi != BIR_SYM_NONE) {
                 bir_global_t *G = &L->M->globals[gi];
-                if (G->name < L->M->string_len
-                    && strcmp(&L->M->strings[G->name], name) == 0) {
-                    int adrspc = G->addrspace;
-                    uint32_t ptr_t = bir_type_ptr(L->M, G->type, adrspc);
-                    if (G->cuda_flags & CUDA_SHARED) {
-                        uint32_t sa = emit(L, BIR_SHARED_ALLOC, ptr_t, 0, 0);
-                        add_sym(L, name, sa, G->type, 1);
-                    } else {
-                        uint32_t gr = emit(L, BIR_GLOBAL_REF, ptr_t, 0,
-                                           (uint8_t)gi);
-                        add_sym(L, name, gr, G->type, 1);
-                    }
-                    s = find_sym(L, name);
-                    break;
+                int adrspc = G->addrspace;
+                uint32_t ptr_t = bir_type_ptr(L->M, G->type, adrspc);
+                if (G->cuda_flags & CUDA_SHARED) {
+                    uint32_t sa = emit(L, BIR_SHARED_ALLOC, ptr_t, 0, 0);
+                    add_sym(L, name, sa, G->type, 1);
+                } else if (gi > 0xFFu) {
+                    lower_error(L, node, BC_E127, 256);
+                    return BIR_VAL_NONE;
+                } else {
+                    uint32_t gr = emit(L, BIR_GLOBAL_REF, ptr_t, 0,
+                                       (uint8_t)gi);
+                    add_sym(L, name, gr, G->type, 1);
                 }
+                s = find_sym(L, name);
             }
         }
         if (!s) {
@@ -1132,19 +1445,15 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
                 && L->M->types[lt].kind == BIR_TYPE_STRUCT) {
                 char oname[32];
                 op_name_from_tok(op, oname, sizeof(oname));
-                /* Look up operator function in module */
-                for (uint32_t fi = 0; fi < L->M->num_funcs; fi++) {
-                    if (L->M->funcs[fi].name < L->M->string_len
-                        && strcmp(&L->M->strings[L->M->funcs[fi].name],
-                                 oname) == 0) {
-                        uint32_t ftype = L->M->funcs[fi].type;
-                        uint32_t ret_t = L->M->types[ftype].inner;
-                        uint32_t inst = emit(L, BIR_CALL, ret_t, 3, 0);
-                        set_op(L, inst, 0, fi);
-                        set_op(L, inst, 1, lhs);
-                        set_op(L, inst, 2, rhs);
-                        return BIR_MAKE_VAL(inst);
-                    }
+                uint32_t fi = bir_fsym(L->M, oname, L->tu, 2);
+                if (fi != BIR_SYM_NONE) {
+                    uint32_t ftype = L->M->funcs[fi].type;
+                    uint32_t ret_t = L->M->types[ftype].inner;
+                    uint32_t inst = emit(L, BIR_CALL, ret_t, 3, 0);
+                    set_op(L, inst, 0, fi);
+                    set_op(L, inst, 1, lhs);
+                    set_op(L, inst, 2, rhs);
+                    return BIR_MAKE_VAL(inst);
                 }
             }
 
@@ -1176,41 +1485,7 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
                 }
             }
 
-            /* Usual arithmetic conversion: promote both operands
-             * to the wider/float type. C says int*double → double,
-             * not int*double → garbage. Without this, backends get
-             * mixed-type ops (mul.u32 with an f64 register) and
-             * the PTX JIT has strong opinions about that. */
-            uint32_t res_t = lt;
-            int lf = is_float_type(L, lt), rf = is_float_type(L, rt);
-            if (lf && !rf) {
-                rhs = coerce_to(L, rhs, lt, node_is_unsigned(L, rhs_n));
-                res_t = lt;
-            } else if (!lf && rf) {
-                lhs = coerce_to(L, lhs, rt, node_is_unsigned(L, lhs_n));
-                res_t = rt;
-            } else if (lf && rf) {
-                /* Both float: promote narrower to wider */
-                if (lt < L->M->num_types && rt < L->M->num_types
-                    && L->M->types[rt].width > L->M->types[lt].width) {
-                    lhs = coerce_to(L, lhs, rt, 0);
-                    res_t = rt;
-                } else if (lt < L->M->num_types && rt < L->M->num_types
-                           && L->M->types[lt].width > L->M->types[rt].width) {
-                    rhs = coerce_to(L, rhs, lt, 0);
-                    res_t = lt;
-                }
-            }
-            int fp       = is_float_type(L, res_t);
-            int opc      = bin_op_code(op, fp, node_is_unsigned(L, node));
-            if (opc < 0) {
-                lower_error(L, node, BC_E102);
-                return lhs;
-            }
-            uint32_t inst = emit(L, (uint16_t)opc, res_t, 2, 0);
-            set_op(L, inst, 0, lhs);
-            set_op(L, inst, 1, rhs);
-            return BIR_MAKE_VAL(inst);
+            return bin_val(L, node, op, lhs, lhs_n, rhs, rhs_n);
         }
     }
 
@@ -1883,6 +2158,64 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
             }
         }
 
+        /* ---- Warp-collective 16x16x16 f16 matrix multiply ---- */
+        if (strncmp(cname, "__builtin_mma_", 14) == 0) {
+            static const char *const mma_tab[] = {
+                "m16n16k16_f16", "m16n16k16_bf16",
+                "m16n16k8_f16",  "m16n16k8_bf16",
+            };
+            const char *sfx = cname + 14;
+            for (int mi = 0; mi < (int)(sizeof mma_tab / sizeof mma_tab[0]); mi++) {
+                if (strcmp(sfx, mma_tab[mi]) != 0) continue;
+                uint32_t an = ND(L, callee_n)->next_sibling;
+                uint32_t ops[6];
+                int na = 0;
+                while (an != 0 && na < 6) {
+                    ops[na++] = lower_expr(L, an);
+                    an = ND(L, an)->next_sibling;
+                }
+                if (na != 6) return BIR_VAL_NONE;
+                uint32_t r = emit(L, BIR_MMA, bir_type_void(L->M), 6,
+                                  (uint8_t)mi);
+                for (int k = 0; k < 6; k++) set_op(L, r, k, ops[k]);
+                return BIR_MAKE_VAL(r);
+            }
+            return BIR_VAL_NONE;
+        }
+
+        /* ---- MFMA over per-lane fragments in memory ---- */
+        if (strncmp(cname, "__builtin_mfma_", 15) == 0) {
+            static const char *const mfrg_tab[] = {
+                "f32_4x4x4_f16", "f32_16x16x16_f16", "f32_32x32x8_f16",
+                "f32_4x4x4_bf16", "f32_16x16x16_bf16", "f32_32x32x8_bf16",
+                "f32_4x4x1_f32", "f32_16x16x4_f32", "f32_32x32x2_f32",
+                "i32_4x4x4_i8", "i32_16x16x16_i8", "i32_32x32x8_i8",
+                "f32_16x16x32_fp8_fp8", "f32_16x16x32_fp8_bf8",
+                "f32_16x16x32_bf8_fp8", "f32_16x16x32_bf8_bf8",
+                "f32_32x32x16_fp8_fp8", "f32_32x32x16_fp8_bf8",
+                "f32_32x32x16_bf8_fp8", "f32_32x32x16_bf8_bf8",
+                "f64_4x4x4_f64", "f64_16x16x4_f64",
+                "i32_16x16x32_i8", "i32_32x32x16_i8",
+            };
+            const char *sfx = cname + 15;
+            for (int mi = 0; mi < (int)(sizeof mfrg_tab / sizeof mfrg_tab[0]); mi++) {
+                if (strcmp(sfx, mfrg_tab[mi]) != 0) continue;
+                uint32_t an = ND(L, callee_n)->next_sibling;
+                uint32_t ops[3];
+                int na = 0;
+                while (an != 0 && na < 3) {
+                    ops[na++] = lower_expr(L, an);
+                    an = ND(L, an)->next_sibling;
+                }
+                if (na != 3) return BIR_VAL_NONE;
+                uint32_t r = emit(L, BIR_MFRG, bir_type_void(L->M), 3,
+                                  (uint8_t)mi);
+                for (int k = 0; k < 3; k++) set_op(L, r, k, ops[k]);
+                return BIR_MAKE_VAL(r);
+            }
+            return BIR_VAL_NONE;
+        }
+
         /* ---- MFMA intrinsics (CDNA matrix multiply) ---- */
         if (strncmp(cname, "__builtin_amdgcn_mfma_", 22) == 0) {
             static const struct { const char *sfx; uint8_t var; } mfma_tab[] = {
@@ -2009,31 +2342,18 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
 
         /* ---- Regular function call ---- */
 
-        /* Find function in module */
-        uint32_t fi = 0;
-        int found = 0;
-        for (uint32_t i = 0; i < L->M->num_funcs; i++) {
-            if (L->M->funcs[i].name < L->M->string_len
-                && strcmp(&L->M->strings[L->M->funcs[i].name], cname) == 0) {
-                fi = i;
-                found = 1;
-                break;
-            }
-        }
-        if (!found) {
-            lower_error(L, node, BC_E105);
-            return BIR_VAL_NONE;
-        }
-
-        uint32_t ftype = L->M->funcs[fi].type;
-        uint32_t ret_t = L->M->types[ftype].inner;
-
         /* Lower arguments */
         uint32_t args[BC_MAX_ARGS];
         int nargs = 0;
         uint32_t arg = ND(L, callee_n)->next_sibling;
         while (arg && nargs < BC_MAX_ARGS) {
-            args[nargs++] = lower_expr(L, arg);
+            if (ND(L, arg)->type == AST_PACK_EXP) {
+                int got = pk_exp(L, arg, args + nargs, BC_MAX_ARGS - nargs);
+                if (got < 0) return BIR_VAL_NONE;
+                nargs += got;
+            } else {
+                args[nargs++] = lower_expr(L, arg);
+            }
             arg = ND(L, arg)->next_sibling;
         }
         /* Sema rejects this first, so reaching it means the two caps have
@@ -2043,6 +2363,20 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
             lower_error(L, node, BC_E082, "call", BC_MAX_ARGS);
             return BIR_VAL_NONE;
         }
+
+        uint32_t fi = bir_fsym(L->M, cname, L->tu, nargs);
+        if (fi == BIR_SYM_NONE) {
+            uint32_t any = bir_fsym(L->M, cname, L->tu, -1);
+            if (any == BIR_SYM_NONE)
+                lower_error(L, node, BC_E105);
+            else
+                lower_error(L, node, BC_E073, cname,
+                            (int)L->M->funcs[any].num_params, nargs);
+            return BIR_VAL_NONE;
+        }
+
+        uint32_t ftype = L->M->funcs[fi].type;
+        uint32_t ret_t = L->M->types[ftype].inner;
 
         if (1 + nargs <= BIR_OPERANDS_INLINE) {
             uint32_t inst = emit(L, BIR_CALL, ret_t, (uint8_t)(1+nargs), 0);
@@ -2144,6 +2478,7 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
         int64_t sz = 4;
         if (inner && ND(L, inner)->type == AST_TYPE_SPEC) {
             switch (ND(L, inner)->d.btype.kind) {
+            case TYPE_BOOL:  sz = 1; break;
             case TYPE_CHAR:  sz = 1; break;
             case TYPE_SHORT: sz = 2; break;
             case TYPE_LONG: case TYPE_LLONG: sz = 8; break;
@@ -2232,8 +2567,14 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
             lower_error(L, node, BC_E106);
             return BIR_VAL_NONE;
         }
-        uint32_t gi = L->M->num_globals++;
+        uint32_t gi = L->M->num_globals;
+        if (gi > 0xFFu) {
+            lower_error(L, node, BC_E127, 256);
+            return BIR_VAL_NONE;
+        }
+        L->M->num_globals++;
         bir_global_t *G = &L->M->globals[gi];
+        memset(G, 0, sizeof(*G));
         char gname[24];
         snprintf(gname, sizeof(gname), ".str.%u", gi);
         G->name = bir_add_string(L->M, gname, (uint32_t)strlen(gname));
@@ -2243,10 +2584,32 @@ static uint32_t lower_expr(lower_t *L, uint32_t node)
         G->cuda_flags = CUDA_CONSTANT;
         G->addrspace = BIR_AS_CONSTANT;
         G->is_const = 1;
+        G->tu = BIR_TU_EXT;
 
-        uint32_t inst = emit(L, BIR_GLOBAL_REF, ptr, 0, (uint8_t)(gi & 0xff));
+        uint32_t inst = emit(L, BIR_GLOBAL_REF, ptr, 0, (uint8_t)gi);
         return BIR_MAKE_VAL(inst);
     }
+
+    case AST_PACK_SIZE: {
+        uint32_t id = n->first_child;
+        char nm[64];
+        if (id) get_text(L, id, nm, sizeof(nm)); else nm[0] = 0;
+        int cnt = pk_cnt(L, nm);
+        if (cnt < 0) {
+            lower_error(L, node, BC_E030, "sizeof... of an unbound pack");
+            return BIR_VAL_NONE;
+        }
+        return BIR_MAKE_CONST(bir_const_int(L->M,
+            bir_type_int(L->M, 32), cnt));
+    }
+
+    case AST_FOLD:
+        return lfold(L, node);
+
+    case AST_PACK_EXP:
+        lower_error(L, node, BC_E030,
+                    "pack expansion outside an argument list");
+        return BIR_VAL_NONE;
 
     default:
         lower_error(L, node, BC_E106);
@@ -2265,6 +2628,7 @@ static uint32_t lower_lvalue(lower_t *L, uint32_t node)
     case AST_IDENT: {
         char name[128];
         get_text(L, node, name, sizeof(name));
+        pk_rw(L, name, sizeof(name));
         sym_t *s = find_sym(L, name);
         if (!s) {
             lower_error(L, node, BC_E107);
@@ -2993,24 +3357,94 @@ static void lower_func_body(lower_t *L, uint32_t func_def,
             memcpy(fname, fname_raw, sizeof(fname));
     }
 
+    uint16_t flnk = BIR_TU_EXT;
+    uint16_t quals = ND(L, func_def)->qualifiers;
+    if (L->tu != BIR_TU_EXT && (quals & QUAL_STATIC)) {
+        char mng[BIR_SYM_MAX];
+        if (bir_mang(fname, L->tu, mng, (int)sizeof fname) != 0) {
+            lower_error(L, func_def, BC_E126, fname);
+            return;
+        }
+        memcpy(fname, mng, strlen(mng) + 1u);
+        flnk = L->tu;
+    }
+
+    if (L->tu != BIR_TU_EXT) {
+        uint32_t dup = sym_fx(L, fname);
+        if (dup != BIR_SYM_NONE) {
+            if (!(quals & QUAL_INLINE) && !name_override)
+                lower_error(L, func_def, BC_E126, fname);
+            return;
+        }
+    }
+
     uint32_t ret_t = resolve_type(L, type_n, ret_ptr, 0);
 
     /* Collect parameters */
     uint32_t param_nodes[32];
     int nparams = collect_params(L, func_def, param_nodes, 32);
 
-    /* Resolve param types and build function type */
     uint32_t param_types[32];
-    for (int i = 0; i < nparams; i++) {
+    char pnames[32][64];
+    int np = 0;
+    L->nfpk = 0;
+    for (int i = 0; i < nparams && np < 32; i++) {
         const ast_node_t *pn = ND(L, param_nodes[i]);
+        if (pn->d.oper.op == PRM_VARG) continue;
         uint32_t pt_type_n = pn->first_child;
         int pdepth = pn->d.oper.flags; /* stored by parser */
         uint16_t p_cuda = pn->cuda_flags;
-        param_types[i] = resolve_type(L, pt_type_n, pdepth, p_cuda);
+
+        char base[64];
+        base[0] = 0;
+        for (uint32_t pc = pn->first_child; pc; pc = ND(L, pc)->next_sibling)
+            if (ND(L, pc)->type == AST_IDENT) {
+                get_text(L, pc, base, sizeof(base));
+                break;
+            }
+
+        if (pn->d.oper.op == PRM_PACK) {
+            char tn[64];
+            tn[0] = 0;
+            if (pt_type_n && ND(L, pt_type_n)->first_child)
+                get_text(L, ND(L, pt_type_n)->first_child, tn, sizeof(tn));
+            const binding_t *b = find_tpk(L, tn);
+            if (!b) {
+                lower_error(L, param_nodes[i], BC_E030,
+                            "function parameter pack with no bound types");
+                return;
+            }
+            if (base[0] && L->nfpk < MAX_FPACKS) {
+                snprintf(L->fpk[L->nfpk].name,
+                         sizeof(L->fpk[0].name), "%s", base);
+                L->fpk[L->nfpk].n = b->npk;
+                L->nfpk++;
+            }
+            for (int k = 0; k < b->npk && np < 32; k++) {
+                int svb = L->nbindings;
+                if (L->nbindings < 8) {
+                    binding_t *t = &L->bindings[L->nbindings++];
+                    memset(t, 0, sizeof(*t));
+                    snprintf(t->name, sizeof(t->name), "%s", tn);
+                    t->is_type = 1;
+                    t->type = b->pk_t[k];
+                }
+                param_types[np] = resolve_type(L, pt_type_n, pdepth, p_cuda);
+                L->nbindings = svb;
+                pk_nm(pnames[np], sizeof(pnames[0]), base, k);
+                np++;
+            }
+            continue;
+        }
+
+        param_types[np] = resolve_type(L, pt_type_n, pdepth, p_cuda);
+        snprintf(pnames[np], sizeof(pnames[0]), "%s", base);
+        np++;
     }
+    int nparams_x = np;
 
     /* Create function type */
-    uint32_t fn_type = bir_type_func(L->M, ret_t, param_types, nparams);
+    uint32_t fn_type = bir_type_func(L->M, ret_t, param_types, nparams_x);
 
     /* Create function. Bailing leaves cur_func on the previous one. */
     if (L->M->num_funcs >= BIR_MAX_FUNCS) {
@@ -3024,8 +3458,9 @@ static void lower_func_body(lower_t *L, uint32_t func_def,
     memset(F, 0, sizeof(*F));
     F->name = bir_add_string(L->M, fname, (uint32_t)strlen(fname));
     F->type = fn_type;
+    F->tu = flnk;
     F->cuda_flags = cuda_flags;
-    F->num_params = (uint16_t)nparams;
+    F->num_params = (uint16_t)nparams_x;
     F->first_block = L->M->num_blocks;
     F->num_blocks = 0;
     F->launch_bounds_max = ND(L, func_def)->launch_bounds_max;
@@ -3041,18 +3476,9 @@ static void lower_func_body(lower_t *L, uint32_t func_def,
 
     /* Emit PARAM instructions */
     push_scope(L);
-    for (int i = 0; i < nparams; i++) {
+    for (int i = 0; i < nparams_x; i++) {
         uint32_t inst = emit(L, BIR_PARAM, param_types[i], 0, (uint8_t)i);
-        /* Get param name */
-        uint32_t pname_n = 0;
-        uint32_t pc = ND(L, param_nodes[i])->first_child;
-        while (pc) {
-            if (ND(L, pc)->type == AST_IDENT) { pname_n = pc; break; }
-            pc = ND(L, pc)->next_sibling;
-        }
-        if (pname_n) {
-            char pname[128];
-            get_text(L, pname_n, pname, sizeof(pname));
+        if (pnames[i][0]) {
             /* Promote all params to allocas so they're reassignable.
                mem2reg cleans up the ones that are never written. */
             uint32_t pt = bir_type_ptr(L->M, param_types[i], BIR_AS_PRIVATE);
@@ -3060,7 +3486,7 @@ static void lower_func_body(lower_t *L, uint32_t func_def,
             uint32_t st = emit(L, BIR_STORE, bir_type_void(L->M), 2, 0);
             set_op(L, st, 0, BIR_MAKE_VAL(inst));
             set_op(L, st, 1, BIR_MAKE_VAL(al));
-            add_sym(L, pname, al, param_types[i], 1);
+            add_sym(L, pnames[i], al, param_types[i], 1);
         }
     }
 
@@ -3250,10 +3676,6 @@ static void collect_global_var(lower_t *L, uint32_t node)
 {
     uint16_t cuda = ND(L, node)->cuda_flags;
     if (!(cuda & (CUDA_SHARED | CUDA_CONSTANT | CUDA_DEVICE))) return;
-    if (L->M->num_globals >= BIR_MAX_GLOBALS) {
-        bir_pfull(L->M, BIR_P_GLOBALS);
-        return;
-    }
 
     uint32_t type_n = child_at(L, node, 0);
     uint32_t name_n = child_at(L, node, 1);
@@ -3283,10 +3705,34 @@ static void collect_global_var(lower_t *L, uint32_t node)
         }
     }
 
+    uint16_t glnk = BIR_TU_EXT;
+    if (L->tu != BIR_TU_EXT && (ND(L, node)->qualifiers & QUAL_STATIC)) {
+        char mng[BIR_SYM_MAX];
+        if (bir_mang(gname, L->tu, mng, (int)sizeof gname) != 0) {
+            lower_error(L, node, BC_E126, gname);
+            return;
+        }
+        memcpy(gname, mng, strlen(mng) + 1u);
+        glnk = L->tu;
+    }
+
+    uint32_t old = sym_gx(L, gname);
+    if (old != BIR_SYM_NONE) {
+        if (L->M->globals[old].type != elem_t)
+            lower_error(L, node, BC_E126, gname);
+        return;
+    }
+
+    if (L->M->num_globals >= BIR_MAX_GLOBALS) {
+        bir_pfull(L->M, BIR_P_GLOBALS);
+        return;
+    }
     uint32_t gi = L->M->num_globals++;
     bir_global_t *G = &L->M->globals[gi];
+    memset(G, 0, sizeof(*G));
     G->name = bir_add_string(L->M, gname, (uint32_t)strlen(gname));
     G->type = elem_t;
+    G->tu = glnk;
     G->initializer = BIR_VAL_NONE;
     /* Check for literal initializer (skip past array size if present) */
     {
@@ -3346,6 +3792,23 @@ static void collect_template(lower_t *L, uint32_t node)
  *   - callee = "scale"
  *   - Deduce T from literal arguments
  */
+static uint32_t arg_type(lower_t *L, uint32_t arg)
+{
+    const ast_node_t *a = ND(L, arg);
+    switch (a->type) {
+    case AST_FLOAT_LIT: {
+        int f32;
+        parse_float_text(L->src + a->d.text.offset, (int)a->d.text.len, &f32);
+        return f32 ? bir_type_float(L->M, 32) : bir_type_float(L->M, 64);
+    }
+    case AST_INT_LIT:  return bir_type_int(L->M, 32);
+    case AST_BOOL_LIT: return bir_type_int(L->M, 1);
+    case AST_CAST:     return resolve_type(L, a->first_child,
+                                           a->d.oper.flags, 0);
+    default:           return 0;
+    }
+}
+
 static void scan_launches(lower_t *L, uint32_t node)
 {
     if (!node) return;
@@ -3360,136 +3823,144 @@ static void scan_launches(lower_t *L, uint32_t node)
 
         template_def_t *tmpl = find_template(L, cname);
         if (!tmpl) goto recurse;
+        uint32_t arg = ND(L, callee_n)->next_sibling;
+        if (arg) arg = ND(L, arg)->next_sibling;
+        if (arg) arg = ND(L, arg)->next_sibling;
 
-        /* Deduce template type from launch arguments.
-           Skip grid and block args (children 1 and 2 of launch).
-           Actual args start after that. */
-        uint32_t arg = ND(L, callee_n)->next_sibling; /* grid */
-        if (arg) arg = ND(L, arg)->next_sibling;      /* block */
-        /* Optional shared mem and stream */
-        /* Skip to actual function args: after >>> comes () */
-        /* In AST_LAUNCH, children after grid,block,[smem],[stream] are args */
-        /* We need to find the function args. Let's skip 2 more possible. */
-        if (arg) arg = ND(L, arg)->next_sibling; /* first real arg, or smem */
-
-        /* Collect template params from AST_TEMPLATE_DECL */
         uint32_t tmpl_node = tmpl->ast;
-        uint32_t tp = ND(L, tmpl_node)->first_child;
-        int ntparams = 0;
-        binding_t new_bindings[8];
+        binding_t nb[8];
+        int ntp = 0;
 
-        while (tp && ND(L, tp)->type == AST_TEMPLATE_PARAM && ntparams < 8) {
-            int is_type = (ND(L, tp)->d.oper.flags == 0);
-            uint32_t tpname_n = 0;
-            uint32_t tpc = ND(L, tp)->first_child;
-            while (tpc) {
-                if (ND(L, tpc)->type == AST_IDENT) { tpname_n = tpc; break; }
-                tpc = ND(L, tpc)->next_sibling;
+        for (uint32_t tp = ND(L, tmpl_node)->first_child;
+             tp && ND(L, tp)->type == AST_TEMPLATE_PARAM && ntp < 8;
+             tp = ND(L, tp)->next_sibling) {
+            int fl = ND(L, tp)->d.oper.flags;
+            memset(&nb[ntp], 0, sizeof(nb[0]));
+            nb[ntp].is_type = !(fl & TP_NTYP);
+            if (fl & TP_PACK) {
+                nb[ntp].is_pack = 1;
+                nb[ntp].is_type = 0;
             }
-
-            new_bindings[ntparams].is_type = is_type;
-            new_bindings[ntparams].type = 0;
-            new_bindings[ntparams].ival = 0;
-            if (tpname_n)
-                get_text(L, tpname_n, new_bindings[ntparams].name,
-                         sizeof(new_bindings[0].name));
-            else
-                new_bindings[ntparams].name[0] = '\0';
-
-            ntparams++;
-            tp = ND(L, tp)->next_sibling;
-        }
-
-        /* Deduce types from arguments.
-           For typename T: look at float literal args (2.0f → float) */
-        /* Find the function def to match params with template params */
-        uint32_t func_n = 0;
-        {
-            uint32_t fc = ND(L, tmpl_node)->first_child;
-            while (fc) {
-                if (ND(L, fc)->type == AST_FUNC_DEF) { func_n = fc; break; }
-                fc = ND(L, fc)->next_sibling;
-            }
-        }
-
-        if (func_n) {
-            /* Match function params against launch args to deduce T */
-            uint32_t fparam_nodes[16];
-            int nfparams = collect_params(L, func_n, fparam_nodes, 16);
-
-            /* For each function param, check if its type is a template param */
-            /* Then look at the corresponding launch arg to deduce */
-            for (int i = 0; i < nfparams && arg; i++) {
-                uint32_t fpt = ND(L, fparam_nodes[i])->first_child;
-                if (fpt && ND(L, fpt)->type == AST_TYPE_SPEC
-                    && ND(L, fpt)->d.btype.kind == TYPE_NAME) {
-                    /* Named type — might be a template param */
-                    uint32_t fpt_name = ND(L, fpt)->first_child;
-                    if (fpt_name) {
-                        char tname[64];
-                        get_text(L, fpt_name, tname, sizeof(tname));
-                        for (int b = 0; b < ntparams; b++) {
-                            if (new_bindings[b].is_type
-                                && strcmp(new_bindings[b].name, tname) == 0
-                                && new_bindings[b].type == 0) {
-                                /* Deduce from arg */
-                                if (ND(L, arg)->type == AST_FLOAT_LIT) {
-                                    int is_f32;
-                                    parse_float_text(
-                                        L->src + ND(L, arg)->d.text.offset,
-                                        (int)ND(L, arg)->d.text.len, &is_f32);
-                                    new_bindings[b].type = is_f32
-                                        ? bir_type_float(L->M, 32)
-                                        : bir_type_float(L->M, 64);
-                                } else if (ND(L, arg)->type == AST_INT_LIT) {
-                                    new_bindings[b].type = bir_type_int(L->M, 32);
-                                } else if (ND(L, arg)->type == AST_IDENT) {
-                                    /* Look up variable type */
-                                    /* For pointers like d_data (float*),
-                                       the template param T maps to pointee */
-                                    /* Can't easily deduce without host sym table.
-                                       Default to float for now. */
-                                    new_bindings[b].type = bir_type_float(L->M, 32);
-                                }
-                            }
-                        }
-                    }
+            for (uint32_t tpc = ND(L, tp)->first_child; tpc;
+                 tpc = ND(L, tpc)->next_sibling)
+                if (ND(L, tpc)->type == AST_IDENT) {
+                    get_text(L, tpc, nb[ntp].name, sizeof(nb[0].name));
+                    break;
                 }
-                arg = ND(L, arg)->next_sibling;
-            }
+            ntp++;
         }
 
-        /* Default unresolved type bindings to float */
-        for (int i = 0; i < ntparams; i++) {
-            if (new_bindings[i].is_type && new_bindings[i].type == 0)
-                new_bindings[i].type = bir_type_float(L->M, 32);
-        }
+        uint32_t func_n = 0;
+        for (uint32_t fc = ND(L, tmpl_node)->first_child; fc;
+             fc = ND(L, fc)->next_sibling)
+            if (ND(L, fc)->type == AST_FUNC_DEF) { func_n = fc; break; }
+        if (!func_n) return;
 
-        /* Build mangled name */
-        char mangled[256];
-        snprintf(mangled, sizeof(mangled), "%s", cname);
-        /* For template instantiation, we could add <float> suffix
-           but keep it simple — just use the base name if unique */
+        uint32_t fpn[16];
+        int nfp = collect_params(L, func_n, fpn, 16);
+        int ok = 1;
 
-        /* Check if already instantiated */
-        int already = 0;
-        for (uint32_t i = 0; i < L->M->num_funcs; i++) {
-            if (L->M->funcs[i].name < L->M->string_len
-                && strcmp(&L->M->strings[L->M->funcs[i].name], mangled) == 0) {
-                already = 1;
+        for (int i = 0; i < nfp; i++) {
+            const ast_node_t *pn = ND(L, fpn[i]);
+            uint32_t ts = pn->first_child;
+            char tname[64];
+            tname[0] = 0;
+            if (ts && ND(L, ts)->type == AST_TYPE_SPEC
+                   && ND(L, ts)->d.btype.kind == TYPE_NAME
+                   && ND(L, ts)->first_child)
+                get_text(L, ND(L, ts)->first_child, tname, sizeof(tname));
+
+            if (pn->d.oper.op == PRM_PACK) {
+                int b = -1;
+                for (int k = 0; k < ntp; k++)
+                    if (nb[k].is_pack && strcmp(nb[k].name, tname) == 0) b = k;
+                if (b < 0) { ok = 0; break; }
+                while (arg && nb[b].npk < MAX_PKELM) {
+                    uint32_t at = arg_type(L, arg);
+                    if (!at) { ok = 0; break; }
+                    nb[b].pk_t[nb[b].npk++] = at;
+                    arg = ND(L, arg)->next_sibling;
+                }
+                if (arg) ok = 0;
                 break;
             }
+
+            if (tname[0]) {
+                for (int b = 0; b < ntp; b++) {
+                    if (!nb[b].is_type || strcmp(nb[b].name, tname) != 0
+                        || nb[b].type != 0)
+                        continue;
+                    if (!arg) break;
+                    uint32_t at = arg_type(L, arg);
+                    nb[b].type = at ? at : bir_type_float(L->M, 32);
+                }
+            }
+            if (arg) arg = ND(L, arg)->next_sibling;
         }
 
-        if (!already && func_n) {
-            /* Set bindings and instantiate */
-            int old_nb = L->nbindings;
-            for (int i = 0; i < ntparams && L->nbindings < 8; i++)
-                L->bindings[L->nbindings++] = new_bindings[i];
+        if (!ok) {
+            lower_error(L, node, BC_E030,
+                        "variadic template whose pack cannot be deduced here");
+            return;
+        }
 
+        for (int i = 0; i < ntp; i++)
+            if (nb[i].is_type && nb[i].type == 0)
+                nb[i].type = bir_type_float(L->M, 32);
+
+        char key[256];
+        int kl = snprintf(key, sizeof(key), "%s", cname);
+        for (int i = 0; i < ntp && kl > 0 && kl < (int)sizeof(key) - 32; i++) {
+            if (nb[i].is_pack) {
+                kl += snprintf(key + kl, sizeof(key) - (size_t)kl,
+                               "|p%d", nb[i].npk);
+                for (int k = 0; k < nb[i].npk
+                             && kl < (int)sizeof(key) - 16; k++)
+                    kl += snprintf(key + kl, sizeof(key) - (size_t)kl,
+                                   ":%u", nb[i].pk_t[k]);
+            } else if (nb[i].is_type) {
+                kl += snprintf(key + kl, sizeof(key) - (size_t)kl,
+                               "|t%u", nb[i].type);
+            } else {
+                kl += snprintf(key + kl, sizeof(key) - (size_t)kl,
+                               "|n%lld", (long long)nb[i].ival);
+            }
+        }
+
+        int nsame = 0;
+        for (int i = 0; i < L->ninst; i++) {
+            if (strcmp(L->inst[i].key, key) == 0) return;
+            if (strncmp(L->inst[i].key, cname, strlen(cname)) == 0
+                && L->inst[i].key[strlen(cname)] == '|')
+                nsame++;
+        }
+        if (L->ninst >= MAX_INSTS) {
+            lower_error(L, node, BC_E030, "too many template instantiations");
+            return;
+        }
+
+        char mangled[128];
+        if (nsame == 0) {
+            ncpy(mangled, sizeof(mangled), cname);
+        } else {
+            char base[112];
+
+            ncpy(base, sizeof(base), cname);
+            snprintf(mangled, sizeof(mangled), "%s$%d", base, nsame);
+        }
+        snprintf(L->inst[L->ninst].key, sizeof(L->inst[0].key), "%s", key);
+        snprintf(L->inst[L->ninst].sym, sizeof(L->inst[0].sym), "%s", mangled);
+        L->ninst++;
+
+        if (bir_fsym(L->M, mangled, L->tu, -1) != BIR_SYM_NONE)
+            return;
+
+        {
+            int old_nb = L->nbindings;
+            for (int i = 0; i < ntp && L->nbindings < 8; i++)
+                L->bindings[L->nbindings++] = nb[i];
             uint16_t cuda = ND(L, func_n)->cuda_flags;
             lower_func_body(L, func_n, cuda, mangled);
-
             L->nbindings = old_nb;
         }
 
@@ -3512,6 +3983,14 @@ int bir_lower(const parser_t *P, uint32_t ast_root, bir_module_t *M,
               const sema_ctx_t *sema,
               bc_error_t *out_errs, int *out_nerrs)
 {
+    bir_module_init(M);
+    return bir_ltu(P, ast_root, M, sema, BIR_TU_EXT, out_errs, out_nerrs);
+}
+
+int bir_ltu(const parser_t *P, uint32_t ast_root, bir_module_t *M,
+            const sema_ctx_t *sema, uint16_t tu,
+            bc_error_t *out_errs, int *out_nerrs)
+{
     static lower_t L_storage; /* large struct — static to avoid stack overflow */
     lower_t *L = &L_storage;
     memset(L, 0, sizeof(*L));
@@ -3519,8 +3998,7 @@ int bir_lower(const parser_t *P, uint32_t ast_root, bir_module_t *M,
     L->M    = M;
     L->src  = P->src;
     L->sema = sema;
-
-    bir_module_init(M);
+    L->tu   = tu;
 
     /* Pass 1: collect declarations */
     uint32_t c = P->nodes[ast_root].first_child;

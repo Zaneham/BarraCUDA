@@ -23,6 +23,13 @@ static void nv_apnd(nv_module_t *nv, const char *fmt, ...)
         nv->out_len = NV_MAX_OUT - 1;
 }
 
+const nv_mmash_t nv_mmash[NV_MMA_NSHAPE] = {
+    { "m16n8k16.row.col.f32.f16.f16.f32",   8, 4 },
+    { "m16n8k16.row.col.f32.bf16.bf16.f32", 8, 4 },
+    { "m16n8k8.row.col.f32.f16.f16.f32",    4, 2 },
+    { "m16n8k8.row.col.f32.bf16.bf16.f32",  4, 2 },
+};
+
 /* ---- Special Register Names ---- */
 
 static const char *spec_name(int32_t id)
@@ -40,6 +47,7 @@ static const char *spec_name(int32_t id)
     case NV_SPEC_NCTAID_X: return "%nctaid.x";
     case NV_SPEC_NCTAID_Y: return "%nctaid.y";
     case NV_SPEC_NCTAID_Z: return "%nctaid.z";
+    case NV_SPEC_LANEID:   return "%laneid";
     default:               return "%tid.x";
     }
 }
@@ -58,6 +66,7 @@ static void em_opnd(nv_module_t *nv, const nv_opnd_t *op)
         case NV_RF_PRED: nv_apnd(nv, "%%p%u", op->reg_num);  break;
         case NV_RF_U16:  nv_apnd(nv, "%%rh%u", op->reg_num); break;
         case NV_RF_F16:  nv_apnd(nv, "%%h%u", op->reg_num);  break;
+        case NV_RF_B32:  nv_apnd(nv, "%%rb%u", op->reg_num); break;
         default:         nv_apnd(nv, "%%r%u", op->reg_num);   break;
         }
         break;
@@ -640,15 +649,17 @@ static void em_inst(nv_module_t *nv, const nv_minst_t *I)
     }
 
     /* ---- Loads/Stores: Shared ---- */
-    case NV_LD_SHR_U32: case NV_LD_SHR_F32: {
-        const char *tsuf = (I->op == NV_LD_SHR_F32) ? ".f32" : ".u32";
+    case NV_LD_SHR_U32: case NV_LD_SHR_F32: case NV_LD_SHR_U8: {
+        const char *tsuf = (I->op == NV_LD_SHR_F32) ? ".f32"
+                         : (I->op == NV_LD_SHR_U8)  ? ".u8" : ".u32";
         nv_apnd(nv, "ld.shared%s ", tsuf);
         em_opnd(nv, &I->ops[0]); nv_apnd(nv, ", [");
         em_opnd(nv, &I->ops[1]); nv_apnd(nv, "]");
         break;
     }
-    case NV_ST_SHR_U32: case NV_ST_SHR_F32: {
-        const char *tsuf = (I->op == NV_ST_SHR_F32) ? ".f32" : ".u32";
+    case NV_ST_SHR_U32: case NV_ST_SHR_F32: case NV_ST_SHR_U8: {
+        const char *tsuf = (I->op == NV_ST_SHR_F32) ? ".f32"
+                         : (I->op == NV_ST_SHR_U8)  ? ".u8" : ".u32";
         nv_apnd(nv, "st.shared%s [", tsuf);
         em_opnd(nv, &I->ops[0]); nv_apnd(nv, "], ");
         em_opnd(nv, &I->ops[1]);
@@ -657,12 +668,13 @@ static void em_inst(nv_module_t *nv, const nv_minst_t *I)
 
     /* ---- Loads/Stores: Local ---- */
     case NV_LD_LOC_U32: case NV_LD_LOC_U64:
-    case NV_LD_LOC_F32: case NV_LD_LOC_F64: {
+    case NV_LD_LOC_F32: case NV_LD_LOC_F64: case NV_LD_LOC_U8: {
         const char *tsuf;
         switch (I->op) {
         case NV_LD_LOC_U64: tsuf = ".u64"; break;
         case NV_LD_LOC_F32: tsuf = ".f32"; break;
         case NV_LD_LOC_F64: tsuf = ".f64"; break;
+        case NV_LD_LOC_U8:  tsuf = ".u8";  break;
         default:            tsuf = ".u32"; break;
         }
         nv_apnd(nv, "ld.local%s ", tsuf);
@@ -671,12 +683,13 @@ static void em_inst(nv_module_t *nv, const nv_minst_t *I)
         break;
     }
     case NV_ST_LOC_U32: case NV_ST_LOC_U64:
-    case NV_ST_LOC_F32: case NV_ST_LOC_F64: {
+    case NV_ST_LOC_F32: case NV_ST_LOC_F64: case NV_ST_LOC_U8: {
         const char *tsuf;
         switch (I->op) {
         case NV_ST_LOC_U64: tsuf = ".u64"; break;
         case NV_ST_LOC_F32: tsuf = ".f32"; break;
         case NV_ST_LOC_F64: tsuf = ".f64"; break;
+        case NV_ST_LOC_U8:  tsuf = ".u8";  break;
         default:            tsuf = ".u32"; break;
         }
         nv_apnd(nv, "st.local%s [", tsuf);
@@ -933,6 +946,34 @@ static void em_inst(nv_module_t *nv, const nv_minst_t *I)
         break;
     }
 
+    case NV_MOV_PK16:
+        nv_apnd(nv, "mov.b32 ");
+        em_opnd(nv, &I->ops[0]); nv_apnd(nv, ", {");
+        em_opnd(nv, &I->ops[1]); nv_apnd(nv, ", ");
+        em_opnd(nv, &I->ops[2]); nv_apnd(nv, "}");
+        break;
+    case NV_BARWARP:
+        nv_apnd(nv, "bar.warp.sync 0xffffffff");
+        break;
+    case NV_MMA: {
+        const nv_mmash_t *sh = &nv_mmash[I->flags % NV_MMA_NSHAPE];
+        uint8_t nreg[4];
+        nreg[0] = 4; nreg[1] = (uint8_t)(sh->na / 2);
+        nreg[2] = (uint8_t)(sh->nb / 2); nreg[3] = 4;
+        nv_apnd(nv, "mma.sync.aligned.%s ", sh->sfx);
+        for (uint8_t g = 0; g < 4; g++) {
+            if (g > 0) nv_apnd(nv, ", ");
+            nv_apnd(nv, "{");
+            for (uint8_t k = 0; k < nreg[g]; k++) {
+                nv_opnd_t o = I->ops[g];
+                o.reg_num = (uint16_t)(o.reg_num + k);
+                if (k > 0) nv_apnd(nv, ", ");
+                em_opnd(nv, &o);
+            }
+            nv_apnd(nv, "}");
+        }
+        break;
+    }
     default:
         nv_apnd(nv, "/* unknown op %u */", I->op);
         break;
@@ -986,6 +1027,8 @@ static void em_func(nv_module_t *nv, uint32_t fi)
         nv_apnd(nv, "\t.reg .u16  %%rh<%u>;\n", MF->rc[NV_RF_U16]);
     if (MF->rc[NV_RF_F16] > 1)
         nv_apnd(nv, "\t.reg .f16  %%h<%u>;\n",  MF->rc[NV_RF_F16]);
+    if (MF->rc[NV_RF_B32] > 1)
+        nv_apnd(nv, "\t.reg .b32  %%rb<%u>;\n", MF->rc[NV_RF_B32]);
 
     /* Local (stack) memory — without this declaration, ld.local/st.local
      * access unmapped memory and the driver gets very cross with us */

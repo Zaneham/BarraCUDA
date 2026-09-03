@@ -18,4 +18,8 @@ int bir_lower(const struct parser_s *P, uint32_t ast_root, bir_module_t *M,
               const struct sema_ctx_s *sema,
               bc_error_t *out_errs, int *out_nerrs);
 
+int bir_ltu(const struct parser_s *P, uint32_t ast_root, bir_module_t *M,
+            const struct sema_ctx_s *sema, uint16_t tu,
+            bc_error_t *out_errs, int *out_nerrs);
+
 #endif /* BARRACUDA_BIR_LOWER_H */

@@ -20,10 +20,6 @@
 #define AMD_WAVE_SIZE       32
 #define AMD_WAVE64          64
 
-/* Pre-loaded SGPRs — layout depends on kernel needs.
- * Default (no dispatch_ptr): s[0:1]=kernarg, s2+=TGID → reserved=3
- * With dispatch_ptr:         s[0:1]=dispatch, s[2:3]=kernarg, s4+=TGID → reserved=5
- * Actual positions computed per-kernel in isel. */
 #define AMD_KERN_MIN_RESERVED  2  /* absolute floor: kernarg pair */
 
 /* Pre-loaded VGPRs */
@@ -287,6 +283,9 @@ typedef enum {
     AMD_V_MFMA_F32_32X32X16_BF8_FP8,
     AMD_V_MFMA_F32_32X32X16_BF8_BF8,
     /* F64 matrix (gfx942 CDNA3) */
+    AMD_V_MFMA_I32_16X16X32_I8,
+    AMD_V_MFMA_I32_32X32X16_I8,
+
     AMD_V_MFMA_F64_4X4X4_F64,
     AMD_V_MFMA_F64_16X16X4_F64,
 
@@ -313,10 +312,24 @@ typedef enum {
 
 typedef struct {
     uint8_t  kind;       /* mop_kind_t */
-    uint8_t  pad;
+    uint8_t  nreg;       /* registers covered; 0 and 1 both mean one */
     uint16_t reg_num;    /* physical or virtual reg number */
     int32_t  imm;        /* immediate value or special reg ID */
 } moperand_t;            /* 8 bytes */
+
+#define MFMA_NONE 0xFFu
+
+#define RA_MFMA_LO 208u  /* v208..v247: the aligned fragment window */
+#define RA_MFMA_HI 248u
+
+typedef struct {
+    uint16_t op;              /* amd_op_t */
+    uint8_t  wa, wb, wd;      /* A, B and C/D widths in registers */
+    uint8_t  op90a, op942;
+} amd_mfma_t;
+
+const amd_mfma_t *amd_mfsh(uint16_t op);
+uint8_t amd_mfop(const amd_mfma_t *sh, int target);
 
 /* ---- Machine Instruction ---- */
 
@@ -363,12 +376,10 @@ typedef struct {
     uint16_t bir_func;         /* BIR func index (for rplan BIR scan) */
     uint8_t  needs_dispatch;   /* 1 if kernel uses blockDim/gridDim (dispatch_ptr) */
     uint8_t  max_dim;          /* highest dim used: 0=x, 1=xy, 2=xyz */
+    uint8_t  uses_mfma;        /* reserve the aligned MFMA fragment window */
     uint32_t launch_bounds_max; /* 0 = unconstrained. >0 = programmer's optimistic thread count */
     uint32_t launch_bounds_min; /* 0 = not set */
 
-    /* Resource plan — stamped by amd_rplan(), read by isel + emit.
-     * Target decisions made once.  No is_cdna() downstream.
-     * Like pre-flight checks: argue with the checklist, not the runway. */
     uint8_t  exec_w;     /* 0=B32 (Wave32), 1=B64 (Wave64) */
     uint8_t  smem_hz;    /* 1=SMEM→SALU hazard, promote to VALU */
     uint8_t  scr_afs;    /* 1=architected flat scratch (no prologue) */
@@ -399,6 +410,7 @@ typedef struct {
 #define AMD_MAX_MINSTS    (1 << 18)   /* 256K machine instructions */
 #define AMD_MAX_MBLOCKS   (1 << 16)
 #define AMD_MAX_MFUNCS    (1 << 12)
+#define AMD_MAX_ELFK      64
 #define AMD_MAX_VREGS     (1 << 16)
 #define AMD_CODE_SIZE     (4*1024*1024)
 #define AMD_ASM_SIZE      (4*1024*1024)
@@ -445,6 +457,8 @@ typedef struct {
 
     char        asm_buf[AMD_ASM_SIZE];
     uint32_t    asm_len;
+
+    int         enc_err;   /* encoder refused something; fail the compile */
 } amd_module_t;
 
 /* ---- Encoding Table Entry ---- */

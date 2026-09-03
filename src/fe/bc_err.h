@@ -39,6 +39,10 @@ typedef enum {
     BC_E025 = 25,  /* unexpected token in function body */
     BC_E026 = 26,  /* unexpected token in block */
     BC_E027 = 27,  /* unexpected token at top level */
+    BC_E028 = 28,  /* parameter pack must be the last template parameter here */
+    BC_E029 = 29,  /* default argument on a template parameter pack */
+    BC_E030 = 30,  /* unsupported: %s -- also raised by sema and lowering */
+    BC_E031 = 31,  /* pack expansion has no unexpanded parameter pack */
 
     /* ---- Preprocessor (E040-E069) ---- */
     BC_E040 = 40,  /* macro string pool exhausted */
@@ -70,6 +74,7 @@ typedef enum {
     BC_E080 = 80,  /* switch expression must be integer type */
     BC_E081 = 81,  /* __global__ function must return void */
     BC_E082 = 82,  /* '%s' passes more than %d arguments */
+    BC_E083 = 83,  /* parameter pack '%s' must be expanded */
 
     /* ---- Lowering (E100-E129) ---- */
     BC_E100 = 100, /* too many labels (max 256) */
@@ -85,9 +90,6 @@ typedef enum {
     BC_E110 = 110, /* unknown field in lvalue */
     BC_E111 = 111, /* not an lvalue */
 
-    /* ---- Triton frontend (E112-E140), block reserved to avoid the FE
-       collisions the Python path used to have. E112-E125 are catalogued
-       below; E126-E140 (sema/lower) carry runtime-built messages. ---- */
     BC_E112 = 112, /* indentation too deeply nested */
     BC_E113 = 113, /* inconsistent dedent */
     BC_E114 = 114, /* unterminated string literal (triton) */
@@ -101,7 +103,11 @@ typedef enum {
     BC_E122 = 122, /* expected parameter name */
     BC_E123 = 123, /* expected identifier after 'import' */
     BC_E124 = 124, /* expected attribute name after '.' */
-    BC_E125 = 125  /* unrecognised expression */
+    BC_E125 = 125, /* unrecognised expression */
+
+    /* ---- Linking translation units (E126-E127) ---- */
+    BC_E126 = 126, /* symbol defined in more than one translation unit */
+    BC_E127 = 127  /* too many globals to reference (global_ref subop is 8 bits) */
 } bc_eid_t;
 
 /* Returns format string for eid -- loaded translation or compiled-in English */
