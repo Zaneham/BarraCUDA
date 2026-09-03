@@ -727,6 +727,13 @@ int main(int argc, char *argv[])
             return prc != BC_OK ? 1 : 0;
         }
 
+        /* A truncated expansion is not shorter source, it is different
+         * source, and every phase after this would be reading a lie. */
+        if (pp->ovflw) {
+            free(pp);
+            return 1;
+        }
+
         lex_src = pp_out_buf;
         lex_len = pp->out_len;
         free(pp);

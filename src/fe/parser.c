@@ -270,6 +270,9 @@ static int is_storage_class(int type)
     switch (type) {
     case TOK_STATIC: case TOK_EXTERN: case TOK_REGISTER:
     case TOK_INLINE: case TOK_TYPEDEF:
+    /* _Noreturn carries no flag. Nothing in BIR or any backend asks whether
+       a callee returns, so accepting and dropping it is the whole semantics. */
+    case TOK_NORETURN:
         return 1;
     default:
         return 0;
@@ -757,6 +760,27 @@ static uint32_t parse_expr(parser_t *P, int min_prec)
 
 /* Where we divine the programmer's intent from a soup of keywords */
 
+/* [[noreturn]], [[maybe_unused]] and the rest. Booth models none of them and
+   they are all hints, so the run is consumed whole. Returns 1 if it ate one. */
+static int skatt(parser_t *P)
+{
+    int got = 0;
+    KA_GUARD(g, 64);
+    while (g-- && cur_type(P) == TOK_LBRACKET && peek_type(P, 1) == TOK_LBRACKET) {
+        int depth = 0;
+        KA_GUARD(h, 4096);
+        while (h-- && cur_type(P) != TOK_EOF) {
+            int t = cur_type(P);
+            if (t == TOK_LBRACKET) depth++;
+            else if (t == TOK_RBRACKET) depth--;
+            advance(P);
+            if (depth == 0) break;
+        }
+        got = 1;
+    }
+    return got;
+}
+
 static uint32_t parse_type_spec(parser_t *P, uint16_t *quals, uint16_t *cuda)
 {
     *quals = 0;
@@ -764,7 +788,9 @@ static uint32_t parse_type_spec(parser_t *P, uint16_t *quals, uint16_t *cuda)
 
     for (;;) {
         int ct = cur_type(P);
-        if (is_cuda_qualifier(ct)) {
+        if (ct == TOK_LBRACKET && peek_type(P, 1) == TOK_LBRACKET) {
+            if (!skatt(P)) break;
+        } else if (is_cuda_qualifier(ct)) {
             *cuda |= cuda_flag_for(ct);
             advance(P);
             /* __launch_bounds__(maxThreads[, minBlocks]) — actually read the numbers
@@ -1693,6 +1719,8 @@ static uint32_t parse_stmt(parser_t *P)
 
 static uint32_t parse_decl_or_stmt(parser_t *P)
 {
+    skatt(P);
+
     if (cur_type(P) == TOK_PP_LINE) {
         uint32_t pp = alloc_node(P, AST_PP_DIRECTIVE);
         P->nodes[pp].d.text.offset = cur(P)->offset;

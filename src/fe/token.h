@@ -153,6 +153,8 @@ typedef enum {
     TOK_CU_FORCEINLINE,     /* __forceinline__ */
     TOK_CU_NOINLINE,        /* __noinline__ */
 
+    TOK_NORETURN,           /* _Noreturn */
+
     TOK_EOF,
     TOK_ERROR,
     TOK_COUNT
